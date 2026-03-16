@@ -1,3 +1,5 @@
+import re
+
 from flask import Blueprint, request, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy.exc import IntegrityError
@@ -5,6 +7,9 @@ from app import db
 from app.models.user import User
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+
+EMAIL_PATTERN = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+MIN_PASSWORD_LENGTH = 8
 
 
 def _normalize_email(email):
@@ -14,12 +19,16 @@ def _normalize_email(email):
 def _validate_registration_input(username, email, password):
     if not username or not email or not password:
         return 'Username, email, and password are required'
-    if len(username) > 80:
-        return 'Username must be 80 characters or fewer'
-    if len(email) > 120 or '@' not in email or '.' not in email.split('@')[-1]:
+
+    if len(username) < 3 or len(username) > 80:
+        return 'Username must be between 3 and 80 characters'
+
+    if len(email) > 120 or not EMAIL_PATTERN.match(email):
         return 'Please provide a valid email address'
-    if len(password) < 6:
-        return 'Password must be at least 6 characters long'
+
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f'Password must be at least {MIN_PASSWORD_LENGTH} characters'
+
     return None
 
 
@@ -45,9 +54,8 @@ def register():
 
     user = User(username=username, email=email)
     user.set_password(password)
-    db.session.add(user)
-
     try:
+        db.session.add(user)
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
@@ -65,6 +73,12 @@ def login():
 
     email = _normalize_email(data.get('email', ''))
     password = data.get('password', '')
+    if not email or not password:
+        return jsonify({'error': 'Email and password are required'}), 400
+
+    if not email or not password:
+        return jsonify({'error': 'Email and password are required'}), 400
+
     if not email or not password:
         return jsonify({'error': 'Email and password are required'}), 400
 

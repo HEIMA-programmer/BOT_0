@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Form, Input, Button, Typography, message } from 'antd';
 import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
@@ -7,15 +8,26 @@ const { Title, Text } = Typography;
 
 export default function Login({ onLogin }) {
   const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
 
   const onFinish = async (values) => {
+    const payload = {
+      email: values.email.trim().toLowerCase(),
+      password: values.password,
+    };
+
     try {
-      const res = await authAPI.login(values);
+      setSubmitting(true);
+      const res = await authAPI.login(payload);
       onLogin(res.data);
       message.success('Welcome back!');
       navigate('/');
     } catch (err) {
-      message.error(err.response?.data?.error || 'Login failed');
+      const errorMessage = err.response?.data?.error || err.message || 'Login failed';
+      console.error('Login failed:', err);
+      message.error(errorMessage);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -102,7 +114,7 @@ export default function Login({ onLogin }) {
                 fontWeight: 600,
                 fontSize: 16,
                 borderRadius: 10,
-              }}>
+              }} loading={submitting}>
                 Sign In
               </Button>
             </Form.Item>

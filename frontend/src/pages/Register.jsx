@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Form, Input, Button, Typography, message } from 'antd';
 import { UserOutlined, MailOutlined, LockOutlined } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
@@ -7,15 +8,27 @@ const { Title, Text } = Typography;
 
 export default function Register({ onLogin }) {
   const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
 
   const onFinish = async (values) => {
+    const payload = {
+      username: values.username.trim(),
+      email: values.email.trim().toLowerCase(),
+      password: values.password,
+    };
+
     try {
-      const res = await authAPI.register(values);
+      setSubmitting(true);
+      const res = await authAPI.register(payload);
       onLogin(res.data);
       message.success('Registration successful!');
       navigate('/');
     } catch (err) {
-      message.error(err.response?.data?.error || 'Registration failed');
+      const errorMessage = err.response?.data?.error || err.message || 'Registration failed';
+      console.error('Registration failed:', err);
+      message.error(errorMessage);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -73,7 +86,11 @@ export default function Register({ onLogin }) {
             <Form.Item
               name="username"
               label="Username"
-              rules={[{ required: true, message: 'Please enter a username' }]}
+              rules={[
+                { required: true, message: 'Please enter a username' },
+                { min: 3, message: 'At least 3 characters' },
+                { max: 80, message: 'At most 80 characters' },
+              ]}
             >
               <Input prefix={<UserOutlined style={{ color: '#9ca3af' }} />} placeholder="Choose a username" />
             </Form.Item>
@@ -87,9 +104,27 @@ export default function Register({ onLogin }) {
             <Form.Item
               name="password"
               label="Password"
-              rules={[{ required: true, min: 6, message: 'At least 6 characters' }]}
+              rules={[{ required: true, min: 8, message: 'At least 8 characters' }]}
             >
               <Input.Password prefix={<LockOutlined style={{ color: '#9ca3af' }} />} placeholder="Create a password" />
+            </Form.Item>
+            <Form.Item
+              name="confirmPassword"
+              label="Confirm Password"
+              dependencies={['password']}
+              rules={[
+                { required: true, message: 'Please confirm your password' },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue('password') === value) {
+                      return Promise.resolve();
+                    }
+                    return Promise.reject(new Error('Passwords do not match'));
+                  },
+                }),
+              ]}
+            >
+              <Input.Password prefix={<LockOutlined style={{ color: '#9ca3af' }} />} placeholder="Repeat your password" />
             </Form.Item>
             <Form.Item style={{ marginTop: 8 }}>
               <Button type="primary" htmlType="submit" block size="large" style={{
@@ -97,7 +132,7 @@ export default function Register({ onLogin }) {
                 fontWeight: 600,
                 fontSize: 16,
                 borderRadius: 10,
-              }}>
+              }} loading={submitting}>
                 Create Account
               </Button>
             </Form.Item>
