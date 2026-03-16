@@ -11,9 +11,41 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        server_default=db.text('CURRENT_TIMESTAMP')
+    )
 
-    word_bank = db.relationship('WordBank', backref='user', lazy=True)
+    word_bank = db.relationship(
+        'WordBank',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
+    speaking_sessions = db.relationship(
+        'SpeakingSession',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
+    chat_sessions = db.relationship(
+        'ChatSession',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
+    progress_records = db.relationship(
+        'Progress',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -32,4 +64,4 @@ class User(UserMixin, db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
