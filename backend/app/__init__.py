@@ -23,7 +23,12 @@ def create_app(config_name=None):
     # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
+    login_manager.session_protection = 'strong'
     CORS(app, supports_credentials=True, origins=['http://localhost:5173'])
+
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        return {'error': 'Authentication required'}, 401
 
     # Register blueprints
     from app.routes.auth import auth_bp
