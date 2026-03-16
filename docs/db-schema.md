@@ -14,6 +14,11 @@ users 1──────< word_bank >──────1 words
 listening_clips (standalone, linked via progress)
 ```
 
+Current note:
+- `listening_clips` is intentionally content-only in the current schema.
+- `progress` stores module/activity completion data and does not yet foreign-key to a specific `listening_clip`.
+- If per-clip tracking is needed later, add a dedicated reference field or module-specific progress table in a future sprint.
+
 ## Tables
 
 ### users
@@ -71,6 +76,9 @@ Relationship notes:
 | score       | FLOAT   | NULLABLE, CHECK `score >= 0` |
 | created_at  | DATETIME| NOT NULL, DEFAULT NOW     |
 
+Implementation note:
+- `ai_feedback` is stored as `TEXT` and should be serialized/deserialized with `json.dumps()` / `json.loads()` in the service or route layer.
+
 ### chat_sessions (Sprint 3)
 | Column        | Type         | Constraints              |
 |---------------|-------------|--------------------------|
@@ -80,6 +88,9 @@ Relationship notes:
 | started_at    | DATETIME    | NOT NULL, DEFAULT NOW     |
 | ended_at      | DATETIME    | NULLABLE                  |
 | report        | TEXT        | NULLABLE (JSON string)    |
+
+Implementation note:
+- `report` is stored as `TEXT` and should be serialized/deserialized with `json.dumps()` / `json.loads()` in the service or route layer.
 
 ### chat_messages (Sprint 3)
 | Column     | Type     | Constraints              |
@@ -100,3 +111,6 @@ Relationship notes:
 | score         | FLOAT       | NULLABLE, CHECK `score >= 0` |
 | time_spent    | INTEGER     | NULLABLE, CHECK `time_spent >= 0` |
 | completed_at  | DATETIME    | NOT NULL, DEFAULT NOW     |
+
+SQLite note:
+- SQLite requires `PRAGMA foreign_keys=ON` for `ON DELETE CASCADE` to take effect. The backend app now enables this during database connection setup.

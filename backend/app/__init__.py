@@ -1,11 +1,28 @@
 import os
-from flask import Flask
+import sqlite3
+from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_cors import CORS
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 db = SQLAlchemy()
 login_manager = LoginManager()
+login_manager.session_protection = 'strong'
+
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    return jsonify({'error': 'Not authenticated'}), 401
+
+
+@event.listens_for(Engine, 'connect')
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute('PRAGMA foreign_keys=ON')
+        cursor.close()
 
 
 def create_app(config_name=None):

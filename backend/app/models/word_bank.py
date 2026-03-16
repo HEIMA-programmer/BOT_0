@@ -5,6 +5,14 @@ from app import db
 class WordBank(db.Model):
     __tablename__ = 'word_bank'
 
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'word_id', name='unique_user_word'),
+        db.CheckConstraint(
+            'mastery_level >= 0 AND mastery_level <= 3',
+            name='ck_word_bank_mastery_level'
+        ),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(
         db.Integer,
@@ -27,14 +35,6 @@ class WordBank(db.Model):
         nullable=False,
         default=0,
         server_default=db.text('0')
-    )
-
-    __table_args__ = (
-        db.UniqueConstraint('user_id', 'word_id', name='unique_user_word'),
-        db.CheckConstraint(
-            'mastery_level >= 0 AND mastery_level <= 3',
-            name='ck_word_bank_mastery_level'
-        ),
     )
 
     user = db.relationship('User', back_populates='word_bank')

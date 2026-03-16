@@ -30,3 +30,14 @@ class SpeakingSession(db.Model):
     )
 
     user = db.relationship('User', back_populates='speaking_sessions')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'topic': self.topic,
+            'transcript': self.transcript,
+            'ai_feedback': self.ai_feedback,
+            'score': self.score,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }

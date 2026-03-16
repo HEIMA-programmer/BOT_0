@@ -38,3 +38,14 @@ class Progress(db.Model):
     )
 
     user = db.relationship('User', back_populates='progress_records')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'module': self.module,
+            'activity_type': self.activity_type,
+            'score': self.score,
+            'time_spent': self.time_spent,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+        }

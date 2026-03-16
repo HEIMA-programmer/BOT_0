@@ -29,3 +29,16 @@ class ChatSession(db.Model):
         passive_deletes=True,
         lazy=True
     )
+
+    def to_dict(self, include_messages=False):
+        data = {
+            'id': self.id,
+            'user_id': self.user_id,
+            'scenario_type': self.scenario_type,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'ended_at': self.ended_at.isoformat() if self.ended_at else None,
+            'report': self.report,
+        }
+        if include_messages:
+            data['messages'] = [message.to_dict() for message in self.messages]
+        return data

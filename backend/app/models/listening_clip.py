@@ -33,3 +33,14 @@ class ListeningClip(db.Model):
         default=lambda: datetime.now(timezone.utc),
         server_default=db.text('CURRENT_TIMESTAMP')
     )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'audio_url': self.audio_url,
+            'transcript': self.transcript,
+            'difficulty_level': self.difficulty_level,
+            'duration': self.duration,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
