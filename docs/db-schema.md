@@ -25,8 +25,8 @@ Current note:
 | Column        | Type         | Constraints              |
 |---------------|-------------|--------------------------|
 | id            | INTEGER     | PRIMARY KEY, AUTOINCREMENT|
-| username      | VARCHAR(80) | UNIQUE, NOT NULL          |
-| email         | VARCHAR(120)| UNIQUE, NOT NULL          |
+| username      | VARCHAR(80) | UNIQUE, NOT NULL, CHECK length 3-80 |
+| email         | VARCHAR(120)| UNIQUE, NOT NULL, stored lowercase, CHECK length <= 120 |
 | password_hash | VARCHAR(256)| NOT NULL                  |
 | created_at    | DATETIME    | NOT NULL, DEFAULT NOW     |
 

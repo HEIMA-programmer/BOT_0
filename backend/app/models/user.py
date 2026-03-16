@@ -7,6 +7,21 @@ from app import db, login_manager
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
+    __table_args__ = (
+        db.CheckConstraint(
+            'length(username) BETWEEN 3 AND 80',
+            name='ck_users_username_length'
+        ),
+        db.CheckConstraint(
+            'length(email) <= 120',
+            name='ck_users_email_length'
+        ),
+        db.CheckConstraint(
+            'email = lower(email)',
+            name='ck_users_email_lowercase'
+        ),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
