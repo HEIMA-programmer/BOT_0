@@ -85,13 +85,8 @@ export default function WordBank() {
       const res = await wordBankAPI.getAll();
       setWords(res.data.words || []);
       
-      // 加载今日复习数量
-      const reviewRes = await wordBankAPI.getTodayReviewCount();
-      setTodayReviewed(reviewRes.data.count || 0);
-      
-      // 加载复习历史（用于统计）
-      const historyRes = await wordBankAPI.getReviewHistory();
-      setReviewHistory(historyRes.data.history || []);
+      setTodayReviewed(0);
+      setReviewHistory([]);
     } catch (err) {
       message.error('Failed to load word bank');
       console.error(err);
@@ -177,7 +172,11 @@ export default function WordBank() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await wordBankAPI.batchDelete(Array.from(selectedWords));
+          const deletePromises = Array.from(selectedWords).map(id => 
+            wordBankAPI.remove(id)
+          );
+          
+          await Promise.all(deletePromises);
           setWords(words.filter(w => !selectedWords.has(w.id)));
           setSelectedWords(new Set());
           setBatchDeleteMode(false);
@@ -192,8 +191,7 @@ export default function WordBank() {
   // ==================== Review Functions ====================
   const startReview = async () => {
     try {
-      const res = await wordBankAPI.getReviewWords();
-      setReviewWords(res.data.words || []);
+      setReviewWords(words.filter(w => w.mastery_level < 3));
       setReviewModalVisible(true);
       setCurrentReviewIndex(0);
       setShowDefinition(false);
@@ -205,10 +203,11 @@ export default function WordBank() {
 
   const markReviewed = async (wordId, knewIt) => {
     try {
-      await wordBankAPI.recordReview(wordId, knewIt);
-      
-      // 更新掌握程度（如果用户知道这个词，提升掌握度）
-      if (knewIt) {
+      const word = words.find(w => w.id === wordId);
+      if (!word) return;
+
+      if (knewIt && word.mastery_level < 3) {
+        await wordBankAPI.updateMastery(wordId, word.mastery_level + 1);
         setWords(words.map(w => {
           if (w.id === wordId && w.mastery_level < 3) {
             return { ...w, mastery_level: w.mastery_level + 1 };
@@ -240,19 +239,34 @@ export default function WordBank() {
   // ==================== Export Functions ====================
   const exportWords = async (format) => {
     try {
-      const res = await wordBankAPI.export(format, masteryFilter);
+      const exportData = filteredWords;
       
       if (format === 'csv') {
+        // 生成 CSV 内容
+        const csvContent = [
+          ['Word', 'Definition', 'Mastery Level'],
+          ...exportData.map(w => [
+            w.text,
+            w.definition,
+            masteryConfig[w.mastery_level].label
+          ])
+        ].map(row => row.join(',')).join('\n');
+        
         // 下载 CSV 文件
-        const blob = new Blob([res.data], { type: 'text/csv' });
+        const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `wordbank_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
-      } else {
+      } else if (format === 'json') {
         // 复制到剪贴板
-        await navigator.clipboard.writeText(JSON.stringify(res.data, null, 2));
+        await navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
+        message.success('Copied to clipboard');
+      } else if (format === 'text') {
+        // 复制为文本列表
+        const textContent = exportData.map(w => w.text).join('\n');
+        await navigator.clipboard.writeText(textContent);
         message.success('Copied to clipboard');
       }
       
