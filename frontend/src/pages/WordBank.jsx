@@ -74,9 +74,15 @@ export default function WordBank() {
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [batchDeleteMode, setBatchDeleteMode] = useState(false);
   const [selectedWords, setSelectedWords] = useState(new Set());
-  const [reviewHistory, setReviewHistory] = useState([]);
-  const [dailyGoal, setDailyGoal] = useState(10);
-  const [todayReviewed, setTodayReviewed] = useState(0);
+  const [stats, setStats] = useState({
+    total: 0,
+    new: 0,
+    learning: 0,
+    familiar: 0,
+    mastered: 0,
+    today_reviewed: 0,
+    review_history: []
+  });
 
   // ==================== Data Loading ====================
   const loadWordBank = async () => {
@@ -85,9 +91,8 @@ export default function WordBank() {
       const res = await wordBankAPI.getAll();
       setWords(res.data.words || []);
       
-      // 暂时使用默认值，因为后端API未实现
-      setTodayReviewed(0);
-      setReviewHistory([]);
+      const statsRes = await wordBankAPI.getStats();
+      setStats(statsRes.data);
     } catch (err) {
       message.error('Failed to load word bank');
       console.error(err);
@@ -173,7 +178,6 @@ export default function WordBank() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          // 暂时使用本地删除，因为后端API未实现
           const deletePromises = Array.from(selectedWords).map(id => 
             wordBankAPI.remove(id)
           );
@@ -193,7 +197,6 @@ export default function WordBank() {
   // ==================== Review Functions ====================
   const startReview = async () => {
     try {
-      // 暂时使用本地数据，因为后端API未实现
       setReviewWords(words.filter(w => w.mastery_level < 3));
       setReviewModalVisible(true);
       setCurrentReviewIndex(0);
@@ -206,10 +209,12 @@ export default function WordBank() {
 
   const markReviewed = async (wordId, knewIt) => {
     try {
-      // 暂时只更新本地状态，因为后端API未实现
+      await wordBankAPI.review(wordId, knewIt);
       
-      // 更新掌握程度（如果用户知道这个词，提升掌握度）
-      if (knewIt) {
+      const word = words.find(w => w.id === wordId);
+      if (!word) return;
+
+      if (knewIt && word.mastery_level < 3) {
         setWords(words.map(w => {
           if (w.id === wordId && w.mastery_level < 3) {
             return { ...w, mastery_level: w.mastery_level + 1 };
@@ -218,7 +223,10 @@ export default function WordBank() {
         }));
       }
       
-      setTodayReviewed(prev => prev + 1);
+      setStats(prev => ({
+        ...prev,
+        today_reviewed: prev.today_reviewed + 1
+      }));
     } catch (err) {
       console.error('Failed to record review:', err);
     }
@@ -227,7 +235,7 @@ export default function WordBank() {
   // ==================== Mastery Update ====================
   const updateMastery = async (entryId, newLevel) => {
     try {
-      // 暂时只更新本地状态，因为后端API未实现
+      await wordBankAPI.updateMastery(entryId, newLevel);
       setWords(words.map(w => 
         w.id === entryId ? { ...w, mastery_level: newLevel } : w
       ));
@@ -241,7 +249,6 @@ export default function WordBank() {
   // ==================== Export Functions ====================
   const exportWords = async (format) => {
     try {
-      // 暂时使用本地数据，因为后端API未实现
       const exportData = filteredWords;
       
       if (format === 'csv') {
@@ -294,22 +301,12 @@ export default function WordBank() {
   };
 
   // ==================== Statistics ====================
-  const stats = {
-    total: words.length,
-    new: words.filter(w => w.mastery_level === 0).length,
-    learning: words.filter(w => w.mastery_level === 1).length,
-    familiar: words.filter(w => w.mastery_level === 2).length,
-    mastered: words.filter(w => w.mastery_level === 3).length,
-    
-    // 学习进度百分比
-    progress: Math.round((words.filter(w => w.mastery_level >= 2).length / words.length) * 100) || 0,
-    
-    // 今日目标进度
-    dailyProgress: Math.min(Math.round((todayReviewed / dailyGoal) * 100), 100),
-    
-    // 平均掌握程度
-    avgMastery: words.length ? 
-      Math.round((words.reduce((sum, w) => sum + w.mastery_level, 0) / words.length) * 100) / 100 : 0,
+  const calculatedStats = {
+    ...stats,
+    progress: stats.total ? Math.round((stats.familiar + stats.mastered) / stats.total * 100) || 0 : 0,
+    dailyProgress: Math.min(Math.round((stats.today_reviewed / 10) * 100), 100),
+    avgMastery: stats.total ? 
+      Math.round(((stats.new * 0 + stats.learning * 1 + stats.familiar * 2 + stats.mastered * 3) / stats.total) * 100) / 100 : 0,
   };
 
   // ==================== UI Components ====================
@@ -453,14 +450,14 @@ export default function WordBank() {
         {/* 总体进度 */}
         <div style={{ marginBottom: 24 }}>
           <Text strong>Overall Progress</Text>
-          <Progress percent={stats.progress} status="active" strokeColor="#2563eb" />
+          <Progress percent={calculatedStats.progress} status="active" strokeColor="#2563eb" />
         </div>
 
         {/* 掌握程度分布 */}
         <Card size="small" style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text>🆕 New</Text>
-            <Text strong>{stats.new}</Text>
+            <Text strong>{calculatedStats.new}</Text>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text>📚 Learning</Text>
@@ -468,11 +465,11 @@ export default function WordBank() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text>✨ Familiar</Text>
-            <Text strong>{stats.familiar}</Text>
+            <Text strong>{calculatedStats.familiar}</Text>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Text>🌟 Mastered</Text>
-            <Text strong>{stats.mastered}</Text>
+            <Text strong>{calculatedStats.mastered}</Text>
           </div>
         </Card>
 
@@ -482,7 +479,7 @@ export default function WordBank() {
             <Card size="small">
               <Statistic 
                 title="Total Words" 
-                value={stats.total} 
+                value={calculatedStats.total} 
                 suffix="words"
               />
             </Card>
@@ -491,7 +488,7 @@ export default function WordBank() {
             <Card size="small">
               <Statistic 
                 title="Avg Mastery" 
-                value={stats.avgMastery} 
+                value={calculatedStats.avgMastery} 
                 precision={2}
                 suffix="/3"
               />
@@ -500,11 +497,11 @@ export default function WordBank() {
         </Row>
 
         {/* 复习历史（简化版） */}
-        {reviewHistory.length > 0 && (
+        {stats.review_history.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <Text strong>Recent Activity</Text>
             <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 8 }}>
-              {reviewHistory.slice(0, 5).map((item, index) => (
+              {stats.review_history.slice(0, 5).map((item, index) => (
                 <div key={index} style={{ 
                   padding: '8px 0', 
                   borderBottom: index < 4 ? '1px solid #f0f0f0' : 'none'
@@ -607,7 +604,7 @@ export default function WordBank() {
             <Card size="small" style={{ borderRadius: 20, background: '#f0f9ff' }}>
               <Space>
                 <StarOutlined style={{ color: '#f59e0b' }} />
-                <Text strong>{todayReviewed}/{dailyGoal}</Text>
+                <Text strong>{calculatedStats.today_reviewed}/10</Text>
                 <Text type="secondary">today</Text>
               </Space>
             </Card>
@@ -707,7 +704,7 @@ export default function WordBank() {
             onClick={() => setMasteryFilter(null)}
             style={{ borderRadius: 30, minWidth: 80 }}
           >
-            All <Tag style={{ marginLeft: 4 }}>{stats.total}</Tag>
+            All <Tag style={{ marginLeft: 4 }}>{calculatedStats.total}</Tag>
           </Button>
           {masteryConfig.map(level => (
             <Button
@@ -752,7 +749,7 @@ export default function WordBank() {
           <Card hoverable style={{ borderRadius: 16, textAlign: 'center' }} size="small">
             <Statistic 
               title="Mastery Progress" 
-              value={stats.progress} 
+              value={calculatedStats.progress} 
               suffix="%"
               prefix={<CheckCircleOutlined style={{ color: '#059669' }} />}
               valueStyle={{ color: '#059669', fontWeight: 600, fontSize: 28 }}
@@ -763,7 +760,7 @@ export default function WordBank() {
           <Card hoverable style={{ borderRadius: 16, textAlign: 'center' }} size="small">
             <Statistic 
               title="Today's Goal" 
-              value={stats.dailyProgress} 
+              value={calculatedStats.dailyProgress} 
               suffix="%"
               prefix={<StarOutlined style={{ color: '#d97706' }} />}
               valueStyle={{ color: '#d97706', fontWeight: 600, fontSize: 28 }}

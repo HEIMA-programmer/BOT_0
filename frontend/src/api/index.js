@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+const baseURL = import.meta.env.DEV
+  ? '/api'
+  : (import.meta.env.VITE_API_BASE_URL || '/api');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -37,6 +41,11 @@ export const wordBankAPI = {
   getAll: () => api.get('/word-bank'),
   add: (wordId) => api.post('/word-bank', { word_id: wordId }),
   remove: (entryId) => api.delete(`/word-bank/${entryId}`),
+  updateMastery: (entryId, level) => 
+   api.patch(`/word-bank/${entryId}`, { mastery_level: level }),
+  review: (entryId, knewIt) => 
+   api.post(`/word-bank/${entryId}/review`, { knew_it: knewIt }),
+  getStats: () => api.get('/word-bank/stats'),
 };
 
 export default api;

@@ -23,7 +23,18 @@ def create_app(config_name=None):
     # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
-    CORS(app, supports_credentials=True, origins=['http://localhost:5173', 'http://localhost:5174'])
+    login_manager.session_protection = 'strong'
+    CORS(app, supports_credentials=True, origins=['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177', 'http://localhost:5178'])
+
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        from flask import jsonify
+        return jsonify({'error': 'Authentication required'}), 401
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        from app.models.user import User
+        return User.query.get(int(user_id))
 
     # Register blueprints
     from app.routes.auth import auth_bp
@@ -36,7 +47,7 @@ def create_app(config_name=None):
 
     # Create database tables
     with app.app_context():
-        from app.models import user, word, word_bank  # noqa: F401
+        from app.models import user, word, word_bank, review_history  # noqa: F401
         db.create_all()
 
     return app

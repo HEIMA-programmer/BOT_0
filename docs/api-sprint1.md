@@ -33,9 +33,35 @@ Create a new user account.
 
 **Response 400:**
 ```json
+<<<<<<< HEAD
 { "error": "Username already exists" }
 ```
 
+=======
+{ "error": "Username, email, and password are required" }
+```
+
+**Response 400:**
+```json
+{ "error": "Please provide a valid email address" }
+```
+
+**Response 400:**
+```json
+{ "error": "Password must be at least 6 characters long" }
+```
+
+**Response 409:**
+```json
+{ "error": "Username already exists" }
+```
+
+**Response 409:**
+```json
+{ "error": "Email already registered" }
+```
+
+>>>>>>> main
 ---
 
 ### POST /api/auth/login
@@ -65,6 +91,14 @@ Log in with email and password. Sets session cookie.
 { "error": "Invalid credentials" }
 ```
 
+<<<<<<< HEAD
+=======
+**Response 400:**
+```json
+{ "error": "Email and password are required" }
+```
+
+>>>>>>> main
 ---
 
 ### POST /api/auth/logout

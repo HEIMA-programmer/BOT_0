@@ -1,14 +1,35 @@
-from flask import Blueprint, request, jsonify
-from flask_login import login_user, logout_user, login_required, current_user
+import re
+
+from flask import Blueprint, jsonify, request
+from flask_login import current_user, login_required, login_user, logout_user
+from sqlalchemy.exc import IntegrityError
+
 from app import db
 from app.models.user import User
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+EMAIL_PATTERN = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+
+
+def _normalize_email(email):
+    return email.strip().lower()
+
+
+def _validate_registration_input(username, email, password):
+    if not username or not email or not password:
+        return 'Username, email, and password are required'
+    if len(username) < 3 or len(username) > 80:
+        return 'Username must be between 3 and 80 characters'
+    if len(email) > 120 or not EMAIL_PATTERN.fullmatch(email):
+        return 'Please provide a valid email address'
+    if len(password) < 8:
+        return 'Password must be at least 8 characters'
+    return None
 
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
@@ -28,7 +49,12 @@ def register():
     user = User(username=username, email=email)
     user.set_password(password)
     db.session.add(user)
-    db.session.commit()
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Username or email already exists'}), 409
 
     login_user(user)
     return jsonify(user.to_dict()), 201
@@ -36,12 +62,15 @@ def register():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
-    email = data.get('email', '').strip()
+    email = _normalize_email(data.get('email', ''))
     password = data.get('password', '')
+
+    if not email or not password:
+        return jsonify({'error': 'Email and password are required'}), 400
 
     user = User.query.filter_by(email=email).first()
     if user is None or not user.check_password(password):
