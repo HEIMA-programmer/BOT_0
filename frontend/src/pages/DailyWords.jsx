@@ -50,10 +50,16 @@ export default function DailyWords() {
     }
   };
 
-  const addToBank = async (wordId, wordText) => {
+  const addToBank = async (word) => {
     try {
-      await wordBankAPI.add(wordId, wordText);
-      setSavedIds((prev) => new Set([...prev, wordId]));
+      await wordBankAPI.add({
+        word_text: word.text,
+        definition: word.definition,
+        part_of_speech: word.part_of_speech,
+        difficulty_level: word.difficulty_level,
+        example_sentence: word.example_sentence,
+      });
+      setSavedIds((prev) => new Set([...prev, word.text]));
       message.success('Word added to your bank!');
     } catch (error) {
       console.error('Error adding word to bank:', error);
@@ -141,14 +147,14 @@ export default function DailyWords() {
                       style={{ color: '#2563eb', borderColor: '#93c5fd' }}
                     />
                   </Tooltip>
-                  <Tooltip title={savedIds.has(word.id) ? 'Saved' : 'Save to bank'}>
+                  <Tooltip title={savedIds.has(word.text) ? 'Saved' : 'Save to bank'}>
                     <Button
                       shape="circle"
-                      type={savedIds.has(word.id) ? 'primary' : 'default'}
-                      icon={savedIds.has(word.id) ? <CheckOutlined /> : <PlusOutlined />}
-                      onClick={() => addToBank(word.id, word.text)}
-                      disabled={savedIds.has(word.id)}
-                      style={!savedIds.has(word.id) ? { color: '#059669', borderColor: '#6ee7b7' } : {}}
+                      type={savedIds.has(word.text) ? 'primary' : 'default'}
+                      icon={savedIds.has(word.text) ? <CheckOutlined /> : <PlusOutlined />}
+                      onClick={() => addToBank(word)}
+                      disabled={savedIds.has(word.text)}
+                      style={!savedIds.has(word.text) ? { color: '#059669', borderColor: '#6ee7b7' } : {}}
                     />
                   </Tooltip>
                 </div>

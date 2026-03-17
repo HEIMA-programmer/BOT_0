@@ -18,6 +18,8 @@ def get_word_bank():
 @word_bank_bp.route('/word-bank', methods=['POST'])
 @login_required
 def add_to_word_bank():
+    from app.models.word import Word
+
     data = request.get_json()
     if not data:
         return jsonify({'error': 'word_id or word_text is required'}), 400
@@ -28,12 +30,25 @@ def add_to_word_bank():
     if not word_id and not word_text:
         return jsonify({'error': 'word_id or word_text is required'}), 400
 
-    if not word_id and word_text:
-        from app.models.word import Word
+    # Prefer text-based lookup to avoid frontend/backend ID mismatch
+    word = None
+    if word_text:
         word = Word.query.filter_by(text=word_text).first()
         if not word:
-            return jsonify({'error': 'Word not found'}), 404
+            word = Word(
+                text=word_text,
+                definition=data.get('definition', ''),
+                example_sentence=data.get('example_sentence', ''),
+                part_of_speech=data.get('part_of_speech', ''),
+                difficulty_level=data.get('difficulty_level', 'intermediate'),
+            )
+            db.session.add(word)
+            db.session.flush()
         word_id = word.id
+    else:
+        word = Word.query.get(word_id)
+        if not word:
+            return jsonify({'error': 'Word not found'}), 404
 
     existing = WordBank.query.filter_by(
         user_id=current_user.id, word_id=word_id
