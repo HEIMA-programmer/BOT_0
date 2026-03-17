@@ -33,11 +33,6 @@ Create a new user account.
 
 **Response 400:**
 ```json
-<<<<<<< HEAD
-{ "error": "Username already exists" }
-```
-
-=======
 { "error": "Username, email, and password are required" }
 ```
 
@@ -48,7 +43,7 @@ Create a new user account.
 
 **Response 400:**
 ```json
-{ "error": "Password must be at least 6 characters long" }
+{ "error": "Password must be at least 8 characters" }
 ```
 
 **Response 409:**
@@ -61,7 +56,6 @@ Create a new user account.
 { "error": "Email already registered" }
 ```
 
->>>>>>> main
 ---
 
 ### POST /api/auth/login
@@ -91,14 +85,11 @@ Log in with email and password. Sets session cookie.
 { "error": "Invalid credentials" }
 ```
 
-<<<<<<< HEAD
-=======
 **Response 400:**
 ```json
 { "error": "Email and password are required" }
 ```
 
->>>>>>> main
 ---
 
 ### POST /api/auth/logout

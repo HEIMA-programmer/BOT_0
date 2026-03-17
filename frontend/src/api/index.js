@@ -39,7 +39,7 @@ export const getDailyWords = async (date) => {
 // Word Bank APIs
 export const wordBankAPI = {
   getAll: () => api.get('/word-bank'),
-  add: (wordId) => api.post('/word-bank', { word_id: wordId }),
+  add: (wordId, wordText) => api.post('/word-bank', { word_id: wordId, word_text: wordText }),
   remove: (entryId) => api.delete(`/word-bank/${entryId}`),
   updateMastery: (entryId, level) => 
    api.patch(`/word-bank/${entryId}`, { mastery_level: level }),

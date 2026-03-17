@@ -24,7 +24,8 @@ def create_app(config_name=None):
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.session_protection = 'strong'
-    CORS(app, supports_credentials=True, origins=['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177', 'http://localhost:5178'])
+    cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
+    CORS(app, supports_credentials=True, origins=cors_origins)
 
     @login_manager.unauthorized_handler
     def unauthorized():

@@ -19,10 +19,21 @@ def get_word_bank():
 @login_required
 def add_to_word_bank():
     data = request.get_json()
-    if not data or 'word_id' not in data:
-        return jsonify({'error': 'word_id is required'}), 400
+    if not data:
+        return jsonify({'error': 'word_id or word_text is required'}), 400
 
-    word_id = data['word_id']
+    word_id = data.get('word_id')
+    word_text = data.get('word_text')
+
+    if not word_id and not word_text:
+        return jsonify({'error': 'word_id or word_text is required'}), 400
+
+    if not word_id and word_text:
+        from app.models.word import Word
+        word = Word.query.filter_by(text=word_text).first()
+        if not word:
+            return jsonify({'error': 'Word not found'}), 404
+        word_id = word.id
 
     existing = WordBank.query.filter_by(
         user_id=current_user.id, word_id=word_id
