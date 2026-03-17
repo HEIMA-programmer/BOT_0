@@ -26,6 +26,27 @@ class User(UserMixin, db.Model):
         passive_deletes=True,
         lazy=True
     )
+    speaking_sessions = db.relationship(
+        'SpeakingSession',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
+    chat_sessions = db.relationship(
+        'ChatSession',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
+    progress_records = db.relationship(
+        'Progress',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
 
     def __init__(self, username, email):
         self.username = username

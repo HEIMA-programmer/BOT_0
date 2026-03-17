@@ -2,6 +2,7 @@ import re
 import os
 from app import create_app, db
 from app.models.word import Word
+from app.models.word_bank import WordBank
 
 app = create_app()
 with app.app_context():
@@ -34,6 +35,10 @@ with app.app_context():
                     part_of_speech='',  #  part-of-speech information (need to add)
                     difficulty_level='intermediate'  # Default difficulty
                 ))
+    
+    # Delete the existing word bank entries first to avoid foreign key constraint errors
+    WordBank.query.delete()
+    db.session.commit()
     
     # Delete the existing words
     Word.query.delete()
