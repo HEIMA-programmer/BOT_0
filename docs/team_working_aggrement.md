@@ -128,9 +128,9 @@ By participating in this project, all team members agree to the above.
 | Member | Agreed |
 |---|---|
 | Yanbin Xu | Agree |
-| Yanshuo Liu | Aggre |
-| Junfan Zhou | Aggre |
-| Yupei Yang | Aggre |
-| Ruoqi Hu | Aggre |
-| Weike Jin | Aggre |
-| Chenxi Huang | Aggre |
+| Yanshuo Liu | Agree |
+| Junfan Zhou | Agree |
+| Yupei Yang | Agree |
+| Ruoqi Hu | Agree |
+| Weike Jin | Agree |
+| Chenxi Huang | Agree |
