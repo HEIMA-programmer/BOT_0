@@ -79,19 +79,19 @@ export const getRandomWords = (words, count = 7) => {
 };
 
 // Generate a fixed set of words based on the date (ensure that the words are consistent every day)
-export const getDailyWords = (words, date = new Date()) => {
+export const getDailyWords = (words, date = new Date(), count = 8) => {
   if (!words || words.length === 0) return [];
-  
+
   const dateStr = date.toISOString().split('T')[0];
   const seed = dateStr.split('-').reduce((acc, num) => acc + parseInt(num), 0);
-  
-  const count = Math.min(Math.max(5, words.length), 8);
+
+  const actualCount = Math.min(count, words.length);
   const selected = [];
-  
-  for (let i = 0; i < count; i++) {
+
+  for (let i = 0; i < actualCount; i++) {
     const index = (seed + i) % words.length;
     selected.push(words[index]);
   }
-  
+
   return selected;
 };

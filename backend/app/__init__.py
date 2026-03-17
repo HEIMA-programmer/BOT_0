@@ -46,9 +46,65 @@ def create_app(config_name=None):
     app.register_blueprint(daily_words_bp)
     app.register_blueprint(word_bank_bp)
 
-    # Create database tables
+    # Create database tables and auto-seed on first run
     with app.app_context():
         from app.models import user, word, word_bank, review_history  # noqa: F401
         db.create_all()
+        _seed_words_if_empty(app)
+        if app.config.get('DEBUG'):
+            _ensure_dev_test_user(app)
 
     return app
+
+
+def _seed_words_if_empty(app):
+    """Auto-seed the words table from AWL.csv on first run."""
+    import re
+    from app.models.word import Word
+
+    if Word.query.first() is not None:
+        return
+
+    csv_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'frontend', 'public', 'AWL', 'AWL.csv'
+    )
+
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except FileNotFoundError:
+        app.logger.warning('AWL.csv not found at %s, skipping seed', csv_path)
+        return
+
+    content = content.replace('\ufeff', '')
+    for line in content.split('\n'):
+        if not line.strip():
+            continue
+        match = re.match(r'^([^,]+),"?([^"]*)"?$', line)
+        if match:
+            text, definition = match.groups()
+            db.session.add(Word(
+                text=text.strip(),
+                definition=definition.strip(),
+                example_sentence='',
+                part_of_speech='',
+                difficulty_level='intermediate',
+            ))
+
+    db.session.commit()
+    app.logger.info('Auto-seeded %d AWL words', Word.query.count())
+
+
+def _ensure_dev_test_user(app):
+    """Create a test user in development mode if it doesn't exist."""
+    from app.models.user import User
+
+    if User.query.filter_by(email='test@example.com').first():
+        return
+
+    user = User(username='testuser', email='test@example.com')
+    user.set_password('password123')
+    db.session.add(user)
+    db.session.commit()
+    app.logger.info('Created dev test user: test@example.com / password123')
