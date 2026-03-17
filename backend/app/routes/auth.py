@@ -34,17 +34,18 @@ def register():
         return jsonify({'error': 'No data provided'}), 400
 
     username = data.get('username', '').strip()
-    email = data.get('email', '').strip()
+    email = _normalize_email(data.get('email', ''))
     password = data.get('password', '')
 
-    if not username or not email or not password:
-        return jsonify({'error': 'Username, email, and password are required'}), 400
+    validation_error = _validate_registration_input(username, email, password)
+    if validation_error:
+        return jsonify({'error': validation_error}), 400
 
     if User.query.filter_by(username=username).first():
-        return jsonify({'error': 'Username already exists'}), 400
+        return jsonify({'error': 'Username already exists'}), 409
 
-    if User.query.filter_by(email=email).first():
-        return jsonify({'error': 'Email already registered'}), 400
+    if User.query.filter(db.func.lower(User.email) == email).first():
+        return jsonify({'error': 'Email already registered'}), 409
 
     user = User(username=username, email=email)
     user.set_password(password)
