@@ -41,7 +41,7 @@ def create_app(config_name=None):
 
     # Create database tables
     with app.app_context():
-        from app.models import user, word, word_bank  # noqa: F401
+        from app.models import user, word, word_bank, review_history  # noqa: F401
         db.create_all()
 
     return app

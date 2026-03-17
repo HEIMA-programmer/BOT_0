@@ -30,11 +30,11 @@ export const wordBankAPI = {
   getAll: () => api.get('/word-bank'),
   add: (wordId) => api.post('/word-bank', { word_id: wordId }),
   remove: (entryId) => api.delete(`/word-bank/${entryId}`),
-  // 更新掌握程度
   updateMastery: (entryId, level) => 
-   axios.patch(`${API_BASE}/word-bank/${entryId}`, { mastery_level: level }),
-  // 复习单词（新增功能）
-  review: () => axios.get(`${API_BASE}/word-bank/review`),
+   api.patch(`/word-bank/${entryId}`, { mastery_level: level }),
+  review: (entryId, knewIt) => 
+   api.post(`/word-bank/${entryId}/review`, { knew_it: knewIt }),
+  getStats: () => api.get('/word-bank/stats'),
 };
 
 export default api;

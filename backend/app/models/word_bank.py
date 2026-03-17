@@ -36,6 +36,10 @@ class WordBank(db.Model):
         default=0,
         server_default=db.text('0')
     )
+    last_reviewed = db.Column(
+        db.DateTime(timezone=True),
+        nullable=True
+    )
 
     user = db.relationship('User', back_populates='word_bank')
     word = db.relationship('Word', back_populates='word_bank_entries')
@@ -46,6 +50,10 @@ class WordBank(db.Model):
             'word_id': self.word_id,
             'text': self.word.text if self.word else None,
             'definition': self.word.definition if self.word else None,
+            'example_sentence': self.word.example_sentence if self.word else None,
+            'part_of_speech': self.word.part_of_speech if self.word else None,
+            'difficulty_level': self.word.difficulty_level if self.word else None,
             'added_at': self.added_at.isoformat() if self.added_at else None,
-            'mastery_level': self.mastery_level
+            'mastery_level': self.mastery_level,
+            'last_reviewed': self.last_reviewed.isoformat() if self.last_reviewed else None
         }
