@@ -14,9 +14,9 @@ def get_daily_words():
     if not words:
         return jsonify({'date': request_date, 'words': []}), 200
 
-    # Select 5-8 words based on date seed
+    # Return available words up to the daily cap without duplicating entries.
     day_seed = hash(request_date) % len(words)
-    count = min(max(5, len(words)), 8)
+    count = min(len(words), 8)
     selected = []
     for i in range(count):
         idx = (day_seed + i) % len(words)
