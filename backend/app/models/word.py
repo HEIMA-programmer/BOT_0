@@ -37,6 +37,13 @@ class Word(db.Model):
         passive_deletes=True,
         lazy=True
     )
+    user_word_progress = db.relationship(
+        'UserWordProgress',
+        back_populates='word',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
 
     def to_dict(self):
         return {

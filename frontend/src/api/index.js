@@ -20,20 +20,23 @@ export const authAPI = {
   me: () => api.get('/auth/me'),
 };
 
-// Daily Words APIs
+// Daily Words APIs (legacy)
 export const dailyWordsAPI = {
   getWords: (date) => api.get('/daily-words', { params: { date } }),
 };
 
-// Export getDailyWords function for DailyWords component
-export const getDailyWords = async (date) => {
-  try {
-    const response = await dailyWordsAPI.getWords(date);
-    return response;
-  } catch (error) {
-    console.error('Error in getDailyWords:', error);
-    throw error;
-  }
+// Daily Learning APIs
+export const dailyLearningAPI = {
+  getToday: (count) => api.get('/daily-learning/today', { params: { count } }),
+  updateWordStatus: (progressId, status) =>
+    api.post('/daily-learning/word-status', { progress_id: progressId, status }),
+  getReviewWords: () => api.get('/daily-learning/review-words'),
+  getMasteredWords: () => api.get('/daily-learning/mastered-words'),
+  getAllWords: (page, perPage, search) =>
+    api.get('/daily-learning/all-words', { params: { page, per_page: perPage, search } }),
+  getStats: () => api.get('/daily-learning/stats'),
+  markMastered: (wordId) => api.post('/daily-learning/mark-mastered', { word_id: wordId }),
+  addToBank: (wordId) => api.post('/daily-learning/add-to-bank', { word_id: wordId }),
 };
 
 // Word Bank APIs
@@ -41,9 +44,9 @@ export const wordBankAPI = {
   getAll: () => api.get('/word-bank'),
   add: (wordData) => api.post('/word-bank', wordData),
   remove: (entryId) => api.delete(`/word-bank/${entryId}`),
-  updateMastery: (entryId, level) => 
+  updateMastery: (entryId, level) =>
    api.patch(`/word-bank/${entryId}`, { mastery_level: level }),
-  review: (entryId, knewIt) => 
+  review: (entryId, knewIt) =>
    api.post(`/word-bank/${entryId}/review`, { knew_it: knewIt }),
   getStats: () => api.get('/word-bank/stats'),
 };
