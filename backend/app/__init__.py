@@ -42,11 +42,13 @@ def create_app(config_name=None):
     from app.routes.daily_words import daily_words_bp
     from app.routes.word_bank import word_bank_bp
     from app.routes.daily_learning import daily_learning_bp
+    from app.routes.listening import listening_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(daily_words_bp)
     app.register_blueprint(word_bank_bp)
     app.register_blueprint(daily_learning_bp)
+    app.register_blueprint(listening_bp)
 
     # Create database tables and auto-seed on first run
     with app.app_context():
