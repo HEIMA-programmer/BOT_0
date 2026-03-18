@@ -51,4 +51,9 @@ export const wordBankAPI = {
   getStats: () => api.get('/word-bank/stats'),
 };
 
+// Listening APIs
+export const listeningAPI = {
+  getCatalog: () => api.get('/listening/clips'),
+};
+
 export default api;
