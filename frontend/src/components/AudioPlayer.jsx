@@ -27,9 +27,10 @@ export default function AudioPlayer({ src, title }) {
   const togglePlay = async () => {
     if (!audioRef.current) return;
 
-    if (audioRef.current.paused) {
+    if (!playing) {
       try {
         await audioRef.current.play();
+        setPlaying(true);
       } catch {
         setPlaying(false);
       }
@@ -37,6 +38,7 @@ export default function AudioPlayer({ src, title }) {
     }
 
     audioRef.current.pause();
+    setPlaying(false);
   };
 
   const handleTimeUpdate = () => {
