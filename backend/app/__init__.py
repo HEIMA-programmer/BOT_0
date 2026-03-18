@@ -41,14 +41,16 @@ def create_app(config_name=None):
     from app.routes.auth import auth_bp
     from app.routes.daily_words import daily_words_bp
     from app.routes.word_bank import word_bank_bp
+    from app.routes.daily_learning import daily_learning_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(daily_words_bp)
     app.register_blueprint(word_bank_bp)
+    app.register_blueprint(daily_learning_bp)
 
     # Create database tables and auto-seed on first run
     with app.app_context():
-        from app.models import user, word, word_bank, review_history  # noqa: F401
+        from app.models import user, word, word_bank, review_history, user_word_progress  # noqa: F401
         db.create_all()
         _seed_words_if_empty(app)
         if app.config.get('DEBUG'):
@@ -65,8 +67,9 @@ def _seed_words_if_empty(app):
     if Word.query.first() is not None:
         return
 
+    # __file__ = backend/app/__init__.py → up 3 levels to project root
     csv_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         'frontend', 'public', 'AWL', 'AWL.csv'
     )
 

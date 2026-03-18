@@ -62,6 +62,13 @@ class User(UserMixin, db.Model):
         passive_deletes=True,
         lazy=True
     )
+    word_progress = db.relationship(
+        'UserWordProgress',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy=True
+    )
 
     def __init__(self, username, email):
         self.username = username

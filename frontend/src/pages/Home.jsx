@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Typography, Card, Row, Col, Progress } from 'antd';
 import {
   ReadOutlined,
@@ -8,6 +9,7 @@ import {
   ArrowRightOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { dailyLearningAPI } from '../api';
 
 const { Title, Text } = Typography;
 
@@ -24,7 +26,7 @@ const modules = [
     title: 'Word Bank',
     icon: <BookOutlined />,
     path: '/word-bank',
-    desc: 'Review and manage your saved words',
+    desc: 'Manage your saved vocabulary collection',
     color: '#059669',
     bg: 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
   },
@@ -56,6 +58,26 @@ const modules = [
 
 export default function Home() {
   const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    wordsLearned: 0,
+    totalWords: 0,
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await dailyLearningAPI.getStats();
+        const data = res.data;
+        setStats({
+          wordsLearned: data.total_learned || 0,
+          totalWords: data.total_words || 0,
+        });
+      } catch (error) {
+        console.error('Failed to load stats:', error);
+      }
+    };
+    fetchStats();
+  }, []);
 
   return (
     <div className="page-container">
@@ -75,14 +97,17 @@ export default function Home() {
         </Text>
         <Row gutter={32} style={{ marginTop: 28 }}>
           {[
-            { label: 'Words Learned', value: 0, total: 50 },
+            { label: 'Words Learned', value: stats.wordsLearned, total: Math.max(stats.totalWords, 50) },
             { label: 'Listening Hours', value: 0, total: 10 },
             { label: 'Speaking Sessions', value: 0, total: 20 },
           ].map((s) => (
             <Col span={8} key={s.label}>
               <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{s.label}</Text>
+              <div style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: '4px 0 2px' }}>
+                {s.value} / {s.total}
+              </div>
               <Progress
-                percent={Math.round((s.value / s.total) * 100)}
+                percent={s.total > 0 ? Math.round((s.value / s.total) * 100) : 0}
                 strokeColor={{ from: '#60a5fa', to: '#a78bfa' }}
                 trailColor="rgba(255,255,255,0.15)"
                 size="small"
@@ -109,7 +134,7 @@ export default function Home() {
                 border: 'none',
                 overflow: 'hidden',
               }}
-              bodyStyle={{ padding: 24 }}
+              styles={{ body: { padding: 24 } }}
             >
               <div style={{
                 width: 48,

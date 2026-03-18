@@ -1,88 +1,61 @@
-// frontend/src/pages/WordBank.jsx
 import { useState, useEffect } from 'react';
-import { 
-  Typography, 
-  Card, 
-  Button, 
-  Tag, 
-  Empty, 
-  message, 
-  Tooltip, 
-  Input, 
-  Space,
-  Spin,
-  Modal,
-  Select,
-  Row,
-  Col,
-  Statistic,
-  Progress,
-  Divider,
-  Alert
+import {
+  Typography, Card, Button, Tag, Empty, Tooltip, Input, Space, Spin,
+  Modal, Select, List, Progress, Divider, App
 } from 'antd';
-import { 
-  DeleteOutlined, 
-  SoundOutlined, 
-  SearchOutlined, 
-  BookOutlined,
-  ReloadOutlined,
-  BarChartOutlined,
-  ClockCircleOutlined,
-  CheckCircleOutlined,
-  StarOutlined,
-  ExportOutlined,
-  FilterOutlined,
-  SortAscendingOutlined
+import {
+  DeleteOutlined, SoundOutlined, SearchOutlined, BookOutlined,
+  ReloadOutlined, ExportOutlined, SortAscendingOutlined,
+  PlayCircleOutlined, CheckOutlined, PlusOutlined, EyeOutlined,
+  StarOutlined, CloseOutlined
 } from '@ant-design/icons';
-import { wordBankAPI } from '../api';
+import { wordBankAPI, dailyLearningAPI } from '../api';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
 
-// 掌握程度配置
-const masteryConfig = [
-  { label: 'New', color: '#6b7280', bg: '#f3f4f6', value: 0, emoji: '🆕' },
-  { label: 'Learning', color: '#d97706', bg: '#fef3c7', value: 1, emoji: '📚' },
-  { label: 'Familiar', color: '#2563eb', bg: '#dbeafe', value: 2, emoji: '✨' },
-  { label: 'Mastered', color: '#059669', bg: '#d1fae5', value: 3, emoji: '🌟' },
-];
-
-// 排序选项
 const sortOptions = [
   { label: 'Date Added (Newest)', value: 'date_desc' },
   { label: 'Date Added (Oldest)', value: 'date_asc' },
   { label: 'Word (A-Z)', value: 'word_asc' },
   { label: 'Word (Z-A)', value: 'word_desc' },
-  { label: 'Mastery Level', value: 'mastery' },
 ];
 
 export default function WordBank() {
-  // ==================== State Management ====================
   const [words, setWords] = useState([]);
   const [filteredWords, setFilteredWords] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [masteryFilter, setMasteryFilter] = useState(null);
   const [sortBy, setSortBy] = useState('date_desc');
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [wordToDelete, setWordToDelete] = useState(null);
-  const [reviewModalVisible, setReviewModalVisible] = useState(false);
-  const [reviewWords, setReviewWords] = useState([]);
-  const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
-  const [showDefinition, setShowDefinition] = useState(false);
-  const [statsModalVisible, setStatsModalVisible] = useState(false);
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [batchDeleteMode, setBatchDeleteMode] = useState(false);
   const [selectedWords, setSelectedWords] = useState(new Set());
-  const [stats, setStats] = useState({
-    total: 0,
-    new: 0,
-    learning: 0,
-    familiar: 0,
-    mastered: 0,
-    today_reviewed: 0,
-    review_history: []
-  });
+
+  // Learning modal state
+  const [learningOpen, setLearningOpen] = useState(false);
+  const [learningWords, setLearningWords] = useState([]);
+  const [learningIndex, setLearningIndex] = useState(0);
+  const [showDef, setShowDef] = useState(false);
+
+  // All words / review / mastered modal state
+  const [allWordsOpen, setAllWordsOpen] = useState(false);
+  const [allWords, setAllWords] = useState([]);
+  const [allWordsTotal, setAllWordsTotal] = useState(0);
+  const [allWordsPage, setAllWordsPage] = useState(1);
+  const [allWordsSearch, setAllWordsSearch] = useState('');
+  const [allWordsLoading, setAllWordsLoading] = useState(false);
+
+  const [reviewListOpen, setReviewListOpen] = useState(false);
+  const [reviewListWords, setReviewListWords] = useState([]);
+  const [reviewListLoading, setReviewListLoading] = useState(false);
+
+  const [masteredOpen, setMasteredOpen] = useState(false);
+  const [masteredWords, setMasteredWords] = useState([]);
+  const [masteredLoading, setMasteredLoading] = useState(false);
+
+  const { message } = App.useApp();
 
   // ==================== Data Loading ====================
   const loadWordBank = async () => {
@@ -90,9 +63,6 @@ export default function WordBank() {
     try {
       const res = await wordBankAPI.getAll();
       setWords(res.data.words || []);
-      
-      const statsRes = await wordBankAPI.getStats();
-      setStats(statsRes.data);
     } catch (err) {
       message.error('Failed to load word bank');
       console.error(err);
@@ -108,40 +78,23 @@ export default function WordBank() {
   // ==================== Filtering & Sorting ====================
   useEffect(() => {
     let filtered = [...words];
-    
-    // 搜索过滤
     if (search) {
-      filtered = filtered.filter(w => 
+      filtered = filtered.filter(w =>
         w.text.toLowerCase().includes(search.toLowerCase()) ||
         w.definition.toLowerCase().includes(search.toLowerCase())
       );
     }
-    
-    // 掌握程度过滤
-    if (masteryFilter !== null) {
-      filtered = filtered.filter(w => w.mastery_level === masteryFilter);
-    }
-    
-    // 排序
     filtered.sort((a, b) => {
       switch (sortBy) {
-        case 'date_desc':
-          return new Date(b.added_at) - new Date(a.added_at);
-        case 'date_asc':
-          return new Date(a.added_at) - new Date(b.added_at);
-        case 'word_asc':
-          return a.text.localeCompare(b.text);
-        case 'word_desc':
-          return b.text.localeCompare(a.text);
-        case 'mastery':
-          return b.mastery_level - a.mastery_level;
-        default:
-          return 0;
+        case 'date_desc': return new Date(b.added_at) - new Date(a.added_at);
+        case 'date_asc': return new Date(a.added_at) - new Date(b.added_at);
+        case 'word_asc': return a.text.localeCompare(b.text);
+        case 'word_desc': return b.text.localeCompare(a.text);
+        default: return 0;
       }
     });
-    
     setFilteredWords(filtered);
-  }, [words, search, masteryFilter, sortBy]);
+  }, [words, search, sortBy]);
 
   // ==================== CRUD Operations ====================
   const confirmRemove = (entryId) => {
@@ -151,14 +104,12 @@ export default function WordBank() {
 
   const removeWord = async () => {
     if (!wordToDelete) return;
-    
     try {
       await wordBankAPI.remove(wordToDelete);
       setWords(words.filter((w) => w.id !== wordToDelete));
       message.success('Word removed from bank');
     } catch (err) {
       message.error('Failed to remove word');
-      console.error(err);
     } finally {
       setDeleteModalVisible(false);
       setWordToDelete(null);
@@ -170,7 +121,6 @@ export default function WordBank() {
       message.warning('No words selected');
       return;
     }
-
     Modal.confirm({
       title: 'Batch Delete',
       content: `Are you sure you want to delete ${selectedWords.size} words?`,
@@ -178,11 +128,7 @@ export default function WordBank() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          const deletePromises = Array.from(selectedWords).map(id => 
-            wordBankAPI.remove(id)
-          );
-          
-          await Promise.all(deletePromises);
+          await Promise.all(Array.from(selectedWords).map(id => wordBankAPI.remove(id)));
           setWords(words.filter(w => !selectedWords.has(w.id)));
           setSelectedWords(new Set());
           setBatchDeleteMode(false);
@@ -194,98 +140,6 @@ export default function WordBank() {
     });
   };
 
-  // ==================== Review Functions ====================
-  const startReview = async () => {
-    try {
-      setReviewWords(words.filter(w => w.mastery_level < 3));
-      setReviewModalVisible(true);
-      setCurrentReviewIndex(0);
-      setShowDefinition(false);
-    } catch (err) {
-      message.error('Failed to load review words');
-      console.error(err);
-    }
-  };
-
-  const markReviewed = async (wordId, knewIt) => {
-    try {
-      await wordBankAPI.review(wordId, knewIt);
-      
-      const word = words.find(w => w.id === wordId);
-      if (!word) return;
-
-      if (knewIt && word.mastery_level < 3) {
-        setWords(words.map(w => {
-          if (w.id === wordId && w.mastery_level < 3) {
-            return { ...w, mastery_level: w.mastery_level + 1 };
-          }
-          return w;
-        }));
-      }
-      
-      setStats(prev => ({
-        ...prev,
-        today_reviewed: prev.today_reviewed + 1
-      }));
-    } catch (err) {
-      console.error('Failed to record review:', err);
-    }
-  };
-
-  // ==================== Mastery Update ====================
-  const updateMastery = async (entryId, newLevel) => {
-    try {
-      await wordBankAPI.updateMastery(entryId, newLevel);
-      setWords(words.map(w => 
-        w.id === entryId ? { ...w, mastery_level: newLevel } : w
-      ));
-      message.success('Mastery level updated');
-    } catch (err) {
-      message.error('Failed to update mastery level');
-      console.error(err);
-    }
-  };
-
-  // ==================== Export Functions ====================
-  const exportWords = async (format) => {
-    try {
-      const exportData = filteredWords;
-      
-      if (format === 'csv') {
-        // 生成 CSV 内容
-        const csvContent = [
-          ['Word', 'Definition', 'Mastery Level'],
-          ...exportData.map(w => [
-            w.text,
-            w.definition,
-            masteryConfig[w.mastery_level].label
-          ])
-        ].map(row => row.join(',')).join('\n');
-        
-        // 下载 CSV 文件
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `wordbank_${new Date().toISOString().split('T')[0]}.csv`;
-        a.click();
-      } else if (format === 'json') {
-        // 复制到剪贴板
-        await navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
-        message.success('Copied to clipboard');
-      } else if (format === 'text') {
-        // 复制为文本列表
-        const textContent = exportData.map(w => w.text).join('\n');
-        await navigator.clipboard.writeText(textContent);
-        message.success('Copied to clipboard');
-      }
-      
-      setExportModalVisible(false);
-    } catch (err) {
-      message.error('Export failed');
-    }
-  };
-
   // ==================== Speech ====================
   const speakWord = (text) => {
     if ('speechSynthesis' in window) {
@@ -293,303 +147,204 @@ export default function WordBank() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
       utterance.rate = 0.8;
-      utterance.onerror = () => message.warning('Speech synthesis failed');
       window.speechSynthesis.speak(utterance);
-    } else {
-      message.warning('Your browser does not support speech synthesis');
     }
   };
 
-  // ==================== Statistics ====================
-  const calculatedStats = {
-    ...stats,
-    progress: stats.total ? Math.round((stats.familiar + stats.mastered) / stats.total * 100) || 0 : 0,
-    dailyProgress: Math.min(Math.round((stats.today_reviewed / 10) * 100), 100),
-    avgMastery: stats.total ? 
-      Math.round(((stats.new * 0 + stats.learning * 1 + stats.familiar * 2 + stats.mastered * 3) / stats.total) * 100) / 100 : 0,
+  // ==================== Export ====================
+  const exportWords = async (format) => {
+    try {
+      const exportData = filteredWords;
+      if (format === 'csv') {
+        const csvContent = [
+          ['Word', 'Definition'],
+          ...exportData.map(w => [w.text, `"${(w.definition || '').replace(/"/g, '""')}"`])
+        ].map(row => row.join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `wordbank_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+      } else if (format === 'json') {
+        await navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
+        message.success('Copied to clipboard');
+      } else if (format === 'text') {
+        await navigator.clipboard.writeText(exportData.map(w => w.text).join('\n'));
+        message.success('Copied to clipboard');
+      }
+      setExportModalVisible(false);
+    } catch (err) {
+      message.error('Export failed');
+    }
   };
 
-  // ==================== UI Components ====================
-  const ReviewModal = () => (
-    <Modal
-      title="📖 Word Review"
-      open={reviewModalVisible}
-      onCancel={() => setReviewModalVisible(false)}
-      footer={null}
-      width={600}
-      centered
-    >
-      {reviewWords.length > 0 ? (
-        <div>
-          {/* 进度条 */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text type="secondary">
-                {currentReviewIndex + 1} / {reviewWords.length}
-              </Text>
-              <Text type="success">
-                {Math.round(((currentReviewIndex + 1) / reviewWords.length) * 100)}%
-              </Text>
-            </div>
-            <Progress 
-              percent={Math.round(((currentReviewIndex + 1) / reviewWords.length) * 100)} 
-              showInfo={false}
-              strokeColor="#2563eb"
-            />
-          </div>
+  // ==================== Word Bank Learning ====================
+  const startLearning = () => {
+    if (words.length === 0) {
+      message.info('No words in your bank!');
+      return;
+    }
+    setLearningWords([...words]);
+    setLearningIndex(0);
+    setShowDef(false);
+    setLearningOpen(true);
+  };
 
-          {/* 当前单词 */}
-          <div style={{ textAlign: 'center', minHeight: 200, padding: '20px 0' }}>
-            <Title level={2} style={{ marginBottom: 16, color: '#1a1a2e' }}>
-              {reviewWords[currentReviewIndex].text}
-            </Title>
-            
-            {reviewWords[currentReviewIndex].part_of_speech && (
-              <Tag style={{ marginBottom: 16 }}>
-                {reviewWords[currentReviewIndex].part_of_speech}
-              </Tag>
-            )}
-            
-            {showDefinition ? (
-              <div style={{ textAlign: 'left', background: '#f9fafb', padding: 20, borderRadius: 12 }}>
-                <Text strong>Definition: </Text>
-                <Paragraph>{reviewWords[currentReviewIndex].definition}</Paragraph>
-                
-                {reviewWords[currentReviewIndex].example_sentence && (
-                  <>
-                    <Divider style={{ margin: '12px 0' }} />
-                    <Text strong>Example: </Text>
-                    <Text italic>"{reviewWords[currentReviewIndex].example_sentence}"</Text>
-                  </>
-                )}
-              </div>
-            ) : (
-              <Button 
-                type="link" 
-                onClick={() => setShowDefinition(true)}
-                size="large"
-              >
-                Show Definition
-              </Button>
-            )}
-          </div>
+  const handleLearningNext = () => {
+    if (learningIndex < learningWords.length - 1) {
+      setLearningIndex(prev => prev + 1);
+      setShowDef(false);
+    } else {
+      setLearningOpen(false);
+      message.success('Finished reviewing word bank!');
+    }
+  };
 
-          {/* 按钮组 */}
-          {showDefinition ? (
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24 }}>
-              <Button 
-                size="large"
-                onClick={() => {
-                  markReviewed(reviewWords[currentReviewIndex].id, false);
-                  if (currentReviewIndex < reviewWords.length - 1) {
-                    setCurrentReviewIndex(prev => prev + 1);
-                    setShowDefinition(false);
-                  } else {
-                    setReviewModalVisible(false);
-                    loadWordBank(); // 刷新数据
-                  }
-                }}
-              >
-                Need Review Again
-              </Button>
-              <Button 
-                type="primary"
-                size="large"
-                onClick={() => {
-                  markReviewed(reviewWords[currentReviewIndex].id, true);
-                  if (currentReviewIndex < reviewWords.length - 1) {
-                    setCurrentReviewIndex(prev => prev + 1);
-                    setShowDefinition(false);
-                  } else {
-                    setReviewModalVisible(false);
-                    loadWordBank(); // 刷新数据
-                  }
-                }}
-              >
-                I Know It
-              </Button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
-              <Button 
-                onClick={() => {
-                  if (currentReviewIndex > 0) {
-                    setCurrentReviewIndex(prev => prev - 1);
-                    setShowDefinition(false);
-                  }
-                }}
-                disabled={currentReviewIndex === 0}
-              >
-                Previous
-              </Button>
-              <Button type="primary" onClick={() => setShowDefinition(true)}>
-                Check Definition
-              </Button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <Empty description="No words to review today">
-          <Button onClick={() => setReviewModalVisible(false)}>
-            Close
-          </Button>
-        </Empty>
-      )}
-    </Modal>
-  );
+  const handleRemoveFromBank = async (entryId) => {
+    try {
+      await wordBankAPI.remove(entryId);
+      setWords(prev => prev.filter(w => w.id !== entryId));
 
-  const StatsModal = () => (
-    <Modal
-      title="📊 Learning Statistics"
-      open={statsModalVisible}
-      onCancel={() => setStatsModalVisible(false)}
-      footer={null}
-      width={500}
-    >
-      <div style={{ padding: '10px 0' }}>
-        {/* 总体进度 */}
-        <div style={{ marginBottom: 24 }}>
-          <Text strong>Overall Progress</Text>
-          <Progress percent={calculatedStats.progress} status="active" strokeColor="#2563eb" />
-        </div>
+      const updated = learningWords.filter(w => w.id !== entryId);
+      if (updated.length === 0) {
+        setLearningOpen(false);
+        setLearningWords([]);
+        message.success('Removed. No more words in bank.');
+        return;
+      }
 
-        {/* 掌握程度分布 */}
-        <Card size="small" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <Text>🆕 New</Text>
-            <Text strong>{calculatedStats.new}</Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <Text>📚 Learning</Text>
-            <Text strong>{stats.learning}</Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <Text>✨ Familiar</Text>
-            <Text strong>{calculatedStats.familiar}</Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Text>🌟 Mastered</Text>
-            <Text strong>{calculatedStats.mastered}</Text>
-          </div>
-        </Card>
+      setLearningWords(updated);
+      // If we removed the current or a later word, keep index; if removed earlier, decrement
+      const removedIdx = learningWords.findIndex(w => w.id === entryId);
+      if (removedIdx < learningIndex) {
+        setLearningIndex(prev => prev - 1);
+      } else if (learningIndex >= updated.length) {
+        setLearningIndex(updated.length - 1);
+      }
+      setShowDef(false);
+      message.success('Removed from bank');
+    } catch (err) {
+      message.error('Failed to remove');
+    }
+  };
 
-        {/* 统计数据 */}
-        <Row gutter={16}>
-          <Col span={12}>
-            <Card size="small">
-              <Statistic 
-                title="Total Words" 
-                value={calculatedStats.total} 
-                suffix="words"
-              />
-            </Card>
-          </Col>
-          <Col span={12}>
-            <Card size="small">
-              <Statistic 
-                title="Avg Mastery" 
-                value={calculatedStats.avgMastery} 
-                precision={2}
-                suffix="/3"
-              />
-            </Card>
-          </Col>
-        </Row>
+  // ==================== View All / Review / Mastered ====================
+  const addToBank = async (wordId) => {
+    try {
+      await dailyLearningAPI.addToBank(wordId);
+      message.success('Added to Word Bank!');
+      loadWordBank();
+    } catch (error) {
+      if (error.response?.status === 409) {
+        message.info('Already in Word Bank');
+      } else {
+        message.error('Failed to add to bank');
+      }
+    }
+  };
 
-        {/* 复习历史（简化版） */}
-        {stats.review_history.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <Text strong>Recent Activity</Text>
-            <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 8 }}>
-              {stats.review_history.slice(0, 5).map((item, index) => (
-                <div key={index} style={{ 
-                  padding: '8px 0', 
-                  borderBottom: index < 4 ? '1px solid #f0f0f0' : 'none'
-                }}>
-                  <Text>{item.date}: </Text>
-                  <Text strong>{item.count} words</Text>
-                  <Text type="secondary"> reviewed</Text>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </Modal>
-  );
+  const loadAllWords = async (page = 1, search = '') => {
+    try {
+      setAllWordsLoading(true);
+      const res = await dailyLearningAPI.getAllWords(page, 50, search);
+      setAllWords(res.data.words || []);
+      setAllWordsTotal(res.data.total || 0);
+      setAllWordsPage(page);
+    } catch (error) {
+      message.error('Failed to load words');
+    } finally {
+      setAllWordsLoading(false);
+    }
+  };
 
-  const ExportModal = () => (
-    <Modal
-      title="📤 Export Word Bank"
-      open={exportModalVisible}
-      onCancel={() => setExportModalVisible(false)}
-      footer={null}
-    >
-      <div style={{ padding: '10px 0' }}>
-        <Alert
-          message={`Exporting ${masteryFilter !== null ? 
-            masteryConfig.find(m => m.value === masteryFilter)?.label : 'all'} words`}
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-        
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Button 
-            block 
-            icon={<ExportOutlined />}
-            onClick={() => exportWords('csv')}
-          >
-            Export as CSV (for Excel)
-          </Button>
-          <Button 
-            block 
-            icon={<ExportOutlined />}
-            onClick={() => exportWords('json')}
-          >
-            Export as JSON
-          </Button>
-          <Button 
-            block 
-            icon={<ExportOutlined />}
-            onClick={() => exportWords('text')}
-          >
-            Copy as Text List
-          </Button>
-        </Space>
-      </div>
-    </Modal>
-  );
+  const openAllWords = () => {
+    setAllWordsSearch('');
+    loadAllWords(1, '');
+    setAllWordsOpen(true);
+  };
 
-  // ==================== Main Render ====================
+  const openReviewList = async () => {
+    try {
+      setReviewListLoading(true);
+      const res = await dailyLearningAPI.getReviewWords();
+      setReviewListWords(res.data.words || []);
+      setReviewListOpen(true);
+    } catch (error) {
+      message.error('Failed to load review words');
+    } finally {
+      setReviewListLoading(false);
+    }
+  };
+
+  const openMastered = async () => {
+    try {
+      setMasteredLoading(true);
+      const res = await dailyLearningAPI.getMasteredWords();
+      setMasteredWords(res.data.words || []);
+      setMasteredOpen(true);
+    } catch (error) {
+      message.error('Failed to load mastered words');
+    } finally {
+      setMasteredLoading(false);
+    }
+  };
+
+  // ==================== Mark Mastered by word_id ====================
+  const markMasteredByWordId = async (wordId) => {
+    try {
+      await dailyLearningAPI.markMastered(wordId);
+      message.success('Marked as mastered');
+      setAllWords(prev => prev.map(w =>
+        w.id === wordId ? { ...w, progress_status: 'mastered' } : w
+      ));
+    } catch (error) {
+      message.error('Failed to mark as mastered');
+    }
+  };
+
+  // ==================== Render ====================
+  const currentLearningWord = learningWords[learningIndex];
+
   return (
     <div className="page-container" style={{ padding: '24px' }}>
-      {/* Modals */}
+      {/* Delete Confirm Modal */}
       <Modal
         title="Remove Word"
         open={deleteModalVisible}
         onOk={removeWord}
         onCancel={() => setDeleteModalVisible(false)}
         okText="Remove"
-        cancelText="Cancel"
         okButtonProps={{ danger: true }}
       >
         <p>Are you sure you want to remove this word from your bank?</p>
       </Modal>
 
-      <ReviewModal />
-      <StatsModal />
-      <ExportModal />
+      {/* Export Modal */}
+      <Modal
+        title="Export Word Bank"
+        open={exportModalVisible}
+        onCancel={() => setExportModalVisible(false)}
+        footer={null}
+      >
+        <Space direction="vertical" style={{ width: '100%', padding: '10px 0' }}>
+          <Button block icon={<ExportOutlined />} onClick={() => exportWords('csv')}>
+            Export as CSV (for Excel)
+          </Button>
+          <Button block icon={<ExportOutlined />} onClick={() => exportWords('json')}>
+            Export as JSON
+          </Button>
+          <Button block icon={<ExportOutlined />} onClick={() => exportWords('text')}>
+            Copy as Text List
+          </Button>
+        </Space>
+      </Modal>
 
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 16,
-          marginBottom: 16
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          flexWrap: 'wrap', gap: 16, marginBottom: 16
         }}>
           <div>
             <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>
@@ -598,70 +353,46 @@ export default function WordBank() {
             </Title>
             <Text type="secondary">{words.length} words saved</Text>
           </div>
-          
           <Space wrap>
-            {/* Daily Goal Progress */}
-            <Card size="small" style={{ borderRadius: 20, background: '#f0f9ff' }}>
-              <Space>
-                <StarOutlined style={{ color: '#f59e0b' }} />
-                <Text strong>{calculatedStats.today_reviewed}/10</Text>
-                <Text type="secondary">today</Text>
-              </Space>
-            </Card>
-
-            <Button 
+            <Button
               type="primary"
-              icon={<ReloadOutlined />}
-              onClick={startReview}
+              icon={<PlayCircleOutlined />}
+              onClick={startLearning}
               disabled={words.length === 0}
+              style={{ background: '#667eea', borderColor: '#667eea' }}
             >
-              Review Words
+              Learn Word Bank
             </Button>
-
-            <Button 
-              icon={<BarChartOutlined />}
-              onClick={() => setStatsModalVisible(true)}
-            >
-              Stats
-            </Button>
-
-            <Button 
-              icon={<ExportOutlined />}
-              onClick={() => setExportModalVisible(true)}
-            >
+            <Button icon={<ExportOutlined />} onClick={() => setExportModalVisible(true)}>
               Export
             </Button>
-
             {batchDeleteMode ? (
-              <Button 
-                danger
-                onClick={batchDelete}
-              >
-                Delete ({selectedWords.size})
-              </Button>
+              <>
+                <Button danger onClick={batchDelete}>Delete ({selectedWords.size})</Button>
+                <Button size="small" onClick={() => { setBatchDeleteMode(false); setSelectedWords(new Set()); }}>
+                  Cancel
+                </Button>
+              </>
             ) : (
-              <Button 
-                onClick={() => setBatchDeleteMode(true)}
-              >
-                Batch Select
-              </Button>
-            )}
-
-            {batchDeleteMode && (
-              <Button 
-                size="small"
-                onClick={() => {
-                  setBatchDeleteMode(false);
-                  setSelectedWords(new Set());
-                }}
-              >
-                Cancel
-              </Button>
+              <Button onClick={() => setBatchDeleteMode(true)}>Batch Select</Button>
             )}
           </Space>
         </div>
 
-        {/* Search and Filter Bar */}
+        {/* View Buttons */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+          <Button icon={<EyeOutlined />} onClick={openAllWords}>
+            View All Words
+          </Button>
+          <Button icon={<ReloadOutlined />} onClick={openReviewList}>
+            View Review Words
+          </Button>
+          <Button icon={<StarOutlined />} onClick={openMastered}>
+            View Mastered Words
+          </Button>
+        </div>
+
+        {/* Search and Sort */}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Input
             placeholder="Search words or definitions..."
@@ -671,115 +402,18 @@ export default function WordBank() {
             style={{ width: 300, borderRadius: 8 }}
             allowClear
           />
-
-          <Select
-            value={sortBy}
-            onChange={setSortBy}
-            style={{ width: 200 }}
-            placeholder="Sort by"
-          >
+          <Select value={sortBy} onChange={setSortBy} style={{ width: 200 }}>
             {sortOptions.map(opt => (
               <Option key={opt.value} value={opt.value}>
                 <SortAscendingOutlined /> {opt.label}
               </Option>
             ))}
           </Select>
-
-          <Button 
-            icon={<ReloadOutlined />} 
-            onClick={loadWordBank}
-            loading={loading}
-          >
+          <Button icon={<ReloadOutlined />} onClick={loadWordBank} loading={loading}>
             Refresh
           </Button>
         </div>
       </div>
-
-      {/* Mastery Filter Tabs */}
-      <div style={{ marginBottom: 24 }}>
-        <Space wrap>
-          <Button 
-            size="large"
-            type={masteryFilter === null ? 'primary' : 'default'}
-            onClick={() => setMasteryFilter(null)}
-            style={{ borderRadius: 30, minWidth: 80 }}
-          >
-            All <Tag style={{ marginLeft: 4 }}>{calculatedStats.total}</Tag>
-          </Button>
-          {masteryConfig.map(level => (
-            <Button
-              key={level.value}
-              size="large"
-              type={masteryFilter === level.value ? 'primary' : 'default'}
-              onClick={() => setMasteryFilter(level.value)}
-              style={{ 
-                borderRadius: 30,
-                minWidth: 100,
-                background: masteryFilter === level.value ? level.color : level.bg,
-                borderColor: level.color,
-                color: masteryFilter === level.value ? '#fff' : level.color,
-              }}
-            >
-              {level.emoji} {level.label} 
-              <Tag style={{ 
-                marginLeft: 4,
-                background: masteryFilter === level.value ? 'rgba(255,255,255,0.2)' : '#fff',
-                border: 'none'
-              }}>
-                {stats[level.label.toLowerCase()] || 0}
-              </Tag>
-            </Button>
-          ))}
-        </Space>
-      </div>
-
-      {/* Statistics Cards */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} md={6}>
-          <Card hoverable style={{ borderRadius: 16, textAlign: 'center' }} size="small">
-            <Statistic 
-              title="Total Vocabulary" 
-              value={stats.total} 
-              prefix={<BookOutlined style={{ color: '#2563eb' }} />}
-              valueStyle={{ color: '#2563eb', fontWeight: 600, fontSize: 28 }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card hoverable style={{ borderRadius: 16, textAlign: 'center' }} size="small">
-            <Statistic 
-              title="Mastery Progress" 
-              value={calculatedStats.progress} 
-              suffix="%"
-              prefix={<CheckCircleOutlined style={{ color: '#059669' }} />}
-              valueStyle={{ color: '#059669', fontWeight: 600, fontSize: 28 }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card hoverable style={{ borderRadius: 16, textAlign: 'center' }} size="small">
-            <Statistic 
-              title="Today's Goal" 
-              value={calculatedStats.dailyProgress} 
-              suffix="%"
-              prefix={<StarOutlined style={{ color: '#d97706' }} />}
-              valueStyle={{ color: '#d97706', fontWeight: 600, fontSize: 28 }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card hoverable style={{ borderRadius: 16, textAlign: 'center' }} size="small">
-            <Statistic 
-              title="Avg Mastery" 
-              value={stats.avgMastery} 
-              precision={1}
-              suffix="/3"
-              prefix={<BarChartOutlined style={{ color: '#7c3aed' }} />}
-              valueStyle={{ color: '#7c3aed', fontWeight: 600, fontSize: 28 }}
-            />
-          </Card>
-        </Col>
-      </Row>
 
       {/* Word List */}
       {loading ? (
@@ -792,181 +426,303 @@ export default function WordBank() {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
               words.length === 0
-                ? 'No words saved yet. Start building your vocabulary!'
-                : 'No words match your filters'
+                ? 'No words saved yet. Add words from Daily Words!'
+                : 'No words match your search'
             }
           >
             {words.length === 0 ? (
-              <Button 
-                type="primary" 
-                href="/daily-words"
-                size="large"
-              >
+              <Button type="primary" href="/daily-words" size="large">
                 Go to Daily Words
               </Button>
             ) : (
-              <Button onClick={() => {
-                setSearch('');
-                setMasteryFilter(null);
-              }}>
-                Clear Filters
-              </Button>
+              <Button onClick={() => setSearch('')}>Clear Search</Button>
             )}
           </Empty>
         </Card>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {filteredWords.map((entry) => {
-            const mastery = masteryConfig[entry.mastery_level] || masteryConfig[0];
-            return (
-              <Card
-                key={entry.id}
-                style={{ 
-                  borderRadius: 16, 
-                  border: selectedWords.has(entry.id) ? '2px solid #2563eb' : '1px solid #e5e7eb',
-                  transition: 'all 0.2s',
-                  background: selectedWords.has(entry.id) ? '#eff6ff' : '#fff',
-                }}
-                bodyStyle={{ padding: '16px 24px' }}
-                hoverable
-              >
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center', 
-                  gap: 16,
-                  flexWrap: 'wrap',
-                }}>
-                  {/* Left: Word Info */}
-                  <div style={{ flex: 1, minWidth: 250 }}>
-                    {batchDeleteMode && (
-                      <input
-                        type="checkbox"
-                        checked={selectedWords.has(entry.id)}
-                        onChange={(e) => {
-                          const newSelected = new Set(selectedWords);
-                          if (e.target.checked) {
-                            newSelected.add(entry.id);
-                          } else {
-                            newSelected.delete(entry.id);
-                          }
-                          setSelectedWords(newSelected);
-                        }}
-                        style={{ marginRight: 12 }}
-                      />
-                    )}
-                    
-                    <Space size={12} align="center" wrap>
-                      <Title level={4} style={{ margin: 0, fontWeight: 600 }}>
-                        {entry.text}
-                      </Title>
-                      <Tag style={{
-                        borderRadius: 16,
-                        color: mastery.color,
-                        background: mastery.bg,
-                        border: 'none',
-                        fontWeight: 500,
-                        padding: '4px 12px',
-                      }}>
-                        {mastery.emoji} {mastery.label}
-                      </Tag>
-                      {entry.difficulty_level && (
-                        <Tag color={
-                          entry.difficulty_level === 'beginner' ? 'green' :
-                          entry.difficulty_level === 'intermediate' ? 'blue' : 'orange'
-                        } style={{ borderRadius: 16 }}>
-                          {entry.difficulty_level}
-                        </Tag>
-                      )}
-                      {entry.part_of_speech && (
-                        <Tag style={{ borderRadius: 16 }}>{entry.part_of_speech}</Tag>
-                      )}
-                    </Space>
-                    
-                    <Paragraph style={{ 
-                      margin: '8px 0 4px', 
-                      color: '#374151', 
-                      fontSize: 15,
-                      paddingLeft: batchDeleteMode ? 28 : 0,
-                    }}>
-                      {entry.definition}
-                    </Paragraph>
-                    
-                    {entry.example_sentence && (
-                      <Text italic style={{ 
-                        color: '#6b7280', 
-                        fontSize: 14,
-                        display: 'block',
-                        marginBottom: 4,
-                        paddingLeft: batchDeleteMode ? 28 : 0,
-                      }}>
-                        "{entry.example_sentence}"
-                      </Text>
-                    )}
-                    
-                    <div style={{ paddingLeft: batchDeleteMode ? 28 : 0 }}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        Added: {new Date(entry.added_at).toLocaleDateString()}
-                      </Text>
-                      {entry.last_reviewed && (
-                        <Text type="secondary" style={{ fontSize: 12, marginLeft: 16 }}>
-                          Last review: {new Date(entry.last_reviewed).toLocaleDateString()}
-                        </Text>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Right: Actions */}
-                  {!batchDeleteMode && (
-                    <Space size={8}>
-                      <Tooltip title="Listen">
-                        <Button 
-                          shape="circle" 
-                          icon={<SoundOutlined />} 
-                          onClick={() => speakWord(entry.text)}
-                          style={{ color: '#2563eb', borderColor: '#93c5fd' }}
-                        />
-                      </Tooltip>
-                      
-                      <Tooltip title="Update mastery level">
-                        <Select
-                          value={entry.mastery_level}
-                          onChange={(value) => updateMastery(entry.id, value)}
-                          style={{ width: 100 }}
-                          size="small"
-                          dropdownMatchSelectWidth={false}
-                        >
-                          {masteryConfig.map(level => (
-                            <Option key={level.value} value={level.value}>
-                              <Tag style={{ 
-                                color: level.color, 
-                                background: level.bg,
-                                border: 'none',
-                                marginRight: 0
-                              }}>
-                                {level.emoji} {level.label}
-                              </Tag>
-                            </Option>
-                          ))}
-                        </Select>
-                      </Tooltip>
-                      
-                      <Tooltip title="Remove">
-                        <Button 
-                          shape="circle" 
-                          icon={<DeleteOutlined />} 
-                          danger
-                          onClick={() => confirmRemove(entry.id)}
-                        />
-                      </Tooltip>
-                    </Space>
+          {filteredWords.map((entry) => (
+            <Card
+              key={entry.id}
+              style={{
+                borderRadius: 16,
+                border: selectedWords.has(entry.id) ? '2px solid #2563eb' : '1px solid #e5e7eb',
+                background: selectedWords.has(entry.id) ? '#eff6ff' : '#fff',
+                transition: 'all 0.2s',
+              }}
+              styles={{ body: { padding: '16px 24px' } }}
+              hoverable
+            >
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                gap: 16, flexWrap: 'wrap',
+              }}>
+                <div style={{ flex: 1, minWidth: 250 }}>
+                  {batchDeleteMode && (
+                    <input
+                      type="checkbox"
+                      checked={selectedWords.has(entry.id)}
+                      onChange={(e) => {
+                        const newSelected = new Set(selectedWords);
+                        if (e.target.checked) newSelected.add(entry.id);
+                        else newSelected.delete(entry.id);
+                        setSelectedWords(newSelected);
+                      }}
+                      style={{ marginRight: 12 }}
+                    />
                   )}
+                  <Space size={12} align="center" wrap>
+                    <Title level={4} style={{ margin: 0, fontWeight: 600 }}>{entry.text}</Title>
+                    {entry.difficulty_level && (
+                      <Tag color={
+                        entry.difficulty_level === 'beginner' ? 'green' :
+                        entry.difficulty_level === 'intermediate' ? 'blue' : 'orange'
+                      } style={{ borderRadius: 16 }}>
+                        {entry.difficulty_level}
+                      </Tag>
+                    )}
+                    {entry.part_of_speech && (
+                      <Tag style={{ borderRadius: 16 }}>{entry.part_of_speech}</Tag>
+                    )}
+                  </Space>
+                  <Paragraph style={{ margin: '8px 0 4px', color: '#374151', fontSize: 15 }}>
+                    {entry.definition}
+                  </Paragraph>
+                  {entry.example_sentence && (
+                    <Text italic style={{ color: '#6b7280', fontSize: 14, display: 'block', marginBottom: 4 }}>
+                      &ldquo;{entry.example_sentence}&rdquo;
+                    </Text>
+                  )}
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Added: {new Date(entry.added_at).toLocaleDateString()}
+                  </Text>
                 </div>
-              </Card>
-            );
-          })}
+                {!batchDeleteMode && (
+                  <Space size={8}>
+                    <Tooltip title="Listen">
+                      <Button
+                        shape="circle"
+                        icon={<SoundOutlined />}
+                        onClick={() => speakWord(entry.text)}
+                        style={{ color: '#2563eb', borderColor: '#93c5fd' }}
+                      />
+                    </Tooltip>
+                    <Tooltip title="Remove">
+                      <Button
+                        shape="circle"
+                        icon={<DeleteOutlined />}
+                        danger
+                        onClick={() => confirmRemove(entry.id)}
+                      />
+                    </Tooltip>
+                  </Space>
+                )}
+              </div>
+            </Card>
+          ))}
         </div>
       )}
+
+      {/* ==================== Word Bank Learning Modal ==================== */}
+      <Modal
+        title={null}
+        open={learningOpen}
+        onCancel={() => setLearningOpen(false)}
+        footer={null}
+        width={640}
+        centered
+        styles={{ body: { padding: '24px' } }}
+      >
+        {currentLearningWord && (
+          <div>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text type="secondary">Word Bank Study</Text>
+                <Text strong>{learningIndex + 1} / {learningWords.length}</Text>
+              </div>
+              <Progress
+                percent={Math.round(((learningIndex + 1) / learningWords.length) * 100)}
+                showInfo={false}
+                strokeColor={{ from: '#059669', to: '#10b981' }}
+              />
+            </div>
+
+            <div style={{ textAlign: 'center', minHeight: 220, padding: '20px 0' }}>
+              <Title level={1} style={{ margin: 0, color: '#1a1a2e', fontSize: 36 }}>
+                {currentLearningWord.text}
+              </Title>
+              <Button
+                type="text"
+                icon={<SoundOutlined />}
+                onClick={() => speakWord(currentLearningWord.text)}
+                style={{ color: '#059669', marginTop: 4 }}
+              >
+                Listen
+              </Button>
+
+              {showDef ? (
+                <div style={{
+                  textAlign: 'left', background: '#ecfdf5', padding: 20, borderRadius: 12, marginTop: 16
+                }}>
+                  <Text strong style={{ color: '#059669' }}>Definition:</Text>
+                  <Paragraph style={{ margin: '8px 0', fontSize: 15 }}>
+                    {currentLearningWord.definition}
+                  </Paragraph>
+                  {currentLearningWord.example_sentence && (
+                    <>
+                      <Divider style={{ margin: '12px 0' }} />
+                      <Text strong style={{ color: '#059669' }}>Example:</Text>
+                      <Paragraph italic style={{ margin: '8px 0', color: '#6b7280' }}>
+                        &ldquo;{currentLearningWord.example_sentence}&rdquo;
+                      </Paragraph>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <Button type="dashed" size="large" onClick={() => setShowDef(true)} style={{ marginTop: 16 }}>
+                  Show Definition
+                </Button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}>
+              <Button
+                size="large"
+                onClick={handleLearningNext}
+                type="primary"
+                style={{ minWidth: 120 }}
+              >
+                {learningIndex < learningWords.length - 1 ? 'Next Word' : 'Finish'}
+              </Button>
+              <Tooltip title="Remove this word from your bank">
+                <Button
+                  size="large"
+                  danger
+                  icon={<CloseOutlined />}
+                  onClick={() => handleRemoveFromBank(currentLearningWord.id)}
+                  style={{ minWidth: 120 }}
+                >
+                  Remove from Bank
+                </Button>
+              </Tooltip>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ==================== All Words Modal ==================== */}
+      <Modal
+        title={`All Words (${allWordsTotal})`}
+        open={allWordsOpen}
+        onCancel={() => setAllWordsOpen(false)}
+        footer={null}
+        width={750}
+      >
+        <Input
+          placeholder="Search words..."
+          prefix={<SearchOutlined />}
+          value={allWordsSearch}
+          onChange={(e) => { setAllWordsSearch(e.target.value); loadAllWords(1, e.target.value); }}
+          allowClear
+          style={{ marginBottom: 16 }}
+        />
+        <Spin spinning={allWordsLoading}>
+          <List
+            dataSource={allWords}
+            pagination={{
+              current: allWordsPage, total: allWordsTotal, pageSize: 50,
+              onChange: (page) => loadAllWords(page, allWordsSearch), size: 'small',
+            }}
+            renderItem={(word) => (
+              <List.Item actions={[
+                <Button
+                  key="bank"
+                  type="text"
+                  icon={word.in_word_bank ? <CheckOutlined /> : <PlusOutlined />}
+                  disabled={word.in_word_bank}
+                  onClick={() => addToBank(word.id)}
+                  size="small"
+                >
+                  {word.in_word_bank ? 'In Bank' : 'Add to Bank'}
+                </Button>,
+                word.progress_status === 'mastered' ? (
+                  <Tag key="status" color="green">mastered</Tag>
+                ) : (
+                  <Button
+                    key="mastered"
+                    type="text"
+                    icon={<StarOutlined />}
+                    onClick={() => markMasteredByWordId(word.id)}
+                    size="small"
+                    style={{ color: '#059669' }}
+                  >
+                    Mastered
+                  </Button>
+                ),
+              ].filter(Boolean)}>
+                <List.Item.Meta
+                  title={<Space><Text strong>{word.text}</Text><Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} /></Space>}
+                  description={word.definition}
+                />
+
+              </List.Item>
+            )}
+          />
+        </Spin>
+      </Modal>
+
+      {/* ==================== Review Words Modal ==================== */}
+      <Modal
+        title={`Review Words (${reviewListWords.length})`}
+        open={reviewListOpen}
+        onCancel={() => setReviewListOpen(false)}
+        footer={null}
+        width={700}
+      >
+        <Spin spinning={reviewListLoading}>
+          <List
+            dataSource={reviewListWords}
+            renderItem={(word) => (
+              <List.Item actions={[
+                <Button key="bank" type="text" icon={<PlusOutlined />} onClick={() => addToBank(word.word_id)} size="small">Add to Bank</Button>,
+              ]}>
+                <List.Item.Meta
+                  title={<Space><Text strong>{word.text}</Text><Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} /></Space>}
+                  description={word.definition}
+                />
+              </List.Item>
+            )}
+            locale={{ emptyText: <Empty description="No review words" /> }}
+          />
+        </Spin>
+      </Modal>
+
+      {/* ==================== Mastered Words Modal ==================== */}
+      <Modal
+        title={`Mastered Words (${masteredWords.length})`}
+        open={masteredOpen}
+        onCancel={() => setMasteredOpen(false)}
+        footer={null}
+        width={700}
+      >
+        <Spin spinning={masteredLoading}>
+          <List
+            dataSource={masteredWords}
+            pagination={{ pageSize: 20 }}
+            renderItem={(word) => (
+              <List.Item actions={[
+                <Button key="bank" type="text" icon={<PlusOutlined />} onClick={() => addToBank(word.word_id)} size="small">Add to Bank</Button>,
+              ]}>
+                <List.Item.Meta
+                  title={<Space><Text strong>{word.text}</Text><Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} /></Space>}
+                  description={word.definition}
+                />
+              </List.Item>
+            )}
+            locale={{ emptyText: <Empty description="No mastered words yet" /> }}
+          />
+        </Spin>
+      </Modal>
     </div>
   );
 }

@@ -11,6 +11,8 @@ from app.models.speaking_session import SpeakingSession
 from app.models.chat_session import ChatSession
 from app.models.chat_message import ChatMessage
 from app.models.progress import Progress
+from app.models.review_history import ReviewHistory
+from app.models.user_word_progress import UserWordProgress
 
 
 @event.listens_for(Engine, 'connect')
@@ -29,4 +31,6 @@ __all__ = [
     'ChatSession',
     'ChatMessage',
     'Progress',
+    'ReviewHistory',
+    'UserWordProgress',
 ]
