@@ -25,10 +25,21 @@ export const dailyWordsAPI = {
   getWords: (date) => api.get('/daily-words', { params: { date } }),
 };
 
+// Export getDailyWords function for DailyWords component
+export const getDailyWords = async (date) => {
+  try {
+    const response = await dailyWordsAPI.getWords(date);
+    return response;
+  } catch (error) {
+    console.error('Error in getDailyWords:', error);
+    throw error;
+  }
+};
+
 // Word Bank APIs
 export const wordBankAPI = {
   getAll: () => api.get('/word-bank'),
-  add: (wordId) => api.post('/word-bank', { word_id: wordId }),
+  add: (wordData) => api.post('/word-bank', wordData),
   remove: (entryId) => api.delete(`/word-bank/${entryId}`),
   updateMastery: (entryId, level) => 
    api.patch(`/word-bank/${entryId}`, { mastery_level: level }),

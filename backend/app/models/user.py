@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
-from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
-from app import db, login_manager
+from werkzeug.security import generate_password_hash, check_password_hash
+from app import db
 
 
 class User(UserMixin, db.Model):
@@ -25,7 +25,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
@@ -33,6 +33,7 @@ class User(UserMixin, db.Model):
         server_default=db.text('CURRENT_TIMESTAMP')
     )
 
+    # Relationships
     word_bank = db.relationship(
         'WordBank',
         back_populates='user',
@@ -62,6 +63,10 @@ class User(UserMixin, db.Model):
         lazy=True
     )
 
+    def __init__(self, username, email):
+        self.username = username
+        self.email = email
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -75,8 +80,3 @@ class User(UserMixin, db.Model):
             'email': self.email,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
-
-
-@login_manager.user_loader
-def load_user(user_id):
-    return db.session.get(User, int(user_id))

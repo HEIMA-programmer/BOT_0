@@ -44,7 +44,7 @@ def register():
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 409
 
-    if User.query.filter_by(email=email).first():
+    if User.query.filter(db.func.lower(User.email) == email).first():
         return jsonify({'error': 'Email already registered'}), 409
 
     user = User(username=username, email=email)

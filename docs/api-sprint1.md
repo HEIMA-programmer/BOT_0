@@ -43,7 +43,7 @@ Create a new user account.
 
 **Response 400:**
 ```json
-{ "error": "Password must be at least 6 characters long" }
+{ "error": "Password must be at least 8 characters" }
 ```
 
 **Response 409:**

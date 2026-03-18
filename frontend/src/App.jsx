@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Layout, ConfigProvider, Spin } from 'antd';
+import { Layout, ConfigProvider, Spin, App as AntdApp } from 'antd';
 import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import DailyWords from './pages/DailyWords';
@@ -73,46 +73,48 @@ export default function App() {
 
   return (
     <ConfigProvider theme={theme}>
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-        {user && <NavBar user={user} onLogout={handleLogout} />}
-        <Content style={{ background: '#f0f2f5' }}>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={
-              user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />
-            } />
-            <Route path="/register" element={
-              user ? <Navigate to="/" replace /> : <Register onLogin={handleLogin} />
-            } />
+      <AntdApp>
+        <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+          {user && <NavBar user={user} onLogout={handleLogout} />}
+          <Content style={{ background: '#f0f2f5' }}>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/login" element={
+                user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />
+              } />
+              <Route path="/register" element={
+                user ? <Navigate to="/" replace /> : <Register onLogin={handleLogin} />
+              } />
 
-            {/* Protected routes */}
-            <Route path="/" element={
-              <RequireAuth user={user} loading={loading}><Home /></RequireAuth>
-            } />
-            <Route path="/daily-words" element={
-              <RequireAuth user={user} loading={loading}><DailyWords /></RequireAuth>
-            } />
-            <Route path="/word-bank" element={
-              <RequireAuth user={user} loading={loading}><WordBank /></RequireAuth>
-            } />
-            <Route path="/listening" element={
-              <RequireAuth user={user} loading={loading}><Listening /></RequireAuth>
-            } />
-            <Route path="/speaking" element={
-              <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>
-            } />
-            <Route path="/ai-chat" element={
-              <RequireAuth user={user} loading={loading}><AIChat /></RequireAuth>
-            } />
-            <Route path="/profile" element={
-              <RequireAuth user={user} loading={loading}><Profile user={user} /></RequireAuth>
-            } />
+              {/* Protected routes */}
+              <Route path="/" element={
+                <RequireAuth user={user} loading={loading}><Home /></RequireAuth>
+              } />
+              <Route path="/daily-words" element={
+                <RequireAuth user={user} loading={loading}><DailyWords /></RequireAuth>
+              } />
+              <Route path="/word-bank" element={
+                <RequireAuth user={user} loading={loading}><WordBank /></RequireAuth>
+              } />
+              <Route path="/listening" element={
+                <RequireAuth user={user} loading={loading}><Listening /></RequireAuth>
+              } />
+              <Route path="/speaking" element={
+                <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>
+              } />
+              <Route path="/ai-chat" element={
+                <RequireAuth user={user} loading={loading}><AIChat /></RequireAuth>
+              } />
+              <Route path="/profile" element={
+                <RequireAuth user={user} loading={loading}><Profile user={user} /></RequireAuth>
+              } />
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Content>
-      </Layout>
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Content>
+        </Layout>
+      </AntdApp>
     </ConfigProvider>
   );
 }
