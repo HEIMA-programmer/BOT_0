@@ -99,6 +99,9 @@ export default function App() {
               <Route path="/listening" element={
                 <RequireAuth user={user} loading={loading}><Listening /></RequireAuth>
               } />
+              <Route path="/listening/:levelId" element={
+                <RequireAuth user={user} loading={loading}><Listening /></RequireAuth>
+              } />
               <Route path="/speaking" element={
                 <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>
               } />

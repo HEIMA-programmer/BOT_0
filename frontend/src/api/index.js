@@ -54,6 +54,10 @@ export const wordBankAPI = {
 // Listening APIs
 export const listeningAPI = {
   getCatalog: () => api.get('/listening/clips'),
+  getPractice: (levelId, scenarioId, sourceSlug) =>
+    api.get(`/listening/quiz/${levelId}/${scenarioId}/${sourceSlug}`),
+  submitPractice: (levelId, scenarioId, sourceSlug, answers) =>
+    api.post(`/listening/quiz/${levelId}/${scenarioId}/${sourceSlug}/submit`, { answers }),
 };
 
 export default api;
