@@ -1,6 +1,3 @@
-Here’s a complete **English test report document** in Markdown format that you can upload directly to GitHub. I’ve structured it as a QA-style test document, covering the issues you mentioned, with clear sections for reproducibility, expected vs. actual results, and recommendations.
-
-```markdown
 # English Vocabulary Learning Platform - Test Report
 
 ## Overview
@@ -124,6 +121,3 @@ Focus areas include: learning process, word bank management, review mechanics, s
 - Address **progress bar and button logic** (core learning flow).  
 - Tackle **UI/UX polish** (animations, layout, labels) after functional fixes.
 
-```
-
-Would you like me to also create a **GitHub Issues template** (so each bug can be logged directly as an issue with reproducible steps), or keep this as a single consolidated test report?
