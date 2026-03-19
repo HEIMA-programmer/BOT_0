@@ -256,7 +256,6 @@ export default function Listening({ user }) {
     const fetchPractice = async () => {
       setPracticeLoading(true);
       setPracticeError('');
-      setPracticeData(null);
       setSubmissionResult(null);
       try {
         const response = await listeningAPI.getPractice(
@@ -701,6 +700,7 @@ export default function Listening({ user }) {
                       borderRadius: 12,
                       border: isSelected ? '1px solid #2563eb' : '1px solid #e5e7eb',
                       background: isSelected ? '#f8fbff' : '#fff',
+                      transition: 'border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease',
                     }}
                     styles={{ body: { padding: 16 } }}
                   >
@@ -771,14 +771,8 @@ export default function Listening({ user }) {
                   />
                 ) : null}
 
-                {practiceLoading ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
-                    <Spin size="large" />
-                  </div>
-                ) : null}
-
-                {!practiceLoading && practiceData ? (
-                  <>
+                {practiceData ? (
+                  <Spin spinning={practiceLoading}>
                     {submissionResult ? (
                       <Card
                         style={{
@@ -863,10 +857,12 @@ export default function Listening({ user }) {
                         Submit answers
                       </Button>
                     ) : null}
-                  </>
-                ) : null}
-
-                {!practiceLoading && !practiceData && !practiceError ? (
+                  </Spin>
+                ) : practiceLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                    <Spin size="large" />
+                  </div>
+                ) : !practiceError ? (
                   <Empty description="Choose a clip to load its questions." />
                 ) : null}
               </Space>
