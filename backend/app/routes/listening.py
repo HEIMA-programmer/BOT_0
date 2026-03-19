@@ -1,9 +1,14 @@
 import re
 import unicodedata
+import json
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request, send_from_directory
-from flask_login import login_required
+from flask_login import current_user, login_required
+
+from app import db
+from app.models.listening_attempt import ListeningAttempt
+from app.models.progress import Progress
 
 listening_bp = Blueprint('listening', __name__, url_prefix='/api/listening')
 
@@ -534,6 +539,15 @@ def _build_practice_payload(level, scenario, source, include_answers=False):
     return payload
 
 
+def _find_saved_attempt(user_id, level_id, scenario_id, source_slug):
+    return ListeningAttempt.query.filter_by(
+        user_id=user_id,
+        level_id=level_id,
+        scenario_id=scenario_id,
+        source_slug=source_slug,
+    ).first()
+
+
 def _find_level(level_id):
     return next((level for level in LEVELS if level['id'] == level_id), None)
 
@@ -675,6 +689,9 @@ def get_listening_practice(level_id, scenario_id, source_slug):
     if payload is None:
         return jsonify({'error': 'Questions were not found for this clip'}), 404
 
+    saved_attempt = _find_saved_attempt(current_user.id, level_id, scenario_id, source_slug)
+    payload['saved_attempt'] = saved_attempt.to_dict() if saved_attempt else None
+
     return jsonify(payload), 200
 
 
@@ -704,6 +721,45 @@ def submit_listening_practice(level_id, scenario_id, source_slug):
     correct_count = sum(1 for result in results if result['is_correct'])
     total_count = len(results)
     score = round((correct_count / total_count) * 100, 1) if total_count else 0
+    time_spent = payload.get('time_spent')
+    time_spent = time_spent if isinstance(time_spent, int) and time_spent >= 0 else None
+
+    progress_record = Progress(
+        user_id=current_user.id,
+        module='listening',
+        activity_type=f'{level_id}:{scenario_id}:{source_slug}',
+        score=score,
+        time_spent=time_spent,
+    )
+    db.session.add(progress_record)
+
+    serialized_answers = {}
+    for question in questions:
+        serialized_answers[question['id']] = answers.get(question['id'], '')
+
+    saved_attempt = _find_saved_attempt(current_user.id, level_id, scenario_id, source_slug)
+    if saved_attempt is None:
+        saved_attempt = ListeningAttempt(
+            user_id=current_user.id,
+            level_id=level_id,
+            scenario_id=scenario_id,
+            source_slug=source_slug,
+            answers_json='{}',
+            results_json='[]',
+            transcript='',
+            score=0,
+            correct_count=0,
+            total_count=0,
+        )
+        db.session.add(saved_attempt)
+
+    saved_attempt.answers_json = json.dumps(serialized_answers)
+    saved_attempt.results_json = json.dumps(results)
+    saved_attempt.transcript = source['transcript']
+    saved_attempt.score = score
+    saved_attempt.correct_count = correct_count
+    saved_attempt.total_count = total_count
+    db.session.commit()
 
     return jsonify({
         'level': {
@@ -715,6 +771,7 @@ def submit_listening_practice(level_id, scenario_id, source_slug):
             'label': scenario['label'],
         },
         'clip': _clip_from_source(source, level, scenario),
+        'progress_id': progress_record.id,
         'score': score,
         'correct_count': correct_count,
         'total_count': total_count,

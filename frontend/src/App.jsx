@@ -97,10 +97,10 @@ export default function App() {
                 <RequireAuth user={user} loading={loading}><WordBank /></RequireAuth>
               } />
               <Route path="/listening" element={
-                <RequireAuth user={user} loading={loading}><Listening /></RequireAuth>
+                <RequireAuth user={user} loading={loading}><Listening user={user} /></RequireAuth>
               } />
               <Route path="/listening/:levelId" element={
-                <RequireAuth user={user} loading={loading}><Listening /></RequireAuth>
+                <RequireAuth user={user} loading={loading}><Listening user={user} /></RequireAuth>
               } />
               <Route path="/speaking" element={
                 <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>

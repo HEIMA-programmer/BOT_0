@@ -38,9 +38,18 @@ def get_today_words():
         UserWordProgress.assigned_date == today
     ).count()
 
+    # Carry-over words already studied today should still count toward today's cap,
+    # otherwise finishing old pending words would immediately unlock a fresh batch.
+    processed_carryover_today_count = UserWordProgress.query.filter(
+        UserWordProgress.user_id == current_user.id,
+        UserWordProgress.assigned_date < today,
+        UserWordProgress.status != 'pending',
+        db.func.date(UserWordProgress.updated_at) == today
+    ).count()
+
     # How many new words should be assigned today
-    today_target = max(0, daily_count - carryover_count)
-    new_needed = max(0, today_target - assigned_today_count)
+    daily_slots_used = carryover_count + assigned_today_count + processed_carryover_today_count
+    new_needed = max(0, daily_count - daily_slots_used)
 
     if new_needed > 0:
         # Get word IDs already in progress for this user
@@ -66,11 +75,29 @@ def get_today_words():
 
         db.session.commit()
 
-    # Return all currently pending words (carry-over + today's remaining)
-    pending = UserWordProgress.query.filter_by(
-        user_id=current_user.id,
-        status='pending'
-    ).all()
+    completed_today_count = UserWordProgress.query.filter(
+        UserWordProgress.user_id == current_user.id,
+        UserWordProgress.assigned_date == today,
+        UserWordProgress.status != 'pending',
+    ).count()
+
+    carryover_pending = UserWordProgress.query.filter(
+        UserWordProgress.user_id == current_user.id,
+        UserWordProgress.status == 'pending',
+        UserWordProgress.assigned_date < today,
+    ).order_by(UserWordProgress.assigned_date.asc(), UserWordProgress.id.asc()).all()
+
+    today_pending = UserWordProgress.query.filter(
+        UserWordProgress.user_id == current_user.id,
+        UserWordProgress.status == 'pending',
+        UserWordProgress.assigned_date == today,
+    ).order_by(UserWordProgress.id.asc()).all()
+
+    remaining_today_slots = max(
+        0,
+        daily_count - len(carryover_pending) - processed_carryover_today_count - completed_today_count
+    )
+    pending = carryover_pending + today_pending[:remaining_today_slots]
 
     review_count = UserWordProgress.query.filter_by(
         user_id=current_user.id,
@@ -160,12 +187,7 @@ def get_all_words():
 
     query = Word.query
     if search:
-        query = query.filter(
-            db.or_(
-                Word.text.ilike(f'%{search}%'),
-                Word.definition.ilike(f'%{search}%')
-            )
-        )
+        query = query.filter(Word.text.ilike(f'%{search}%'))
 
     total = query.count()
     words = query.order_by(Word.id).offset((page - 1) * per_page).limit(per_page).all()

@@ -1,3 +1,6 @@
+from app.models.progress import Progress
+
+
 def test_listening_catalog_returns_levels_and_supported_lecture_clips(client, login_user):
     login_user()
 
@@ -125,3 +128,88 @@ def test_intermediate_practice_submission_returns_score_and_results(client, logi
     assert results_by_prompt['The podcast is hosted by ____.']['is_correct'] is True
     assert results_by_prompt['What is the main goal of the podcast?']['is_correct'] is True
     assert results_by_prompt['The show’s title is “How to Be a ____ Human.”']['is_correct'] is False
+    assert isinstance(result['progress_id'], int) is True
+
+    progress = Progress.query.get(result['progress_id'])
+    assert progress is not None
+    assert progress.user_id == 1
+    assert progress.module == 'listening'
+    assert progress.activity_type == 'intermediate:lecture-clips:better-human-trailer'
+    assert progress.score == result['score']
+
+
+def test_listening_practice_returns_saved_attempt_for_same_user(client, login_user):
+    login_user()
+
+    quiz_response = client.get('/api/listening/quiz/beginner/lecture-clips/better-human-trailer')
+    assert quiz_response.status_code == 200
+    quiz = quiz_response.get_json()
+
+    answers = {}
+    for question in quiz['questions']:
+        answers[question['id']] = 'A'
+
+    submit_response = client.post(
+        '/api/listening/quiz/beginner/lecture-clips/better-human-trailer/submit',
+        json={'answers': answers},
+    )
+    assert submit_response.status_code == 200
+
+    practice_response = client.get('/api/listening/quiz/beginner/lecture-clips/better-human-trailer')
+    assert practice_response.status_code == 200
+    practice_data = practice_response.get_json()
+
+    assert practice_data['saved_attempt'] is not None
+    assert practice_data['saved_attempt']['answers'] == answers
+    assert practice_data['saved_attempt']['results']
+
+
+def test_listening_audio_route_returns_404_for_unknown_clip(client, login_user):
+    login_user()
+
+    response = client.get('/api/listening/audio/not-a-real-clip')
+
+    assert response.status_code == 404
+    assert response.get_json()['error'] == 'Clip not found'
+
+
+def test_listening_practice_route_rejects_unsupported_scenario(client, login_user):
+    login_user()
+
+    response = client.get('/api/listening/quiz/beginner/group-discussion/better-human-trailer')
+
+    assert response.status_code == 404
+    assert response.get_json()['error'] == 'Practice for this level and scenario is coming soon'
+
+
+def test_listening_practice_route_returns_404_for_unknown_clip(client, login_user):
+    login_user()
+
+    response = client.get('/api/listening/quiz/beginner/lecture-clips/not-a-real-clip')
+
+    assert response.status_code == 404
+    assert response.get_json()['error'] == 'Practice material not found'
+
+
+def test_listening_submission_requires_answers_object(client, login_user):
+    login_user()
+
+    response = client.post(
+        '/api/listening/quiz/intermediate/lecture-clips/better-human-trailer/submit',
+        json={'answers': ['not', 'a', 'dict']},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()['error'] == 'Answers must be provided as an object'
+
+
+def test_listening_submission_rejects_unsupported_level_and_scenario(client, login_user):
+    login_user()
+
+    response = client.post(
+        '/api/listening/quiz/advanced/lecture-clips/better-human-trailer/submit',
+        json={'answers': {}},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json()['error'] == 'Practice for this level and scenario is coming soon'
