@@ -198,8 +198,56 @@
 
 ### Fill in the Blank (6)
 
-1. The speaker says they “debuted my new role on the radio the same day the country went into ____.**  
+1. The speaker says they “debuted my new role on the radio the same day the country went into ____.”  
    **Answer:** lockdown  
-   **Explanation:** The transcript explicitly mentions the lockdown.
+   **Explanation:** The transcript says the debut happened on the same day the country went into lockdown.
 
-2. They mention “the pandemic put the ____ on my other
+2. They mention “the pandemic put the ____ on my other business venture.”  
+   **Answer:** cabash  
+   **Explanation:** The speaker says the pandemic put “the cabash” on the other business venture.
+
+3. The speaker says “my kids stopped going to ____.”  
+   **Answer:** school  
+   **Explanation:** The transcript directly states that the speaker's kids stopped going to school.
+
+4. The speaker says “the economy kept getting ____.”  
+   **Answer:** worse  
+   **Explanation:** The speaker describes the economy as continuously getting worse.
+
+5. They say “on season five, you’ll hear how ____ very unusual dynamos are making us rethink all sorts of assumptions.”  
+   **Answer:** six  
+   **Explanation:** The transcript explicitly mentions “six very unusual dynamos.”
+
+6. The new season starts on Thursdays this summer beginning July ____.
+   **Answer:** 23rd  
+   **Explanation:** The trailer says the season starts “July 23rd.”
+
+---
+
+### Short Answer (6)
+
+1. **Question:** What major national event happened on the same day the speaker debuted the new radio role?  
+   **Answer:** The country went into lockdown.  
+   **Explanation:** The speaker says the debut happened “the same day the country went into lockdown.”
+
+2. **Question:** How does the speaker describe the core purpose of Zigzag as a business show?  
+   **Answer:** It is a business show about being human.  
+   **Explanation:** The transcript says “Zigzag is the business show about being human.”
+
+3. **Question:** What impact did the pandemic have on the speaker’s other business venture?  
+   **Answer:** It put the venture on hold (the speaker says it put the “cabash” on it).  
+   **Explanation:** The transcript explicitly describes the pandemic as stopping progress on the other venture.
+
+4. **Question:** What kind of people does the speaker say they want to highlight?  
+   **Answer:** People changing their own lives by changing the lives of others.  
+   **Explanation:** This line appears directly in the trailer as the speaker’s focus.
+
+5. **Question:** Which three self-help remedies does the speaker mention, and why are they referenced?  
+   **Answer:** Well-buterin, marathon running, and sex; they are mentioned as the speaker’s personal coping tools.  
+   **Explanation:** The trailer lists all three in one sentence as self-help remedies.
+
+6. **Question:** What does the season preview suggest about the people featured in season five?  
+   **Answer:** It features six unusual dynamos who challenge assumptions and help imagine a better future.  
+   **Explanation:** The speaker says season five includes “six very unusual dynamos” rethinking assumptions.
+
+---
