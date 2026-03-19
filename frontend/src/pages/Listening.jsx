@@ -316,7 +316,7 @@ export default function Listening({ user }) {
           [activeKey]: (timeSpentCacheRef.current[activeKey] || 0) + elapsedMs,
         };
         timeSpentCacheRef.current = nextTimeSpentCache;
-        persistListeningState({
+        persistListeningState(user?.id, {
           answerCache: answerCacheRef.current,
           submissionCache: submissionCacheRef.current,
           timeSpentCache: nextTimeSpentCache,
