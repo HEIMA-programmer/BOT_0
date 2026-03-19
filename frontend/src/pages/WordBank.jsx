@@ -11,6 +11,7 @@ import {
   StarOutlined, CloseOutlined
 } from '@ant-design/icons';
 import { wordBankAPI, dailyLearningAPI } from '../api';
+import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -23,6 +24,8 @@ const sortOptions = [
 ];
 
 export default function WordBank() {
+  useLearningTimeTracker('vocab', 'study_time:word-bank');
+
   const [words, setWords] = useState([]);
   const [filteredWords, setFilteredWords] = useState([]);
   const [search, setSearch] = useState('');
@@ -40,11 +43,15 @@ export default function WordBank() {
   const [learningIndex, setLearningIndex] = useState(0);
   const [showDef, setShowDef] = useState(false);
 
+  // Track word IDs that are in the bank for immediate button feedback
+  const [bankWordIds, setBankWordIds] = useState(new Set());
+
   // All words / review / mastered modal state
   const [allWordsOpen, setAllWordsOpen] = useState(false);
   const [allWords, setAllWords] = useState([]);
   const [allWordsTotal, setAllWordsTotal] = useState(0);
   const [allWordsPage, setAllWordsPage] = useState(1);
+  const [allWordsPerPage, setAllWordsPerPage] = useState(20);
   const [allWordsSearch, setAllWordsSearch] = useState('');
   const [allWordsLoading, setAllWordsLoading] = useState(false);
 
@@ -76,13 +83,17 @@ export default function WordBank() {
     loadWordBank();
   }, []);
 
+  // Keep bankWordIds in sync with loaded word bank
+  useEffect(() => {
+    setBankWordIds(new Set(words.map(w => w.word_id)));
+  }, [words]);
+
   // ==================== Filtering & Sorting ====================
   useEffect(() => {
     let filtered = [...words];
     if (search) {
       filtered = filtered.filter(w =>
-        w.text.toLowerCase().includes(search.toLowerCase()) ||
-        w.definition.toLowerCase().includes(search.toLowerCase())
+        w.text.toLowerCase().includes(search.toLowerCase())
       );
     }
     filtered.sort((a, b) => {
@@ -234,21 +245,24 @@ export default function WordBank() {
   const addToBank = async (wordId) => {
     try {
       await dailyLearningAPI.addToBank(wordId);
+      setBankWordIds(prev => new Set([...prev, wordId]));
+      setAllWords(prev => prev.map(w => w.id === wordId ? { ...w, in_word_bank: true } : w));
       message.success('Added to Word Bank!');
-      loadWordBank();
     } catch (error) {
       if (error.response?.status === 409) {
         message.info('Already in Word Bank');
+        setBankWordIds(prev => new Set([...prev, wordId]));
+        setAllWords(prev => prev.map(w => w.id === wordId ? { ...w, in_word_bank: true } : w));
       } else {
         message.error('Failed to add to bank');
       }
     }
   };
 
-  const loadAllWords = async (page = 1, search = '') => {
+  const loadAllWords = async (page = 1, perPage = allWordsPerPage, search = '') => {
     try {
       setAllWordsLoading(true);
-      const res = await dailyLearningAPI.getAllWords(page, 50, search);
+      const res = await dailyLearningAPI.getAllWords(page, perPage, search);
       setAllWords(res.data.words || []);
       setAllWordsTotal(res.data.total || 0);
       setAllWordsPage(page);
@@ -261,7 +275,7 @@ export default function WordBank() {
 
   const openAllWords = () => {
     setAllWordsSearch('');
-    loadAllWords(1, '');
+    loadAllWords(1, allWordsPerPage, '');
     setAllWordsOpen(true);
   };
 
@@ -396,7 +410,7 @@ export default function WordBank() {
         {/* Search and Sort */}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Input
-            placeholder="Search words or definitions..."
+            placeholder="Search words..."
             prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -623,7 +637,7 @@ export default function WordBank() {
           placeholder="Search words..."
           prefix={<SearchOutlined />}
           value={allWordsSearch}
-          onChange={(e) => { setAllWordsSearch(e.target.value); loadAllWords(1, e.target.value); }}
+          onChange={(e) => { setAllWordsSearch(e.target.value); loadAllWords(1, allWordsPerPage, e.target.value); }}
           allowClear
           style={{ marginBottom: 16 }}
         />
@@ -631,20 +645,32 @@ export default function WordBank() {
           <List
             dataSource={allWords}
             pagination={{
-              current: allWordsPage, total: allWordsTotal, pageSize: 50,
-              onChange: (page) => loadAllWords(page, allWordsSearch), size: 'small',
+              current: allWordsPage,
+              total: allWordsTotal,
+              pageSize: allWordsPerPage,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50, 100],
+              onChange: (page, pageSize) => {
+                if (pageSize !== allWordsPerPage) {
+                  setAllWordsPerPage(pageSize);
+                  loadAllWords(1, pageSize, allWordsSearch);
+                } else {
+                  loadAllWords(page, pageSize, allWordsSearch);
+                }
+              },
+              size: 'small',
             }}
             renderItem={(word) => (
               <List.Item actions={[
                 <Button
                   key="bank"
                   type="text"
-                  icon={word.in_word_bank ? <CheckOutlined /> : <PlusOutlined />}
-                  disabled={word.in_word_bank}
+                  icon={word.in_word_bank || bankWordIds.has(word.id) ? <CheckOutlined /> : <PlusOutlined />}
+                  disabled={word.in_word_bank || bankWordIds.has(word.id)}
                   onClick={() => addToBank(word.id)}
                   size="small"
                 >
-                  {word.in_word_bank ? 'In Bank' : 'Add to Bank'}
+                  {word.in_word_bank || bankWordIds.has(word.id) ? 'In Bank' : 'Add to Bank'}
                 </Button>,
                 word.progress_status === 'mastered' ? (
                   <Tag key="status" color="green">mastered</Tag>
@@ -683,9 +709,19 @@ export default function WordBank() {
         <Spin spinning={reviewListLoading}>
           <List
             dataSource={reviewListWords}
+            pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], size: 'small' }}
             renderItem={(word) => (
               <List.Item actions={[
-                <Button key="bank" type="text" icon={<PlusOutlined />} onClick={() => addToBank(word.word_id)} size="small">Add to Bank</Button>,
+                <Button
+                  key="bank"
+                  type="text"
+                  icon={bankWordIds.has(word.word_id) ? <CheckOutlined /> : <PlusOutlined />}
+                  disabled={bankWordIds.has(word.word_id)}
+                  onClick={() => addToBank(word.word_id)}
+                  size="small"
+                >
+                  {bankWordIds.has(word.word_id) ? 'In Bank' : 'Add to Bank'}
+                </Button>,
               ]}>
                 <List.Item.Meta
                   title={<Space><Text strong>{word.text}</Text><Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} /></Space>}
@@ -709,10 +745,19 @@ export default function WordBank() {
         <Spin spinning={masteredLoading}>
           <List
             dataSource={masteredWords}
-            pagination={{ pageSize: 20 }}
+            pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], size: 'small' }}
             renderItem={(word) => (
               <List.Item actions={[
-                <Button key="bank" type="text" icon={<PlusOutlined />} onClick={() => addToBank(word.word_id)} size="small">Add to Bank</Button>,
+                <Button
+                  key="bank"
+                  type="text"
+                  icon={bankWordIds.has(word.word_id) ? <CheckOutlined /> : <PlusOutlined />}
+                  disabled={bankWordIds.has(word.word_id)}
+                  onClick={() => addToBank(word.word_id)}
+                  size="small"
+                >
+                  {bankWordIds.has(word.word_id) ? 'In Bank' : 'Add to Bank'}
+                </Button>,
               ]}>
                 <List.Item.Meta
                   title={<Space><Text strong>{word.text}</Text><Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} /></Space>}

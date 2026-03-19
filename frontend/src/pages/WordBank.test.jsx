@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WordBank from './WordBank';
 import { renderWithProviders } from '../test/renderWithProviders';
 
-const { mockWordBankAPI, mockDailyLearningAPI } = vi.hoisted(() => ({
+const { mockWordBankAPI, mockDailyLearningAPI, mockProgressAPI } = vi.hoisted(() => ({
   mockWordBankAPI: {
     getAll: vi.fn(),
     add: vi.fn(),
@@ -21,17 +21,23 @@ const { mockWordBankAPI, mockDailyLearningAPI } = vi.hoisted(() => ({
     getMasteredWords: vi.fn(),
     markMastered: vi.fn(),
   },
+  mockProgressAPI: {
+    getDashboard: vi.fn(),
+    trackTime: vi.fn(),
+  },
 }));
 
 vi.mock('../api', () => ({
   wordBankAPI: mockWordBankAPI,
   dailyLearningAPI: mockDailyLearningAPI,
+  progressAPI: mockProgressAPI,
 }));
 
 describe('WordBank page', () => {
   beforeEach(() => {
     Object.values(mockWordBankAPI).forEach((fn) => fn.mockReset());
     Object.values(mockDailyLearningAPI).forEach((fn) => fn.mockReset());
+    Object.values(mockProgressAPI).forEach((fn) => fn.mockReset());
   });
 
   it('renders saved words and filters them by search term', async () => {
@@ -66,13 +72,50 @@ describe('WordBank page', () => {
     expect(await screen.findByText('hypothesis')).toBeTruthy();
     expect(await screen.findByText('empirical')).toBeTruthy();
 
-    fireEvent.change(screen.getByPlaceholderText('Search words or definitions...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search words...'), {
       target: { value: 'hypo' },
     });
 
     await waitFor(() => {
       expect(screen.getByText('hypothesis')).toBeTruthy();
       expect(screen.queryByText('empirical')).toBeNull();
+    });
+  });
+
+  it('filters by word text only and ignores definition matches', async () => {
+    mockWordBankAPI.getAll.mockResolvedValue({
+      data: {
+        words: [
+          {
+            id: 1,
+            word_id: 11,
+            text: 'zebra',
+            definition: 'Contains character c in definition.',
+            added_at: '2026-03-18T10:00:00',
+          },
+          {
+            id: 2,
+            word_id: 12,
+            text: 'abacus',
+            definition: 'A counting frame.',
+            added_at: '2026-03-17T10:00:00',
+          },
+        ],
+      },
+    });
+
+    renderWithProviders(<WordBank />);
+
+    expect(await screen.findByText('zebra')).toBeTruthy();
+    expect(await screen.findByText('abacus')).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText('Search words...'), {
+      target: { value: 'c' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('abacus')).toBeTruthy();
+      expect(screen.queryByText('zebra')).toBeNull();
     });
   });
 

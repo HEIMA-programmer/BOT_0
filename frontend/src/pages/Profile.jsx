@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from 'react';
 import { Typography, Card, Row, Col, Avatar, Statistic, Tag } from 'antd';
 import {
   UserOutlined,
@@ -6,10 +7,46 @@ import {
   AudioOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons';
+import { progressAPI } from '../api';
 
 const { Title, Text } = Typography;
 
 export default function Profile({ user }) {
+  const [stats, setStats] = useState({
+    wordsLearned: 0,
+    listeningDone: 0,
+    speakingSessions: 0,
+    totalTimeMinutes: 0,
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchStats = async () => {
+      try {
+        const response = await progressAPI.getDashboard();
+        if (!active) {
+          return;
+        }
+        setStats({
+          wordsLearned: response.data.words_learned || 0,
+          listeningDone: response.data.listening_done || 0,
+          speakingSessions: response.data.speaking_sessions || 0,
+          totalTimeMinutes: response.data.total_time_minutes || 0,
+        });
+      } catch (error) {
+        console.error('Failed to load profile progress:', error);
+      }
+    };
+
+    fetchStats();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const totalHours = `${(stats.totalTimeMinutes / 60).toFixed(1)}h`;
+
   return (
     <div className="page-container">
       {/* Profile card */}
@@ -38,16 +75,16 @@ export default function Profile({ user }) {
         <div style={{ padding: '24px 32px' }}>
           <Row gutter={24}>
             <Col span={6}>
-              <Statistic title="Words Learned" value={0} prefix={<BookOutlined />} />
+              <Statistic title="Words Learned" value={stats.wordsLearned} prefix={<BookOutlined />} />
             </Col>
             <Col span={6}>
-              <Statistic title="Listening Done" value={0} prefix={<SoundOutlined />} />
+              <Statistic title="Listening Done" value={stats.listeningDone} prefix={<SoundOutlined />} />
             </Col>
             <Col span={6}>
-              <Statistic title="Speaking Sessions" value={0} prefix={<AudioOutlined />} />
+              <Statistic title="Speaking Sessions" value={stats.speakingSessions} prefix={<AudioOutlined />} />
             </Col>
             <Col span={6}>
-              <Statistic title="Total Time" value="0h" prefix={<ClockCircleOutlined />} />
+              <Statistic title="Total Time" value={totalHours} prefix={<ClockCircleOutlined />} />
             </Col>
           </Row>
         </div>

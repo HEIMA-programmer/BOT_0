@@ -8,9 +8,12 @@
 
 - **@Yanbin Xu**: Start **T1.0** (Frontend project setup: React+Vite, router, Ant Design, API module with mock).
 - **@Junfan Zhou**: Start **T1.1** (Database schema design & implementation: SQLAlchemy models).
-- **@Yanshuo Liu (Me)**: Start **T1.6** (CI/CD pipeline: GitHub Actions lint + test on PR, setup branch protection rules on main).
+- **@Yanshuo Liu (Me)**: Start **T1.6** (CI/CD pipeline: GitHub Actions lint + test on PR, branch protection rules).
+- **@Yupei Yang**: Start **T1.2** (Backend Flask API framework + route structure). While waiting for T1.1: setup Flask skeleton, folder structure, config.
+- **@Ruoqi Hu**: Start **T1.3** (User authentication). While waiting for T1.2: build login/register frontend pages with mock API.
+- **@Weike Jin**: Start **T1.4** Daily Words. While waiting for T1.0/T1.2: build Daily Words page UI using mock data.
+- **@Chenxi Huang**: Start **T1.4** Word Bank. While waiting for T1.2/T1.3: build Word Bank page UI with mock data.
 - **All Team**: Participate in the Sprint Planning meeting (2 hours) to define Sprint 1 API contracts.
-- **Others**: Start building frontend pages using mock data while waiting for the backend setup.
 
 **Blockers:**
 
