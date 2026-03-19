@@ -56,8 +56,16 @@ export const listeningAPI = {
   getCatalog: () => api.get('/listening/clips'),
   getPractice: (levelId, scenarioId, sourceSlug) =>
     api.get(`/listening/quiz/${levelId}/${scenarioId}/${sourceSlug}`),
-  submitPractice: (levelId, scenarioId, sourceSlug, answers) =>
-    api.post(`/listening/quiz/${levelId}/${scenarioId}/${sourceSlug}/submit`, { answers }),
+  submitPractice: (levelId, scenarioId, sourceSlug, answers, timeSpent) =>
+    api.post(`/listening/quiz/${levelId}/${scenarioId}/${sourceSlug}/submit`, {
+      answers,
+      time_spent: timeSpent,
+    }),
+};
+
+export const progressAPI = {
+  getDashboard: () => api.get('/progress/dashboard'),
+  trackTime: (payload) => api.post('/progress/track-time', payload),
 };
 
 export default api;

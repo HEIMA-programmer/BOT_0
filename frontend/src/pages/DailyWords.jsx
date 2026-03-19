@@ -10,6 +10,7 @@ import {
   ReloadOutlined, TrophyOutlined, SearchOutlined, StarOutlined
 } from '@ant-design/icons';
 import { dailyLearningAPI, wordBankAPI } from '../api';
+import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -17,6 +18,8 @@ const DAILY_COUNT_KEY = 'dailyWordsCount';
 const DEFAULT_COUNT = 10;
 
 export default function DailyWords() {
+  useLearningTimeTracker('vocab', 'study_time:daily-words');
+
   // Main state
   const [todayWords, setTodayWords] = useState([]);
   const [reviewCount, setReviewCount] = useState(0);

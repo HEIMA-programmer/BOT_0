@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -29,6 +29,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import AudioPlayer from '../components/AudioPlayer';
 import { listeningAPI } from '../api';
+import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -52,6 +53,53 @@ const questionTypeLabels = {
   short_answer: 'Short answer',
 };
 
+function getListeningStorageKey(userId) {
+  return `listening-practice-state-v1:${userId || 'anonymous'}`;
+}
+
+function loadPersistedListeningState(userId) {
+  if (typeof window === 'undefined') {
+    return {
+      answerCache: {},
+      submissionCache: {},
+      timeSpentCache: {},
+    };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getListeningStorageKey(userId));
+    if (!raw) {
+      return {
+        answerCache: {},
+        submissionCache: {},
+        timeSpentCache: {},
+      };
+    }
+
+    const parsed = JSON.parse(raw);
+    return {
+      answerCache: parsed.answerCache || {},
+      submissionCache: parsed.submissionCache || {},
+      timeSpentCache: parsed.timeSpentCache || {},
+    };
+  } catch (error) {
+    console.error('Failed to restore listening practice state:', error);
+    return {
+      answerCache: {},
+      submissionCache: {},
+      timeSpentCache: {},
+    };
+  }
+}
+
+function persistListeningState(userId, state) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(getListeningStorageKey(userId), JSON.stringify(state));
+}
+
 function handleSelectableKeyDown(event, onSelect) {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
@@ -66,7 +114,9 @@ function createEmptyAnswers(questions) {
   }, {});
 }
 
-export default function Listening() {
+export default function Listening({ user }) {
+  useLearningTimeTracker('listening', 'study_time:listening');
+
   const navigate = useNavigate();
   const { levelId } = useParams();
 
@@ -79,8 +129,27 @@ export default function Listening() {
   const [practiceError, setPracticeError] = useState('');
   const [practiceData, setPracticeData] = useState(null);
   const [answers, setAnswers] = useState({});
+  const [answerCache, setAnswerCache] = useState(() => loadPersistedListeningState(user?.id).answerCache);
   const [submitting, setSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
+  const [submissionCache, setSubmissionCache] = useState(
+    () => loadPersistedListeningState(user?.id).submissionCache
+  );
+  const [timeSpentCache, setTimeSpentCache] = useState(
+    () => loadPersistedListeningState(user?.id).timeSpentCache
+  );
+  const practiceStartedAtRef = useRef(null);
+  const activePracticeKeyRef = useRef(null);
+  const answerCacheRef = useRef(answerCache);
+  const submissionCacheRef = useRef(submissionCache);
+  const timeSpentCacheRef = useRef(timeSpentCache);
+
+  useEffect(() => {
+    const persistedState = loadPersistedListeningState(user?.id);
+    setAnswerCache(persistedState.answerCache || {});
+    setSubmissionCache(persistedState.submissionCache || {});
+    setTimeSpentCache(persistedState.timeSpentCache || {});
+  }, [user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -116,10 +185,24 @@ export default function Listening() {
     (scenario) => scenario.id === selectedScenarioId
   ) || null;
   const selectedClip = selectedScenario?.clips?.find((clip) => clip.id === selectedClipId) || null;
+  const selectedPracticeKey = selectedLevel && selectedScenario && selectedClip
+    ? `${selectedLevel.id}:${selectedScenario.id}:${selectedClip.source_slug}`
+    : null;
   const resultMap = (submissionResult?.results || []).reduce((accumulator, result) => {
     accumulator[result.id] = result;
     return accumulator;
   }, {});
+
+  useEffect(() => {
+    answerCacheRef.current = answerCache;
+    submissionCacheRef.current = submissionCache;
+    timeSpentCacheRef.current = timeSpentCache;
+    persistListeningState(user?.id, {
+      answerCache,
+      submissionCache,
+      timeSpentCache,
+    });
+  }, [answerCache, submissionCache, timeSpentCache, user?.id]);
 
   useEffect(() => {
     if (!levelId || !selectedLevel?.scenarios?.length) {
@@ -183,7 +266,22 @@ export default function Listening() {
         );
         if (!active) return;
         setPracticeData(response.data);
-        setAnswers(createEmptyAnswers(response.data.questions));
+        const emptyAnswers = createEmptyAnswers(response.data.questions);
+        const savedAttempt = response.data.saved_attempt;
+        const savedAnswers = savedAttempt?.answers || {};
+        const cachedAnswers = selectedPracticeKey ? answerCache[selectedPracticeKey] : null;
+        setAnswers({ ...emptyAnswers, ...savedAnswers, ...(cachedAnswers || {}) });
+
+        const savedSubmission = savedAttempt ? {
+          score: savedAttempt.score,
+          correct_count: savedAttempt.correct_count,
+          total_count: savedAttempt.total_count,
+          results: savedAttempt.results,
+          transcript: savedAttempt.transcript,
+        } : null;
+        setSubmissionResult(
+          selectedPracticeKey ? (submissionCache[selectedPracticeKey] || savedSubmission) : savedSubmission
+        );
       } catch (fetchError) {
         console.error('Failed to load listening practice:', fetchError);
         if (!active) return;
@@ -203,11 +301,59 @@ export default function Listening() {
     };
   }, [levelId, selectedLevel, selectedScenario, selectedClip]);
 
+  useEffect(() => {
+    const flushActivePracticeTime = () => {
+      const activeKey = activePracticeKeyRef.current;
+      const startedAt = practiceStartedAtRef.current;
+      if (!activeKey || !startedAt) {
+        return;
+      }
+
+      const elapsedMs = Math.max(0, Date.now() - startedAt);
+      if (elapsedMs > 0) {
+        const nextTimeSpentCache = {
+          ...timeSpentCacheRef.current,
+          [activeKey]: (timeSpentCacheRef.current[activeKey] || 0) + elapsedMs,
+        };
+        timeSpentCacheRef.current = nextTimeSpentCache;
+        persistListeningState({
+          answerCache: answerCacheRef.current,
+          submissionCache: submissionCacheRef.current,
+          timeSpentCache: nextTimeSpentCache,
+        });
+        setTimeSpentCache(nextTimeSpentCache);
+      }
+
+      practiceStartedAtRef.current = null;
+      activePracticeKeyRef.current = null;
+    };
+
+    flushActivePracticeTime();
+
+    if (selectedPracticeKey && !submissionCache[selectedPracticeKey]) {
+      activePracticeKeyRef.current = selectedPracticeKey;
+      practiceStartedAtRef.current = Date.now();
+    }
+
+    return () => {
+      flushActivePracticeTime();
+    };
+  }, [selectedPracticeKey, submissionCache, user?.id]);
+
   const handleAnswerChange = (questionId, value) => {
-    setAnswers((currentAnswers) => ({
-      ...currentAnswers,
-      [questionId]: value,
-    }));
+    setAnswers((currentAnswers) => {
+      const nextAnswers = {
+        ...currentAnswers,
+        [questionId]: value,
+      };
+      if (selectedPracticeKey) {
+        setAnswerCache((currentCache) => ({
+          ...currentCache,
+          [selectedPracticeKey]: nextAnswers,
+        }));
+      }
+      return nextAnswers;
+    });
   };
 
   const handleSubmit = async () => {
@@ -225,6 +371,14 @@ export default function Listening() {
         answers
       );
       setSubmissionResult(response.data);
+      if (selectedPracticeKey) {
+        activePracticeKeyRef.current = null;
+        practiceStartedAtRef.current = null;
+        setSubmissionCache((currentCache) => ({
+          ...currentCache,
+          [selectedPracticeKey]: response.data,
+        }));
+      }
     } catch (submitError) {
       console.error('Failed to submit listening practice:', submitError);
       setPracticeError('We could not submit your answers. Please try again.');
@@ -234,7 +388,25 @@ export default function Listening() {
   };
 
   const handleResetCurrentClip = () => {
-    setAnswers(createEmptyAnswers(practiceData?.questions));
+    const resetAnswers = createEmptyAnswers(practiceData?.questions);
+    setAnswers(resetAnswers);
+    if (selectedPracticeKey) {
+      activePracticeKeyRef.current = selectedPracticeKey;
+      practiceStartedAtRef.current = Date.now();
+      setAnswerCache((currentCache) => ({
+        ...currentCache,
+        [selectedPracticeKey]: resetAnswers,
+      }));
+      setSubmissionCache((currentCache) => {
+        const nextCache = { ...currentCache };
+        delete nextCache[selectedPracticeKey];
+        return nextCache;
+      });
+      setTimeSpentCache((currentCache) => ({
+        ...currentCache,
+        [selectedPracticeKey]: 0,
+      }));
+    }
     setSubmissionResult(null);
     setPracticeError('');
   };
@@ -766,7 +938,7 @@ export default function Listening() {
                 color={selectedLevel.is_available ? 'success' : 'default'}
                 style={{ borderRadius: 999 }}
               >
-                {selectedLevel.is_available ? 'Lecture Clips available now' : 'In development'}
+                {selectedLevel.is_available ? 'Lecture Clips available now' : 'Coming soon'}
               </Tag>
             </Space>
 

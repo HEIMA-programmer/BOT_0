@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DailyWords from './DailyWords';
 import { renderWithProviders } from '../test/renderWithProviders';
 
-const { mockDailyLearningAPI, mockWordBankAPI } = vi.hoisted(() => ({
+const { mockDailyLearningAPI, mockWordBankAPI, mockProgressAPI } = vi.hoisted(() => ({
   mockDailyLearningAPI: {
     getToday: vi.fn(),
     updateWordStatus: vi.fn(),
@@ -19,17 +19,23 @@ const { mockDailyLearningAPI, mockWordBankAPI } = vi.hoisted(() => ({
   mockWordBankAPI: {
     getAll: vi.fn(),
   },
+  mockProgressAPI: {
+    getDashboard: vi.fn(),
+    trackTime: vi.fn(),
+  },
 }));
 
 vi.mock('../api', () => ({
   dailyLearningAPI: mockDailyLearningAPI,
   wordBankAPI: mockWordBankAPI,
+  progressAPI: mockProgressAPI,
 }));
 
 describe('DailyWords page', () => {
   beforeEach(() => {
     Object.values(mockDailyLearningAPI).forEach((fn) => fn.mockReset());
     Object.values(mockWordBankAPI).forEach((fn) => fn.mockReset());
+    Object.values(mockProgressAPI).forEach((fn) => fn.mockReset());
     localStorage.clear();
   });
 

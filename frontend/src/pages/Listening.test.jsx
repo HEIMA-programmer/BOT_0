@@ -6,16 +6,21 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import Listening from './Listening';
 
-const { mockListeningAPI } = vi.hoisted(() => ({
+const { mockListeningAPI, mockProgressAPI } = vi.hoisted(() => ({
   mockListeningAPI: {
     getCatalog: vi.fn(),
     getPractice: vi.fn(),
     submitPractice: vi.fn(),
   },
+  mockProgressAPI: {
+    getDashboard: vi.fn(),
+    trackTime: vi.fn(),
+  },
 }));
 
 vi.mock('../api', () => ({
   listeningAPI: mockListeningAPI,
+  progressAPI: mockProgressAPI,
 }));
 
 const catalogPayload = {
@@ -193,6 +198,7 @@ const beginnerPracticePayload = {
   },
   instructions: 'Listen to the lecture clip and answer the multiple-choice questions.',
   question_count: 2,
+  saved_attempt: null,
   questions: [
     {
       id: 'beginner-campus-welcome-multiple-choice-1',
@@ -218,6 +224,35 @@ const beginnerPracticePayload = {
         { key: 'B', text: 'Campus orientation' },
         { key: 'C', text: 'Dining hall menus' },
         { key: 'D', text: 'Scholarship forms' },
+      ],
+    },
+  ],
+};
+
+const libraryPracticePayload = {
+  level: { id: 'beginner', label: 'Beginner' },
+  scenario: { id: 'lecture-clips', label: 'Lecture Clips' },
+  clip: {
+    id: 'beginner-lecture-library-tour',
+    title: 'Library Orientation',
+    audio_url: '/api/listening/audio/library-tour',
+    source_slug: 'library-tour',
+  },
+  instructions: 'Listen to the lecture clip and answer the multiple-choice questions.',
+  question_count: 1,
+  saved_attempt: null,
+  questions: [
+    {
+      id: 'beginner-library-tour-multiple-choice-1',
+      number: 1,
+      type: 'multiple_choice',
+      section_label: 'Multiple choice',
+      prompt: 'Who leads the library tour?',
+      options: [
+        { key: 'A', text: 'A professor' },
+        { key: 'B', text: 'A librarian' },
+        { key: 'C', text: 'A classmate' },
+        { key: 'D', text: 'A coach' },
       ],
     },
   ],
@@ -269,6 +304,7 @@ const intermediatePracticePayload = {
   },
   instructions: 'Listen carefully, then complete the fill-in-the-blank and short-answer tasks.',
   question_count: 2,
+  saved_attempt: null,
   questions: [
     {
       id: 'intermediate-research-fill-1',
@@ -333,14 +369,22 @@ function renderListening(initialEntry = '/listening') {
 
 describe('Listening page', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     mockListeningAPI.getCatalog.mockReset();
     mockListeningAPI.getPractice.mockReset();
     mockListeningAPI.submitPractice.mockReset();
+    mockProgressAPI.trackTime.mockReset();
 
     mockListeningAPI.getCatalog.mockResolvedValue({ data: catalogPayload });
-    mockListeningAPI.getPractice.mockImplementation((levelId) => Promise.resolve({
-      data: levelId === 'intermediate' ? intermediatePracticePayload : beginnerPracticePayload,
-    }));
+    mockListeningAPI.getPractice.mockImplementation((levelId, _scenarioId, sourceSlug) => {
+      if (levelId === 'intermediate') {
+        return Promise.resolve({ data: intermediatePracticePayload });
+      }
+      if (sourceSlug === 'library-tour') {
+        return Promise.resolve({ data: libraryPracticePayload });
+      }
+      return Promise.resolve({ data: beginnerPracticePayload });
+    });
     mockListeningAPI.submitPractice.mockImplementation((levelId) => Promise.resolve({
       data: levelId === 'intermediate' ? intermediateSubmitPayload : beginnerSubmitPayload,
     }));
@@ -431,5 +475,76 @@ describe('Listening page', () => {
       screen.getAllByText('Because they reveal different kinds of evidence.').length
     ).toBeGreaterThan(0);
     expect(screen.getByText(/Research begins with a clear question/)).toBeTruthy();
+  });
+
+  it('preserves answers when switching between clips and restores prior submission results', async () => {
+    renderListening('/listening/beginner');
+
+    expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('A. A student ambassador'));
+    fireEvent.click(screen.getByText('D. Scholarship forms'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit answers' }));
+
+    expect(await screen.findByText((_, node) => node?.textContent === '50%')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Library Orientation'));
+    expect(await screen.findByText('Who leads the library tour?')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Campus Welcome Lecture'));
+    expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
+    expect(screen.getByText((_, node) => node?.textContent === '50%')).toBeTruthy();
+
+    const selectedOption = document.querySelector('input[value="A"]');
+    expect(selectedOption?.checked).toBe(true);
+  });
+
+  it('restores saved answers and results after leaving the page and coming back', async () => {
+    const firstRender = renderListening('/listening/beginner');
+
+    expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('A. A student ambassador'));
+    fireEvent.click(screen.getByText('D. Scholarship forms'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit answers' }));
+
+    expect(await screen.findByText((_, node) => node?.textContent === '50%')).toBeTruthy();
+
+    firstRender.unmount();
+
+    renderListening('/listening/beginner');
+
+    expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
+    expect(await screen.findByText((_, node) => node?.textContent === '50%')).toBeTruthy();
+
+    const selectedOption = document.querySelector('input[value="A"]');
+    expect(selectedOption?.checked).toBe(true);
+  });
+
+  it('restores saved submission data returned by the backend', async () => {
+    mockListeningAPI.getPractice.mockResolvedValueOnce({
+      data: {
+        ...beginnerPracticePayload,
+        saved_attempt: {
+          answers: {
+            'beginner-campus-welcome-multiple-choice-1': 'A',
+            'beginner-campus-welcome-multiple-choice-2': 'D',
+          },
+          score: 50,
+          correct_count: 1,
+          total_count: 2,
+          transcript: beginnerSubmitPayload.transcript,
+          results: beginnerSubmitPayload.results,
+        },
+      },
+    });
+
+    renderListening('/listening/beginner');
+
+    expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
+    expect(await screen.findByText((_, node) => node?.textContent === '50%')).toBeTruthy();
+
+    const selectedOption = document.querySelector('input[value="A"]');
+    expect(selectedOption?.checked).toBe(true);
   });
 });

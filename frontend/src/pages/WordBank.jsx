@@ -11,6 +11,7 @@ import {
   StarOutlined, CloseOutlined
 } from '@ant-design/icons';
 import { wordBankAPI, dailyLearningAPI } from '../api';
+import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -23,6 +24,8 @@ const sortOptions = [
 ];
 
 export default function WordBank() {
+  useLearningTimeTracker('vocab', 'study_time:word-bank');
+
   const [words, setWords] = useState([]);
   const [filteredWords, setFilteredWords] = useState([]);
   const [search, setSearch] = useState('');
@@ -81,8 +84,7 @@ export default function WordBank() {
     let filtered = [...words];
     if (search) {
       filtered = filtered.filter(w =>
-        w.text.toLowerCase().includes(search.toLowerCase()) ||
-        w.definition.toLowerCase().includes(search.toLowerCase())
+        w.text.toLowerCase().includes(search.toLowerCase())
       );
     }
     filtered.sort((a, b) => {
@@ -396,7 +398,7 @@ export default function WordBank() {
         {/* Search and Sort */}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Input
-            placeholder="Search words or definitions..."
+            placeholder="Search words..."
             prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}

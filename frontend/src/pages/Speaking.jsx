@@ -1,5 +1,6 @@
 import { Typography, Card, Row, Col, Tag } from 'antd';
 import { AudioOutlined, MessageOutlined, TrophyOutlined } from '@ant-design/icons';
+import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text } = Typography;
 
@@ -10,7 +11,7 @@ const modes = [
     color: '#dc2626',
     bg: '#fef2f2',
     desc: 'Record your voice, play back, and compare with native pronunciation.',
-    sprint: 'Sprint 2',
+    status: 'Coming soon',
   },
   {
     title: 'Structured Speaking',
@@ -18,7 +19,7 @@ const modes = [
     color: '#7c3aed',
     bg: '#f5f3ff',
     desc: 'Pick a topic card, express your thoughts in 30-60 seconds, and get AI feedback.',
-    sprint: 'Sprint 3',
+    status: 'Coming soon',
   },
   {
     title: 'Sentence Follow-along',
@@ -26,11 +27,13 @@ const modes = [
     color: '#059669',
     bg: '#ecfdf5',
     desc: 'Read sentences aloud and see how closely your speech matches the target.',
-    sprint: 'Sprint 2',
+    status: 'Coming soon',
   },
 ];
 
 export default function Speaking() {
+  useLearningTimeTracker('speaking', 'study_time:speaking');
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -69,7 +72,7 @@ export default function Speaking() {
                 {mode.icon}
               </div>
               <Title level={5} style={{ fontWeight: 600 }}>{mode.title}</Title>
-              <Tag style={{ borderRadius: 12, marginBottom: 12 }}>{mode.sprint}</Tag>
+              <Tag style={{ borderRadius: 12, marginBottom: 12 }}>{mode.status}</Tag>
               <Text type="secondary" style={{ fontSize: 13, display: 'block' }}>
                 {mode.desc}
               </Text>
