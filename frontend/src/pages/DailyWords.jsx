@@ -60,6 +60,7 @@ export default function DailyWords() {
   const [allWords, setAllWords] = useState([]);
   const [allWordsTotal, setAllWordsTotal] = useState(0);
   const [allWordsPage, setAllWordsPage] = useState(1);
+  const [allWordsPerPage, setAllWordsPerPage] = useState(20);
   const [allWordsSearch, setAllWordsSearch] = useState('');
   const [allWordsLoading, setAllWordsLoading] = useState(false);
 
@@ -149,11 +150,13 @@ export default function DailyWords() {
     try {
       await dailyLearningAPI.addToBank(wordId);
       setBankIds(prev => new Set([...prev, wordId]));
+      setAllWords(prev => prev.map(w => w.id === wordId ? { ...w, in_word_bank: true } : w));
       message.success('Added to Word Bank!');
     } catch (error) {
       if (error.response?.status === 409) {
         message.info('Already in Word Bank');
         setBankIds(prev => new Set([...prev, wordId]));
+        setAllWords(prev => prev.map(w => w.id === wordId ? { ...w, in_word_bank: true } : w));
       } else {
         message.error('Failed to add to bank');
       }
@@ -242,10 +245,10 @@ export default function DailyWords() {
   };
 
   // ==================== All Words ====================
-  const loadAllWords = async (page = 1, search = '') => {
+  const loadAllWords = async (page = 1, perPage = allWordsPerPage, search = '') => {
     try {
       setAllWordsLoading(true);
-      const res = await dailyLearningAPI.getAllWords(page, 50, search);
+      const res = await dailyLearningAPI.getAllWords(page, perPage, search);
       setAllWords(res.data.words || []);
       setAllWordsTotal(res.data.total || 0);
       setAllWordsPage(page);
@@ -258,7 +261,7 @@ export default function DailyWords() {
 
   const openAllWords = () => {
     setAllWordsSearch('');
-    loadAllWords(1, '');
+    loadAllWords(1, allWordsPerPage, '');
     setAllWordsOpen(true);
   };
 
@@ -789,7 +792,7 @@ export default function DailyWords() {
           value={allWordsSearch}
           onChange={(e) => {
             setAllWordsSearch(e.target.value);
-            loadAllWords(1, e.target.value);
+            loadAllWords(1, allWordsPerPage, e.target.value);
           }}
           allowClear
           style={{ marginBottom: 16 }}
@@ -800,8 +803,17 @@ export default function DailyWords() {
             pagination={{
               current: allWordsPage,
               total: allWordsTotal,
-              pageSize: 50,
-              onChange: (page) => loadAllWords(page, allWordsSearch),
+              pageSize: allWordsPerPage,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50, 100],
+              onChange: (page, pageSize) => {
+                if (pageSize !== allWordsPerPage) {
+                  setAllWordsPerPage(pageSize);
+                  loadAllWords(1, pageSize, allWordsSearch);
+                } else {
+                  loadAllWords(page, pageSize, allWordsSearch);
+                }
+              },
               size: 'small',
             }}
             renderItem={(word) => (
@@ -810,12 +822,12 @@ export default function DailyWords() {
                   <Button
                     key="bank"
                     type="text"
-                    icon={word.in_word_bank ? <CheckOutlined /> : <PlusOutlined />}
-                    disabled={word.in_word_bank}
+                    icon={word.in_word_bank || bankIds.has(word.id) ? <CheckOutlined /> : <PlusOutlined />}
+                    disabled={word.in_word_bank || bankIds.has(word.id)}
                     onClick={() => addToBank(word.id)}
                     size="small"
                   >
-                    {word.in_word_bank ? 'In Bank' : 'Add to Bank'}
+                    {word.in_word_bank || bankIds.has(word.id) ? 'In Bank' : 'Add to Bank'}
                   </Button>,
                   word.progress_status === 'mastered' ? (
                     <Tag key="status" color="green">mastered</Tag>
@@ -866,6 +878,7 @@ export default function DailyWords() {
         <Spin spinning={reviewListLoading}>
           <List
             dataSource={reviewListWords}
+            pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], size: 'small' }}
             renderItem={(word) => (
               <List.Item
                 actions={[
@@ -917,7 +930,7 @@ export default function DailyWords() {
         <Spin spinning={masteredLoading}>
           <List
             dataSource={masteredWords}
-            pagination={{ pageSize: 20 }}
+            pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], size: 'small' }}
             renderItem={(word) => (
               <List.Item
                 actions={[
