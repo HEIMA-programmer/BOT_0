@@ -26,6 +26,12 @@ const menuItems = [
 export default function NavBar({ user, onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const selectedKey = (
+    menuItems.find((item) => (
+      location.pathname === item.key
+      || (item.key !== '/' && location.pathname.startsWith(`${item.key}/`))
+    )) || menuItems[0]
+  ).key;
 
   const userMenuItems = [
     { key: 'profile', icon: <UserOutlined />, label: 'Profile', onClick: () => navigate('/profile') },
@@ -75,7 +81,7 @@ export default function NavBar({ user, onLogout }) {
       <Menu
         theme="dark"
         mode="horizontal"
-        selectedKeys={[location.pathname]}
+        selectedKeys={[selectedKey]}
         items={menuItems}
         onClick={({ key }) => navigate(key)}
         style={{ flex: 1, minWidth: 0, background: 'transparent', borderBottom: 'none' }}

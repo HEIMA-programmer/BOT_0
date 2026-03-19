@@ -43,16 +43,30 @@ def create_app(config_name=None):
     from app.routes.word_bank import word_bank_bp
     from app.routes.daily_learning import daily_learning_bp
     from app.routes.listening import listening_bp
+    from app.routes.progress import progress_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(daily_words_bp)
     app.register_blueprint(word_bank_bp)
     app.register_blueprint(daily_learning_bp)
     app.register_blueprint(listening_bp)
+    app.register_blueprint(progress_bp)
 
     # Create database tables and auto-seed on first run
     with app.app_context():
-        from app.models import user, word, word_bank, review_history, user_word_progress  # noqa: F401
+        from app.models import (  # noqa: F401
+            chat_message,
+            chat_session,
+            listening_attempt,
+            listening_clip,
+            progress,
+            review_history,
+            speaking_session,
+            user,
+            user_word_progress,
+            word,
+            word_bank,
+        )
         db.create_all()
         _seed_words_if_empty(app)
         if app.config.get('DEBUG'):

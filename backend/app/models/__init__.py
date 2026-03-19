@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.word import Word
 from app.models.word_bank import WordBank
 from app.models.listening_clip import ListeningClip
+from app.models.listening_attempt import ListeningAttempt
 from app.models.speaking_session import SpeakingSession
 from app.models.chat_session import ChatSession
 from app.models.chat_message import ChatMessage
@@ -27,6 +28,7 @@ __all__ = [
     'Word',
     'WordBank',
     'ListeningClip',
+    'ListeningAttempt',
     'SpeakingSession',
     'ChatSession',
     'ChatMessage',

@@ -1,5 +1,6 @@
 import { Typography, Card, Row, Col, Tag } from 'antd';
 import { RobotOutlined, TeamOutlined, CommentOutlined } from '@ant-design/icons';
+import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text } = Typography;
 
@@ -10,7 +11,7 @@ const scenarios = [
     color: '#2563eb',
     bg: '#eff6ff',
     desc: 'Practice asking your professor for help, clarifying assignment requirements, and discussing grades.',
-    sprint: 'Sprint 3',
+    status: 'Coming soon',
   },
   {
     title: 'Seminar Discussion',
@@ -18,7 +19,7 @@ const scenarios = [
     color: '#7c3aed',
     bg: '#f5f3ff',
     desc: 'Participate in academic group discussions, express agreement/disagreement, and build on ideas.',
-    sprint: 'Sprint 3',
+    status: 'Coming soon',
   },
   {
     title: 'Free Conversation',
@@ -26,11 +27,13 @@ const scenarios = [
     color: '#059669',
     bg: '#ecfdf5',
     desc: 'Choose any topic and practice open-ended academic conversation with AI.',
-    sprint: 'Sprint 4 (Bonus)',
+    status: 'Coming soon',
   },
 ];
 
 export default function AIChat() {
+  useLearningTimeTracker('chat', 'study_time:ai-chat');
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -69,7 +72,7 @@ export default function AIChat() {
                 {s.icon}
               </div>
               <Title level={5} style={{ fontWeight: 600 }}>{s.title}</Title>
-              <Tag style={{ borderRadius: 12, marginBottom: 12 }}>{s.sprint}</Tag>
+              <Tag style={{ borderRadius: 12, marginBottom: 12 }}>{s.status}</Tag>
               <Text type="secondary" style={{ fontSize: 13, display: 'block' }}>
                 {s.desc}
               </Text>
