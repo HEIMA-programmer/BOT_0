@@ -23,7 +23,7 @@
 
 ## 2. Working Hours & Capacity
 
-- Each member commits a maximum of **10 hours per sprint**.
+- Each member commits a maximum of **25 hours per sprint**.
 - If a member anticipates being unable to meet their hours (exam, illness, etc.), they must notify the SM **at least 24 hours in advance** so tasks can be redistributed.
 - We show up to all Scrum ceremonies unless a valid reason is communicated early.
 
