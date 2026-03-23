@@ -8,6 +8,7 @@ import WordBank from './pages/WordBank';
 import Listening from './pages/Listening';
 import Speaking from './pages/Speaking';
 import Profile from './pages/Profile';
+import Forum from './pages/Forum';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import { authAPI } from './api';
@@ -103,6 +104,9 @@ export default function App() {
               } />
               <Route path="/speaking" element={
                 <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>
+              } />
+              <Route path="/forum" element={
+                <RequireAuth user={user} loading={loading}><Forum user={user} /></RequireAuth>
               } />
               <Route path="/profile" element={
                 <RequireAuth user={user} loading={loading}><Profile user={user} /></RequireAuth>

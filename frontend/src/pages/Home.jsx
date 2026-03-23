@@ -6,6 +6,7 @@ import {
   SoundOutlined,
   AudioOutlined,
   RobotOutlined,
+  MessageOutlined,
   ArrowRightOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -53,6 +54,14 @@ const modules = [
     desc: 'Practice academic discussions with AI',
     color: '#7c3aed',
     bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
+  },
+  {
+    title: 'Forum',
+    icon: <MessageOutlined />,
+    path: '/forum',
+    desc: 'Share skills, experiences, and discuss academic culture',
+    color: '#0891b2',
+    bg: 'linear-gradient(135deg, #ecfeff, #cffafe)',
   },
 ];
 
