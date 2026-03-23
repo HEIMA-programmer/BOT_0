@@ -6,7 +6,6 @@ import {
   BookOutlined,
   SoundOutlined,
   AudioOutlined,
-  RobotOutlined,
   MessageOutlined,
   UserOutlined,
   LogoutOutlined,
@@ -21,7 +20,6 @@ const menuItems = [
   { key: '/word-bank', icon: <BookOutlined />, label: 'Word Bank' },
   { key: '/listening', icon: <SoundOutlined />, label: 'Listening' },
   { key: '/speaking', icon: <AudioOutlined />, label: 'Speaking' },
-  { key: '/ai-chat', icon: <RobotOutlined />, label: 'AI Chat' },
   { key: '/forum', icon: <MessageOutlined />, label: 'Forum' },
 ];
 
