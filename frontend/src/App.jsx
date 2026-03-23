@@ -7,6 +7,7 @@ import DailyWords from './pages/DailyWords';
 import Listening from './pages/Listening';
 import Speaking from './pages/Speaking';
 import StructuredSpeaking from './pages/StructuredSpeaking';
+import FreeConversation from './pages/FreeConversation';
 import Profile from './pages/Profile';
 import Forum from './pages/Forum';
 import Login from './pages/Login';
@@ -105,6 +106,9 @@ export default function App() {
               } />
               <Route path="/speaking/structured" element={
                 <RequireAuth user={user} loading={loading}><StructuredSpeaking /></RequireAuth>
+              } />
+              <Route path="/speaking/free-conversation" element={
+                <RequireAuth user={user} loading={loading}><FreeConversation /></RequireAuth>
               } />
               <Route path="/forum" element={
                 <RequireAuth user={user} loading={loading}><Forum user={user} /></RequireAuth>

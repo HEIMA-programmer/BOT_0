@@ -55,8 +55,9 @@ const aiChatScenarios = [
     icon: <RobotOutlined />,
     color: '#059669',
     bg: '#ecfdf5',
-    desc: 'Choose any topic and practice open-ended academic conversation with AI.',
-    status: 'Coming soon',
+    desc: 'Practice natural English conversation with AI. Talk about any topic you like.',
+    status: '',
+    clickable: true,
   },
 ];
 
@@ -78,7 +79,15 @@ export default function Speaking() {
                 cursor: item.clickable ? 'pointer' : 'default',
               }}
               bodyStyle={{ padding: 24 }}
-              onClick={() => item.clickable && navigate('/speaking/structured')}
+              onClick={() => {
+                if (item.clickable) {
+                  if (item.title === 'Structured Speaking') {
+                    navigate('/speaking/structured');
+                  } else if (item.title === 'Free Conversation') {
+                    navigate('/speaking/free-conversation');
+                  }
+                }
+              }}
             >
               <div style={{
                 width: 48,
