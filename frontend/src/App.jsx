@@ -7,7 +7,6 @@ import DailyWords from './pages/DailyWords';
 import WordBank from './pages/WordBank';
 import Listening from './pages/Listening';
 import Speaking from './pages/Speaking';
-import AIChat from './pages/AIChat';
 import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -104,9 +103,6 @@ export default function App() {
               } />
               <Route path="/speaking" element={
                 <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>
-              } />
-              <Route path="/ai-chat" element={
-                <RequireAuth user={user} loading={loading}><AIChat /></RequireAuth>
               } />
               <Route path="/profile" element={
                 <RequireAuth user={user} loading={loading}><Profile user={user} /></RequireAuth>
