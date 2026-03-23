@@ -18,7 +18,7 @@ const modules = [
     title: 'Listening Lab',
     icon: <SoundOutlined />,
     path: '/listening',
-    desc: 'Practice with academic lecture clips',
+    desc: 'Practice with lectures, discussions, and Q&A clips',
     color: '#d97706',
     bg: 'linear-gradient(135deg, #fffbeb, #fef3c7)',
   },

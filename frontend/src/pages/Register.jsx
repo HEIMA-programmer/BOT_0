@@ -59,10 +59,10 @@ export default function Register({ onLogin }) {
     >
       <AuthMascotPanel
         heading="Start Your Journey"
-        description="Create your account to build stronger academic vocabulary, improve lecture listening, and practice confident English for seminars and discussions."
+        description="Create your account to build stronger academic vocabulary, improve listening across lectures and discussions, and practice confident English for seminars and discussions."
         stats={[
           { num: '7', label: 'Animated Guides' },
-          { num: '50+', label: 'Lecture Clips' },
+          { num: '50+', label: 'Listening Clips' },
           { num: 'AI', label: 'Conversation Practice' },
         ]}
         emailFocused={emailFocused}

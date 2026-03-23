@@ -427,13 +427,13 @@ export default function Listening({ user }) {
               Choose your listening level
             </Title>
             <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-              Beginner and Intermediate lecture practice are ready now. Advanced content and the
-              other scenarios stay visible in the interface for future development.
+              Beginner and Intermediate practice are ready now for Lecture Clips, Group Discussion,
+              Q&A Session, and Office Hour. Advanced content stays visible for future development.
             </Text>
           </Col>
           <Col xs={24} md={8} lg={6}>
             <Tag color="gold" style={{ borderRadius: 999, padding: '4px 10px', fontSize: 13 }}>
-              {catalog.source_count} lecture clips ready
+              {catalog.source_count} recordings ready
             </Tag>
           </Col>
         </Row>
@@ -680,7 +680,8 @@ export default function Listening({ user }) {
                 {selectedScenario.label}
               </Title>
               <Text type="secondary">
-                Choose one of the {selectedScenario.clip_count} lecture clips to start your practice.
+                Choose one of the {selectedScenario.clip_count} recordings in this scenario to start
+                your practice.
               </Text>
             </Space>
 
@@ -738,7 +739,7 @@ export default function Listening({ user }) {
                     {selectedClip.title}
                   </Title>
                   <Text type="secondary" style={{ display: 'block', marginBottom: 18 }}>
-                    Listen first, then complete the practice set for this clip.
+                    Listen first, then complete the practice set for this recording.
                   </Text>
                   <AudioPlayer src={selectedClip.audio_url} title={selectedClip.title} />
                 </>
@@ -934,7 +935,7 @@ export default function Listening({ user }) {
                 color={selectedLevel.is_available ? 'success' : 'default'}
                 style={{ borderRadius: 999 }}
               >
-                {selectedLevel.is_available ? 'Lecture Clips available now' : 'Coming soon'}
+                {selectedLevel.is_available ? 'Listening practice available now' : 'Coming soon'}
               </Tag>
             </Space>
 
@@ -963,7 +964,7 @@ export default function Listening({ user }) {
           Listening Lab
         </Title>
         <Text type="secondary">
-          Practice listening to academic lectures and answer comprehension questions.
+          Practice lectures, group discussions, Q&A, and office-hour recordings with instant feedback.
         </Text>
       </div>
 
@@ -985,7 +986,7 @@ export default function Listening({ user }) {
 
       {!loading && !levels.length ? (
         <Card style={{ borderRadius: 16, border: '1px solid #e5e7eb' }}>
-          <Empty description="No listening materials were found in the Audio/output folders yet." />
+          <Empty description="No listening materials were found in the project content folders yet." />
         </Card>
       ) : null}
 
