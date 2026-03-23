@@ -3,9 +3,11 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_cors import CORS
+from flask_socketio import SocketIO
 
 db = SQLAlchemy()
 login_manager = LoginManager()
+socketio = SocketIO()
 
 
 def create_app(config_name=None):
@@ -26,6 +28,7 @@ def create_app(config_name=None):
     login_manager.session_protection = 'strong'
     cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
     CORS(app, supports_credentials=True, origins=cors_origins)
+    socketio.init_app(app, cors_allowed_origins=cors_origins)
 
     @login_manager.unauthorized_handler
     def unauthorized():
@@ -53,6 +56,10 @@ def create_app(config_name=None):
     app.register_blueprint(listening_bp)
     app.register_blueprint(progress_bp)
     app.register_blueprint(forum_bp)
+
+    # Register SocketIO handlers
+    from app.routes import speaking_ws  # noqa: F401
+    from app.routes import conversation_ws  # noqa: F401
 
     # Create database tables and auto-seed on first run
     with app.app_context():

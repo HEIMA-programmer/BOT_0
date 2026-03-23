@@ -1,34 +1,86 @@
-import { Typography, Card, Row, Col, Button, Space, Progress, Breadcrumb, Input, Divider, Tag } from 'antd';
-import { AudioOutlined, MessageOutlined, PlayCircleOutlined, PauseCircleOutlined, UploadOutlined, CheckCircleOutlined, ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
-import { useState } from 'react';
+import { Typography, Card, Row, Col, Button, Space, Progress, Breadcrumb, Input, Divider, Tag, message, Spin } from 'antd';
+import { AudioOutlined, MessageOutlined, PauseCircleOutlined, ArrowLeftOutlined, PlusOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 export default function StructuredSpeaking() {
   useLearningTimeTracker('speaking', 'study_time:structured-speaking');
   const navigate = useNavigate();
 
+  // State management
   const [selectedTopic, setSelectedTopic] = useState(null);
   const [recording, setRecording] = useState(false);
-  const [showResults, setShowResults] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [customTopicTitle, setCustomTopicTitle] = useState('');
   const [customTopicDesc, setCustomTopicDesc] = useState('');
   const [showCustomTopic, setShowCustomTopic] = useState(false);
-  const [recordingTimer, setRecordingTimer] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [progressMessage, setProgressMessage] = useState('');
+
+  // Refs
+  const socketRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
+  const streamRef = useRef(null);
 
   const recommendedTopics = [
-    { id: 1, title: 'Talk about your day today', desc: 'Describe your activities and experiences from today' },
-    { id: 2, title: 'Your favorite hobby', desc: 'Explain what you enjoy doing in your free time' },
-    { id: 3, title: 'A memorable trip', desc: 'Share an interesting travel experience' },
-    { id: 4, title: 'Your career goals', desc: 'Discuss your professional aspirations' },
+    { id: 1, title: 'Describe your research interests', desc: 'Explain what academic topics interest you and why they are important' },
+    { id: 2, title: 'Explain a concept from your field', desc: 'Choose a key concept and explain it in simple terms' },
+    { id: 3, title: 'Discuss online vs in-person learning', desc: 'Compare the advantages and disadvantages of each learning mode' },
+    { id: 4, title: 'Describe how you approach group projects', desc: 'Explain your strategy for collaborating with classmates' },
+    { id: 5, title: 'Evaluate an academic source', desc: 'Describe how you determine if a source is credible and reliable' },
+    { id: 6, title: 'Discuss critical thinking in academia', desc: 'Explain why critical thinking is important in academic work' },
+    { id: 7, title: 'Describe a challenging academic problem', desc: 'Explain a difficult problem you faced and how you solved it' },
+    { id: 8, title: 'Summarize a recent article you read', desc: 'Briefly explain the main argument and findings of an academic article' },
   ];
+
+  // WebSocket connection
+  useEffect(() => {
+    const socket = io('http://localhost:5000');
+    socketRef.current = socket;
+
+    socket.on('connected', () => {
+      console.log('Connected to WebSocket');
+    });
+
+    socket.on('progress', (data) => {
+      setProcessing(true);
+      setProgressMessage(data.message || '处理中...');
+    });
+
+    socket.on('result', (data) => {
+      message.destroy();
+      setProcessing(false);
+      setProgressMessage('');
+      setResult(data);
+      message.success('Scoring complete! 🎉');
+    });
+
+    socket.on('error', (data) => {
+      message.destroy();
+      setProcessing(false);
+      setProgressMessage('');
+      setError(data.message);
+      message.error(data.message || '处理失败，请重试');
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   const handleTopicSelect = (topic) => {
     setSelectedTopic(topic);
+    setResult(null);
+    setError(null);
   };
 
   const handleCustomTopicSubmit = () => {
@@ -40,53 +92,128 @@ export default function StructuredSpeaking() {
         isCustom: true
       };
       setSelectedTopic(customTopic);
+      setResult(null);
+      setError(null);
     }
   };
 
-  const handleRecordToggle = () => {
-    if (recording) {
-      // Stop recording
-      setRecording(false);
-      if (recordingTimer) {
-        clearInterval(recordingTimer);
-        setRecordingTimer(null);
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      });
+      streamRef.current = stream;
+
+      // Force WAV format for faster backend processing
+      // Fallback to WebM if WAV is not supported
+      let options = {};
+      if (MediaRecorder.isTypeSupported('audio/wav')) {
+        options = { mimeType: 'audio/wav' };
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options = { mimeType: 'audio/webm' };
+        console.warn('WAV not supported, using WebM as fallback');
       }
-    } else {
-      // Start recording
+
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = handleRecordingStop;
+
+      mediaRecorder.start();
       setRecording(true);
-      const timer = setInterval(() => {
+      setRecordingTime(0);
+
+      // Start timer
+      recordingTimerRef.current = setInterval(() => {
         setRecordingTime(prev => {
           if (prev >= 60) {
-            clearInterval(timer);
-            setRecording(false);
-            setRecordingTimer(null);
+            stopRecording();
             return 60;
           }
           return prev + 1;
         });
       }, 1000);
-      setRecordingTimer(timer);
+
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      message.error('无法访问麦克风，请检查权限设置');
     }
   };
 
-  const handleSubmitRecording = () => {
-    setShowResults(true);
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+    }
+  };
+
+  const handleRecordingStop = async () => {
+    const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+    const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+
+    // Convert blob to base64
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64Audio = reader.result.split(',')[1];
+
+      // Send to backend via WebSocket
+      if (socketRef.current) {
+        socketRef.current.emit('submit_audio', {
+          audio: base64Audio,
+          topic: selectedTopic.title,
+          mimeType: mimeType
+        });
+      }
+    };
+    reader.readAsDataURL(audioBlob);
   };
 
   const handleReset = () => {
     setSelectedTopic(null);
     setRecording(false);
-    setShowResults(false);
     setRecordingTime(0);
     setCustomTopicTitle('');
     setCustomTopicDesc('');
     setShowCustomTopic(false);
-    if (recordingTimer) {
-      clearInterval(recordingTimer);
-      setRecordingTimer(null);
+    setProcessing(false);
+    setResult(null);
+    setError(null);
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
     }
   };
 
+  const handleRetry = () => {
+    setResult(null);
+    setError(null);
+    setRecordingTime(0);
+  };
+
+  // Topic selection page
   if (!selectedTopic) {
     return (
       <div className="page-container">
@@ -98,11 +225,11 @@ export default function StructuredSpeaking() {
             ]}
           />
         </div>
-        
+
         <div className="page-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Button 
-              icon={<ArrowLeftOutlined />} 
+            <Button
+              icon={<ArrowLeftOutlined />}
               onClick={() => navigate('/speaking')}
             />
             <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>
@@ -114,13 +241,12 @@ export default function StructuredSpeaking() {
           </Text>
         </div>
 
-        {/* Custom Topic Section */}
         <Card style={{ marginBottom: 24, borderRadius: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <Title level={4} style={{ margin: 0 }}>
               <PlusOutlined style={{ marginRight: 8, color: '#2563eb' }} />Create Your Own Topic
             </Title>
-            <Button 
+            <Button
               type={showCustomTopic ? 'default' : 'primary'}
               onClick={() => setShowCustomTopic(!showCustomTopic)}
             >
@@ -193,7 +319,8 @@ export default function StructuredSpeaking() {
     );
   }
 
-  if (!showResults) {
+  // Results page
+  if (result) {
     return (
       <div className="page-container">
         <div style={{ marginBottom: 24 }}>
@@ -201,26 +328,211 @@ export default function StructuredSpeaking() {
             items={[
               { title: <span onClick={() => navigate('/speaking')} style={{ cursor: 'pointer' }}>Speaking</span> },
               { title: <span onClick={handleReset} style={{ cursor: 'pointer' }}>Structured Speaking</span> },
-              { title: selectedTopic.title }
+              { title: 'AI Feedback' }
             ]}
           />
         </div>
 
         <div className="page-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Button 
-              icon={<ArrowLeftOutlined />} 
+            <Button
+              icon={<ArrowLeftOutlined />}
               onClick={handleReset}
             />
             <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>
-              {selectedTopic.title}
+              <CheckCircleOutlined style={{ marginRight: 10, color: '#059669' }} />AI Feedback Results
             </Title>
           </div>
           <Text type="secondary">
-            Prepare and start recording your response about this topic
+            Your performance for: {selectedTopic.title}
           </Text>
         </div>
 
+        <div style={{ marginTop: 32 }}>
+          <Row gutter={[32, 32]} style={{ marginBottom: 32 }}>
+            {/* Pronunciation Scores - Left */}
+            <Col xs={24} md={12}>
+              <Card style={{ borderRadius: 12, height: '100%' }}>
+                <Title level={3} style={{ marginBottom: 24, textAlign: 'center', color: '#3b82f6' }}>
+                  Pronunciation
+                </Title>
+
+                <div style={{ textAlign: 'center', marginBottom: 32 }}>
+                  <Progress
+                    type="circle"
+                    percent={result.pronunciation.overall}
+                    size={160}
+                    strokeColor="#3b82f6"
+                    format={(percent) => (
+                      <div>
+                        <div style={{ fontSize: 32, fontWeight: 600 }}>{percent}</div>
+                        <div style={{ fontSize: 14, color: '#666' }}>Overall</div>
+                      </div>
+                    )}
+                  />
+                </div>
+
+                <Space direction="vertical" style={{ width: '100%' }} size="large">
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text strong>Accuracy</Text>
+                      <Text strong>{result.pronunciation.accuracy}</Text>
+                    </div>
+                    <Progress percent={result.pronunciation.accuracy} strokeColor="#3b82f6" showInfo={false} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text strong>Fluency</Text>
+                      <Text strong>{result.pronunciation.fluency}</Text>
+                    </div>
+                    <Progress percent={result.pronunciation.fluency} strokeColor="#3b82f6" showInfo={false} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text strong>Prosody</Text>
+                      <Text strong>{result.pronunciation.prosody}</Text>
+                    </div>
+                    <Progress percent={result.pronunciation.prosody} strokeColor="#3b82f6" showInfo={false} />
+                  </div>
+                </Space>
+              </Card>
+            </Col>
+
+            {/* Content Scores - Right */}
+            <Col xs={24} md={12}>
+              <Card style={{ borderRadius: 12, height: '100%' }}>
+                <Title level={3} style={{ marginBottom: 24, textAlign: 'center', color: '#7c3aed' }}>
+                  Content
+                </Title>
+
+                <div style={{ textAlign: 'center', marginBottom: 32 }}>
+                  <Progress
+                    type="circle"
+                    percent={result.content.overall}
+                    size={160}
+                    strokeColor="#7c3aed"
+                    format={(percent) => (
+                      <div>
+                        <div style={{ fontSize: 32, fontWeight: 600 }}>{percent}</div>
+                        <div style={{ fontSize: 14, color: '#666' }}>Overall</div>
+                      </div>
+                    )}
+                  />
+                </div>
+
+                <Space direction="vertical" style={{ width: '100%' }} size="large">
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text strong>Vocabulary</Text>
+                      <Text strong>{result.content.vocabulary}</Text>
+                    </div>
+                    <Progress percent={result.content.vocabulary} strokeColor="#7c3aed" showInfo={false} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text strong>Grammar</Text>
+                      <Text strong>{result.content.grammar}</Text>
+                    </div>
+                    <Progress percent={result.content.grammar} strokeColor="#7c3aed" showInfo={false} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text strong>Topic</Text>
+                      <Text strong>{result.content.topic}</Text>
+                    </div>
+                    <Progress percent={result.content.topic} strokeColor="#7c3aed" showInfo={false} />
+                  </div>
+                </Space>
+              </Card>
+            </Col>
+          </Row>
+
+          {/* Transcript */}
+          <Card style={{ marginBottom: 24, borderRadius: 12 }}>
+            <Title level={4} style={{ marginBottom: 16 }}>Your Response</Title>
+            <Paragraph style={{ fontSize: 16, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+              {result.transcript}
+            </Paragraph>
+          </Card>
+
+          {/* Feedback */}
+          <Card style={{ marginBottom: 32, borderRadius: 12 }}>
+            <Title level={4} style={{ marginBottom: 16 }}>AI Feedback</Title>
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <div>
+                <Text strong style={{ color: '#7c3aed' }}>Vocabulary: </Text>
+                <Text>{result.content.feedback.vocabulary}</Text>
+              </div>
+              <div>
+                <Text strong style={{ color: '#7c3aed' }}>Grammar: </Text>
+                <Text>{result.content.feedback.grammar}</Text>
+              </div>
+              <div>
+                <Text strong style={{ color: '#7c3aed' }}>Topic: </Text>
+                <Text>{result.content.feedback.topic}</Text>
+              </div>
+            </Space>
+          </Card>
+
+          <div style={{ display: 'flex', gap: 16 }}>
+            <Button size="large" onClick={handleReset}>
+              Try Another Topic
+            </Button>
+            <Button type="primary" size="large" onClick={() => navigate('/speaking')}>
+              Back to Speaking Studio
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Recording page
+  return (
+    <div className="page-container">
+      <div style={{ marginBottom: 24 }}>
+        <Breadcrumb
+          items={[
+            { title: <span onClick={() => navigate('/speaking')} style={{ cursor: 'pointer' }}>Speaking</span> },
+            { title: <span onClick={handleReset} style={{ cursor: 'pointer' }}>Structured Speaking</span> },
+            { title: selectedTopic.title }
+          ]}
+        />
+      </div>
+
+      <div className="page-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={handleReset}
+            disabled={recording || processing}
+          />
+          <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>
+            {selectedTopic.title}
+          </Title>
+        </div>
+        <Text type="secondary">
+          {processing ? 'Processing your recording...' : 'Click the button to start recording (max 60 seconds)'}
+        </Text>
+      </div>
+
+      {processing ? (
+        <div style={{
+          background: '#f8fafc',
+          borderRadius: 16,
+          padding: 48,
+          textAlign: 'center',
+          marginTop: 24,
+        }}>
+          <Spin indicator={<LoadingOutlined style={{ fontSize: 64, color: '#7c3aed' }} spin />} />
+          <Title level={3} style={{ marginTop: 32, color: '#7c3aed' }}>
+            {progressMessage || 'Processing...'}
+          </Title>
+          <Text type="secondary" style={{ fontSize: 16 }}>
+            Please wait, AI is working hard...
+          </Text>
+        </div>
+      ) : (
         <div style={{
           background: '#f8fafc',
           borderRadius: 16,
@@ -243,7 +555,7 @@ export default function StructuredSpeaking() {
               type="primary"
               shape="circle"
               size="large"
-              onClick={handleRecordToggle}
+              onClick={recording ? stopRecording : startRecording}
               style={{
                 width: 100,
                 height: 100,
@@ -251,122 +563,33 @@ export default function StructuredSpeaking() {
                 border: 'none',
               }}
             >
-              {recording ? <PauseCircleOutlined style={{ fontSize: 56 }} /> : <AudioOutlined style={{ fontSize: 56 }} />}
+              {recording ? (
+                <PauseCircleOutlined style={{ fontSize: 56 }} />
+              ) : (
+                <AudioOutlined style={{ fontSize: 56 }} />
+              )}
             </Button>
           </div>
-          
+
           <div style={{ marginBottom: 32 }}>
             <Text style={{ fontSize: 24, fontWeight: 600 }}>
               {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
             </Text>
+            <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+              {recording ? '录音中...' : recordingTime > 0 ? '录音已完成' : '点击开始录音'}
+            </Text>
           </div>
 
-          <Space size="middle">
-            <Button
-              size="large"
-              icon={<PlayCircleOutlined />}
-              disabled={recording}
-            >
-              Play Sample
-            </Button>
-            <Button
-              size="large"
-              icon={<UploadOutlined />}
-              disabled={recording}
-            >
-              Upload Audio
-            </Button>
-            <Button
-              type="primary"
-              size="large"
-              onClick={handleSubmitRecording}
-              disabled={!recordingTime}
-            >
-              Submit for Feedback
-            </Button>
-          </Space>
+          {error && (
+            <div style={{ marginBottom: 24 }}>
+              <Text type="danger">{error}</Text>
+              <div style={{ marginTop: 16 }}>
+                <Button onClick={handleRetry}>重新录制</Button>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="page-container">
-      <div style={{ marginBottom: 24 }}>
-        <Breadcrumb
-          items={[
-            { title: <span onClick={() => navigate('/speaking')} style={{ cursor: 'pointer' }}>Speaking</span> },
-            { title: <span onClick={handleReset} style={{ cursor: 'pointer' }}>Structured Speaking</span> },
-            { title: 'AI Feedback' }
-          ]}
-        />
-      </div>
-
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Button 
-            icon={<ArrowLeftOutlined />} 
-            onClick={handleReset}
-          />
-          <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>
-            <CheckCircleOutlined style={{ marginRight: 10, color: '#059669' }} />AI Feedback Results
-          </Title>
-        </div>
-        <Text type="secondary">
-          Your performance for: {selectedTopic.title}
-        </Text>
-      </div>
-
-      <div style={{ marginTop: 32 }}>
-        <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
-          <Col xs={24} sm={8}>
-            <Card style={{ borderRadius: 12, textAlign: 'center', height: '100%' }}>
-              <Title level={4} style={{ marginBottom: 16 }}>Fluency</Title>
-              <Progress percent={85} size="large" strokeColor="#3b82f6" />
-              <Text style={{ marginTop: 16, display: 'block', fontSize: 18, fontWeight: 600 }}>8.5/10</Text>
-            </Card>
-          </Col>
-          <Col xs={24} sm={8}>
-            <Card style={{ borderRadius: 12, textAlign: 'center', height: '100%' }}>
-              <Title level={4} style={{ marginBottom: 16 }}>Accuracy</Title>
-              <Progress percent={78} size="large" strokeColor="#7c3aed" />
-              <Text style={{ marginTop: 16, display: 'block', fontSize: 18, fontWeight: 600 }}>7.8/10</Text>
-            </Card>
-          </Col>
-          <Col xs={24} sm={8}>
-            <Card style={{ borderRadius: 12, textAlign: 'center', height: '100%' }}>
-              <Title level={4} style={{ marginBottom: 16 }}>Logic</Title>
-              <Progress percent={92} size="large" strokeColor="#059669" />
-              <Text style={{ marginTop: 16, display: 'block', fontSize: 18, fontWeight: 600 }}>9.2/10</Text>
-            </Card>
-          </Col>
-        </Row>
-
-        <Card style={{ marginBottom: 24, borderRadius: 12 }}>
-          <Title level={4} style={{ marginBottom: 16 }}>Sample Response</Title>
-          <Text style={{ fontSize: 16, lineHeight: 1.8 }}>
-            Today was a productive day. I woke up early and went for a morning jog, then had a healthy breakfast. At work, I finished several important projects and had a productive meeting with my team. In the evening, I spent time with my family and read a book before bed. Overall, it was a well-balanced day filled with both work and relaxation.
-          </Text>
-        </Card>
-
-        <Card style={{ marginBottom: 32, borderRadius: 12 }}>
-          <Title level={4} style={{ marginBottom: 16 }}>Improvement Suggestions</Title>
-          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 15, lineHeight: 2 }}>
-            <li style={{ marginBottom: 12 }}>Try to speak more slowly and clearly</li>
-            <li style={{ marginBottom: 12 }}>Pay attention to word stress in longer words</li>
-            <li style={{ marginBottom: 12 }}>Use more varied sentence structures</li>
-          </ul>
-        </Card>
-
-        <div style={{ display: 'flex', gap: 16 }}>
-          <Button size="large" onClick={handleReset}>
-            Try Another Topic
-          </Button>
-          <Button type="primary" size="large" onClick={() => navigate('/speaking')}>
-            Back to Speaking Studio
-          </Button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
