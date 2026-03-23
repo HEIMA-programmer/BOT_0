@@ -44,6 +44,7 @@ def create_app(config_name=None):
     from app.routes.daily_learning import daily_learning_bp
     from app.routes.listening import listening_bp
     from app.routes.progress import progress_bp
+    from app.routes.forum import forum_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(daily_words_bp)
@@ -51,6 +52,7 @@ def create_app(config_name=None):
     app.register_blueprint(daily_learning_bp)
     app.register_blueprint(listening_bp)
     app.register_blueprint(progress_bp)
+    app.register_blueprint(forum_bp)
 
     # Create database tables and auto-seed on first run
     with app.app_context():
@@ -66,6 +68,9 @@ def create_app(config_name=None):
             user_word_progress,
             word,
             word_bank,
+            forum_post,
+            forum_comment,
+            forum_forward,
         )
         db.create_all()
         _seed_words_if_empty(app)

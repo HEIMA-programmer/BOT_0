@@ -63,6 +63,23 @@ export const listeningAPI = {
     }),
 };
 
+// Forum APIs
+export const forumAPI = {
+  getPosts: (params) => api.get('/forum/posts', { params }),
+  getPost: (id) => api.get(`/forum/posts/${id}`),
+  createPost: (formData) =>
+    api.post('/forum/posts', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  deletePost: (id) => api.delete(`/forum/posts/${id}`),
+  addComment: (postId, content) =>
+    api.post(`/forum/posts/${postId}/comments`, { content }),
+  deleteComment: (commentId) => api.delete(`/forum/comments/${commentId}`),
+  forwardPost: (postId, comment) =>
+    api.post(`/forum/posts/${postId}/forward`, { comment }),
+  getMyPosts: (params) => api.get('/forum/my-posts', { params }),
+};
+
 export const progressAPI = {
   getDashboard: () => api.get('/progress/dashboard'),
   trackTime: (payload) => api.post('/progress/track-time', payload),

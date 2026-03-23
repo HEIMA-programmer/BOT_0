@@ -7,6 +7,7 @@ import {
   SoundOutlined,
   AudioOutlined,
   RobotOutlined,
+  MessageOutlined,
   UserOutlined,
   LogoutOutlined,
 } from '@ant-design/icons';
@@ -21,6 +22,7 @@ const menuItems = [
   { key: '/listening', icon: <SoundOutlined />, label: 'Listening' },
   { key: '/speaking', icon: <AudioOutlined />, label: 'Speaking' },
   { key: '/ai-chat', icon: <RobotOutlined />, label: 'AI Chat' },
+  { key: '/forum', icon: <MessageOutlined />, label: 'Forum' },
 ];
 
 export default function NavBar({ user, onLogout }) {

@@ -9,6 +9,7 @@ import Listening from './pages/Listening';
 import Speaking from './pages/Speaking';
 import AIChat from './pages/AIChat';
 import Profile from './pages/Profile';
+import Forum from './pages/Forum';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import { authAPI } from './api';
@@ -107,6 +108,9 @@ export default function App() {
               } />
               <Route path="/ai-chat" element={
                 <RequireAuth user={user} loading={loading}><AIChat /></RequireAuth>
+              } />
+              <Route path="/forum" element={
+                <RequireAuth user={user} loading={loading}><Forum user={user} /></RequireAuth>
               } />
               <Route path="/profile" element={
                 <RequireAuth user={user} loading={loading}><Profile user={user} /></RequireAuth>
