@@ -62,7 +62,7 @@ describe('DailyWords page', () => {
 
     renderWithProviders(<DailyWords />);
 
-    expect(await screen.findByText('Daily Words')).toBeTruthy();
+    expect(await screen.findByText('Vocabulary')).toBeTruthy();
     await waitFor(() => expect(mockDailyLearningAPI.getToday).toHaveBeenCalledWith(10));
     expect(mockWordBankAPI.getAll).toHaveBeenCalled();
     expect(screen.getByText('2026-03-18')).toBeTruthy();

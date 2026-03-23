@@ -4,7 +4,6 @@ import { Layout, ConfigProvider, Spin, App as AntdApp } from 'antd';
 import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import DailyWords from './pages/DailyWords';
-import WordBank from './pages/WordBank';
 import Listening from './pages/Listening';
 import Speaking from './pages/Speaking';
 import Profile from './pages/Profile';
@@ -93,9 +92,7 @@ export default function App() {
               <Route path="/daily-words" element={
                 <RequireAuth user={user} loading={loading}><DailyWords /></RequireAuth>
               } />
-              <Route path="/word-bank" element={
-                <RequireAuth user={user} loading={loading}><WordBank /></RequireAuth>
-              } />
+              <Route path="/word-bank" element={<Navigate to="/daily-words" replace />} />
               <Route path="/listening" element={
                 <RequireAuth user={user} loading={loading}><Listening user={user} /></RequireAuth>
               } />

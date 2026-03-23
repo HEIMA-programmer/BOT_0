@@ -2,20 +2,34 @@ import React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import {
   Typography, Card, Tag, Button, App, Tooltip, Spin, Modal, InputNumber,
-  Empty, Progress, Divider, List, Space, Input
+  Empty, Progress, Divider, List, Space, Input, Drawer, Select, Badge
 } from 'antd';
 import {
   SoundOutlined, PlusOutlined, CheckOutlined, CalendarOutlined,
   BookOutlined, SettingOutlined, PlayCircleOutlined, EyeOutlined,
-  ReloadOutlined, TrophyOutlined, SearchOutlined, StarOutlined
+  ReloadOutlined, TrophyOutlined, SearchOutlined, StarOutlined,
+  DeleteOutlined, ExportOutlined, SortAscendingOutlined, CloseOutlined,
+  FireOutlined
 } from '@ant-design/icons';
 import { dailyLearningAPI, wordBankAPI } from '../api';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text, Paragraph } = Typography;
+const { Option } = Select;
 
 const DAILY_COUNT_KEY = 'dailyWordsCount';
 const DEFAULT_COUNT = 10;
+
+// Confetti colors for celebration
+const CONFETTI_COLORS = ['#667eea', '#764ba2', '#f5576c', '#00f2fe', '#ffd700', '#059669', '#ff6b6b', '#48dbfb'];
+
+// Word Bank sort options
+const sortOptions = [
+  { label: 'Date Added (Newest)', value: 'date_desc' },
+  { label: 'Date Added (Oldest)', value: 'date_asc' },
+  { label: 'Word (A-Z)', value: 'word_asc' },
+  { label: 'Word (Z-A)', value: 'word_desc' },
+];
 
 export default function DailyWords() {
   useLearningTimeTracker('vocab', 'study_time:daily-words');
@@ -42,6 +56,7 @@ export default function DailyWords() {
   const [learningWords, setLearningWords] = useState([]);
   const [learningIndex, setLearningIndex] = useState(0);
   const [showDef, setShowDef] = useState(false);
+  const [cardFlipping, setCardFlipping] = useState(false);
 
   // Review modal state
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -73,6 +88,25 @@ export default function DailyWords() {
   const [masteredOpen, setMasteredOpen] = useState(false);
   const [masteredWords, setMasteredWords] = useState([]);
   const [masteredLoading, setMasteredLoading] = useState(false);
+
+  // Mastery celebration (confetti + border glow)
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [confettiParticles, setConfettiParticles] = useState([]);
+
+  // ==================== Word Bank Drawer State ====================
+  const [bankDrawerOpen, setBankDrawerOpen] = useState(false);
+  const [bankWords, setBankWords] = useState([]);
+  const [bankFilteredWords, setBankFilteredWords] = useState([]);
+  const [bankSearch, setBankSearch] = useState('');
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankSortBy, setBankSortBy] = useState('date_desc');
+  const [bankDeleteModalVisible, setBankDeleteModalVisible] = useState(false);
+  const [bankWordToDelete, setBankWordToDelete] = useState(null);
+  const [bankExportModalVisible, setBankExportModalVisible] = useState(false);
+  const [bankLearningOpen, setBankLearningOpen] = useState(false);
+  const [bankLearningWords, setBankLearningWords] = useState([]);
+  const [bankLearningIndex, setBankLearningIndex] = useState(0);
+  const [bankShowDef, setBankShowDef] = useState(false);
 
   const { message } = App.useApp();
 
@@ -163,6 +197,25 @@ export default function DailyWords() {
     }
   };
 
+  // Celebration effect - confetti particles + border glow
+  const triggerCelebration = () => {
+    const particles = Array.from({ length: 30 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      delay: Math.random() * 0.5,
+      duration: 1 + Math.random() * 1.5,
+      size: 4 + Math.random() * 6,
+      drift: (Math.random() - 0.5) * 60,
+    }));
+    setConfettiParticles(particles);
+    setShowCelebration(true);
+    setTimeout(() => {
+      setShowCelebration(false);
+      setConfettiParticles([]);
+    }, 2500);
+  };
+
   // ==================== Learning Session ====================
   const startLearning = () => {
     if (todayWords.length === 0) {
@@ -181,19 +234,24 @@ export default function DailyWords() {
 
     if (action === 'mastered') {
       await updateStatus(word.id, 'mastered');
+      triggerCelebration();
     } else if (action === 'review') {
       await updateStatus(word.id, 'review');
     }
 
-    // Move to next word
-    if (learningIndex < learningWords.length - 1) {
-      setLearningIndex(prev => prev + 1);
-      setShowDef(false);
-    } else {
-      setLearningOpen(false);
-      message.success('Learning session complete!');
-      loadToday();
-    }
+    // Flip animation
+    setCardFlipping(true);
+    setTimeout(() => {
+      if (learningIndex < learningWords.length - 1) {
+        setLearningIndex(prev => prev + 1);
+        setShowDef(false);
+      } else {
+        setLearningOpen(false);
+        message.success('Learning session complete!');
+        loadToday();
+      }
+      setCardFlipping(false);
+    }, 300);
   };
 
   // ==================== Review Session ====================
@@ -231,8 +289,8 @@ export default function DailyWords() {
 
     if (action === 'mastered') {
       await updateStatus(word.id, 'mastered');
+      triggerCelebration();
     }
-    // 'still_review' means keep status as review, no API call needed
 
     if (reviewIndex < reviewWords.length - 1) {
       setReviewIndex(prev => prev + 1);
@@ -268,13 +326,11 @@ export default function DailyWords() {
   const markMasteredByWordId = async (wordId) => {
     try {
       await dailyLearningAPI.markMastered(wordId);
-      message.success('Marked as mastered');
-      // Update local state
+      triggerCelebration();
       setAllWords(prev => prev.map(w =>
         w.id === wordId ? { ...w, progress_status: 'mastered' } : w
       ));
       setMasteredCount(prev => prev + 1);
-      // Also remove from today's words if it was there
       setTodayWords(prev => prev.filter(w => w.word_id !== wordId));
     } catch (error) {
       message.error('Failed to mark as mastered');
@@ -298,6 +354,7 @@ export default function DailyWords() {
   const markReviewAsMastered = async (progressId) => {
     const ok = await updateStatus(progressId, 'mastered');
     if (ok) {
+      triggerCelebration();
       setReviewListWords(prev => prev.filter(w => w.id !== progressId));
       setReviewCount(prev => prev - 1);
       setMasteredCount(prev => prev + 1);
@@ -323,31 +380,235 @@ export default function DailyWords() {
     const ok = await updateStatus(progressId, 'mastered');
     if (ok) {
       setTodayWords(prev => prev.filter(w => w.id !== progressId));
-      message.success('Marked as mastered');
+      triggerCelebration();
+    }
+  };
+
+  // ==================== Word Bank Drawer ====================
+  const loadWordBank = async () => {
+    setBankLoading(true);
+    try {
+      const res = await wordBankAPI.getAll();
+      setBankWords(res.data.words || []);
+    } catch (err) {
+      message.error('Failed to load word bank');
+    } finally {
+      setBankLoading(false);
+    }
+  };
+
+  const openBankDrawer = () => {
+    loadWordBank();
+    setBankDrawerOpen(true);
+  };
+
+  // Bank filtering & sorting
+  useEffect(() => {
+    let filtered = [...bankWords];
+    if (bankSearch) {
+      filtered = filtered.filter(w =>
+        w.text.toLowerCase().includes(bankSearch.toLowerCase())
+      );
+    }
+    filtered.sort((a, b) => {
+      switch (bankSortBy) {
+        case 'date_desc': return new Date(b.added_at) - new Date(a.added_at);
+        case 'date_asc': return new Date(a.added_at) - new Date(b.added_at);
+        case 'word_asc': return a.text.localeCompare(b.text);
+        case 'word_desc': return b.text.localeCompare(a.text);
+        default: return 0;
+      }
+    });
+    setBankFilteredWords(filtered);
+  }, [bankWords, bankSearch, bankSortBy]);
+
+  // Keep bankIds in sync
+  useEffect(() => {
+    if (bankWords.length > 0) {
+      setBankIds(new Set(bankWords.map(w => w.word_id)));
+    }
+  }, [bankWords]);
+
+  const confirmBankRemove = (entryId) => {
+    setBankWordToDelete(entryId);
+    setBankDeleteModalVisible(true);
+  };
+
+  const removeBankWord = async () => {
+    if (!bankWordToDelete) return;
+    try {
+      await wordBankAPI.remove(bankWordToDelete);
+      setBankWords(bankWords.filter((w) => w.id !== bankWordToDelete));
+      message.success('Word removed from bank');
+    } catch (err) {
+      message.error('Failed to remove word');
+    } finally {
+      setBankDeleteModalVisible(false);
+      setBankWordToDelete(null);
+    }
+  };
+
+  const exportBankWords = async (format) => {
+    try {
+      const exportData = bankFilteredWords;
+      if (format === 'csv') {
+        const csvContent = [
+          ['Word', 'Definition'],
+          ...exportData.map(w => [w.text, `"${(w.definition || '').replace(/"/g, '""')}"`])
+        ].map(row => row.join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `wordbank_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+      } else if (format === 'json') {
+        await navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
+        message.success('Copied to clipboard');
+      } else if (format === 'text') {
+        await navigator.clipboard.writeText(exportData.map(w => w.text).join('\n'));
+        message.success('Copied to clipboard');
+      }
+      setBankExportModalVisible(false);
+    } catch (err) {
+      message.error('Export failed');
+    }
+  };
+
+  const startBankLearning = () => {
+    if (bankWords.length === 0) {
+      message.info('No words in your bank!');
+      return;
+    }
+    setBankLearningWords([...bankWords]);
+    setBankLearningIndex(0);
+    setBankShowDef(false);
+    setBankLearningOpen(true);
+  };
+
+  const handleBankLearningNext = () => {
+    if (bankLearningIndex < bankLearningWords.length - 1) {
+      setBankLearningIndex(prev => prev + 1);
+      setBankShowDef(false);
+    } else {
+      setBankLearningOpen(false);
+      message.success('Finished reviewing word bank!');
+    }
+  };
+
+  const handleRemoveFromBankLearning = async (entryId) => {
+    try {
+      await wordBankAPI.remove(entryId);
+      setBankWords(prev => prev.filter(w => w.id !== entryId));
+
+      const updated = bankLearningWords.filter(w => w.id !== entryId);
+      if (updated.length === 0) {
+        setBankLearningOpen(false);
+        setBankLearningWords([]);
+        message.success('Removed. No more words in bank.');
+        return;
+      }
+
+      setBankLearningWords(updated);
+      const removedIdx = bankLearningWords.findIndex(w => w.id === entryId);
+      if (removedIdx < bankLearningIndex) {
+        setBankLearningIndex(prev => prev - 1);
+      } else if (bankLearningIndex >= updated.length) {
+        setBankLearningIndex(updated.length - 1);
+      }
+      setBankShowDef(false);
+      message.success('Removed from bank');
+    } catch (err) {
+      message.error('Failed to remove');
     }
   };
 
   // ==================== Render ====================
   const currentLearningWord = learningWords[learningIndex];
   const currentReviewWord = reviewWords[reviewIndex];
+  const currentBankLearningWord = bankLearningWords[bankLearningIndex];
+
+  // Fun: daily encouragement based on time of day
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   return (
     <div className="page-container" style={{ padding: '24px' }}>
+      {/* Confetti particles - fall from top, no blocking */}
+      {showCelebration && confettiParticles.map(p => (
+        <div
+          key={p.id}
+          style={{
+            position: 'fixed',
+            left: `${p.x}%`,
+            top: -10,
+            width: p.size,
+            height: p.size,
+            background: p.color,
+            borderRadius: p.size > 7 ? '50%' : '2px',
+            zIndex: 9999,
+            pointerEvents: 'none',
+            animation: `confettiFall ${p.duration}s ease-in ${p.delay}s forwards`,
+            transform: `rotate(${Math.random() * 360}deg)`,
+          }}
+        />
+      ))}
+
+      <style>{`
+        @keyframes confettiFall {
+          0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        @keyframes cardFlip {
+          0% { transform: rotateY(0deg); opacity: 1; }
+          50% { transform: rotateY(90deg); opacity: 0.5; }
+          100% { transform: rotateY(0deg); opacity: 1; }
+        }
+        @keyframes borderGlow {
+          0% { box-shadow: 0 0 5px rgba(102,126,234,0.3); }
+          50% { box-shadow: 0 0 20px rgba(102,126,234,0.6), 0 0 40px rgba(118,75,162,0.3); }
+          100% { box-shadow: 0 0 5px rgba(102,126,234,0.3); }
+        }
+        .word-card-flip {
+          animation: cardFlip 0.3s ease-in-out;
+        }
+        .celebration-glow .ant-modal-content {
+          animation: borderGlow 1s ease-in-out 3;
+        }
+        .streak-glow {
+          text-shadow: 0 0 8px rgba(255,165,0,0.6);
+        }
+      `}</style>
+
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>Daily Words</Title>
+            <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>
+              Vocabulary
+            </Title>
             <Text type="secondary" style={{ fontSize: 14 }}>
               <CalendarOutlined style={{ marginRight: 6 }} />{date}
+              <span style={{ marginLeft: 12, color: '#667eea' }}>{greeting}! Ready to learn?</span>
             </Text>
           </div>
-          <Button
-            icon={<SettingOutlined />}
-            onClick={() => { setTempCount(dailyCount); setSettingsOpen(true); }}
-          >
-            {dailyCount} words/day
-          </Button>
+          <Space wrap>
+            <Badge count={bankIds.size} overflowCount={999} color="#059669" offset={[-4, 0]}>
+              <Button
+                icon={<BookOutlined />}
+                onClick={openBankDrawer}
+                style={{ borderColor: '#059669', color: '#059669' }}
+              >
+                My Word Bank
+              </Button>
+            </Badge>
+            <Button
+              icon={<SettingOutlined />}
+              onClick={() => { setTempCount(dailyCount); setSettingsOpen(true); }}
+            >
+              {dailyCount} words/day
+            </Button>
+          </Space>
         </div>
       </div>
 
@@ -421,6 +682,11 @@ export default function DailyWords() {
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15 }}>
                 {masteredCount} words mastered
               </Text>
+              {masteredCount >= 10 && (
+                <div style={{ marginTop: 8, fontSize: 13, color: 'rgba(255,255,255,0.9)' }}>
+                  <FireOutlined className="streak-glow" /> Great progress!
+                </div>
+              )}
             </div>
           </Card>
         </div>
@@ -460,6 +726,12 @@ export default function DailyWords() {
             </div>
             <Divider type="vertical" style={{ height: 60 }} />
             <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>Word Bank</Text>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#059669' }}>{bankIds.size}</div>
+              <Text type="secondary" style={{ fontSize: 12 }}>saved</Text>
+            </div>
+            <Divider type="vertical" style={{ height: 60 }} />
+            <div>
               <Text type="secondary" style={{ fontSize: 12 }}>Total Pool</Text>
               <div style={{ fontSize: 24, fontWeight: 700, color: '#6c757d' }}>{totalWords}</div>
               <Text type="secondary" style={{ fontSize: 12 }}>words</Text>
@@ -477,6 +749,7 @@ export default function DailyWords() {
         width={640}
         centered
         closable
+        className={showCelebration ? 'celebration-glow' : ''}
         styles={{ body: { padding: '24px' } }}
       >
         {currentLearningWord && (
@@ -495,7 +768,7 @@ export default function DailyWords() {
             </div>
 
             {/* Word Display */}
-            <div style={{ textAlign: 'center', minHeight: 220, padding: '20px 0' }}>
+            <div className={cardFlipping ? 'word-card-flip' : ''} style={{ textAlign: 'center', minHeight: 220, padding: '20px 0' }}>
               <div style={{ marginBottom: 8 }}>
                 <Title level={1} style={{ margin: 0, color: '#1a1a2e', fontSize: 36 }}>
                   {currentLearningWord.text}
@@ -517,10 +790,11 @@ export default function DailyWords() {
               {showDef ? (
                 <div style={{
                   textAlign: 'left',
-                  background: '#f8f9fa',
+                  background: 'linear-gradient(135deg, #f8f9fa, #e9ecef)',
                   padding: 20,
                   borderRadius: 12,
                   marginTop: 16,
+                  border: '1px solid #e9ecef',
                 }}>
                   <Text strong style={{ color: '#667eea' }}>Definition:</Text>
                   <Paragraph style={{ margin: '8px 0', fontSize: 15 }}>
@@ -543,13 +817,13 @@ export default function DailyWords() {
                   onClick={() => setShowDef(true)}
                   style={{ marginTop: 16 }}
                 >
-                  Show Definition
+                  Tap to Reveal Definition
                 </Button>
               )}
             </div>
 
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
               <Button
                 size="large"
                 type="primary"
@@ -627,6 +901,7 @@ export default function DailyWords() {
         width={640}
         centered
         closable
+        className={showCelebration ? 'celebration-glow' : ''}
         styles={{ body: { padding: '24px' } }}
       >
         {currentReviewWord && (
@@ -663,10 +938,11 @@ export default function DailyWords() {
               {showReviewDef ? (
                 <div style={{
                   textAlign: 'left',
-                  background: '#fef2f2',
+                  background: 'linear-gradient(135deg, #fef2f2, #fee2e2)',
                   padding: 20,
                   borderRadius: 12,
                   marginTop: 16,
+                  border: '1px solid #fecaca',
                 }}>
                   <Text strong style={{ color: '#f5576c' }}>Definition:</Text>
                   <Paragraph style={{ margin: '8px 0', fontSize: 15 }}>
@@ -689,7 +965,7 @@ export default function DailyWords() {
                   onClick={() => setShowReviewDef(true)}
                   style={{ marginTop: 16 }}
                 >
-                  Show Definition
+                  Tap to Reveal Definition
                 </Button>
               )}
             </div>
@@ -988,6 +1264,270 @@ export default function DailyWords() {
             </Text>
           </div>
         </div>
+      </Modal>
+
+      {/* ==================== Word Bank Drawer ==================== */}
+      <Drawer
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <BookOutlined style={{ color: '#059669', fontSize: 20 }} />
+            <span style={{ fontWeight: 700, fontSize: 18 }}>My Word Bank</span>
+            <Tag color="green" style={{ marginLeft: 8 }}>{bankWords.length} words</Tag>
+          </div>
+        }
+        placement="right"
+        width={560}
+        open={bankDrawerOpen}
+        onClose={() => setBankDrawerOpen(false)}
+        styles={{ body: { padding: '16px 24px' } }}
+      >
+        {/* Bank Actions */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={startBankLearning}
+            disabled={bankWords.length === 0}
+            style={{ background: '#059669', borderColor: '#059669' }}
+          >
+            Study Bank
+          </Button>
+          <Button icon={<ExportOutlined />} onClick={() => setBankExportModalVisible(true)}>
+            Export
+          </Button>
+          <Button icon={<ReloadOutlined />} onClick={loadWordBank} loading={bankLoading}>
+            Refresh
+          </Button>
+        </div>
+
+        {/* Bank Search & Sort */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <Input
+            placeholder="Search words..."
+            prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
+            value={bankSearch}
+            onChange={(e) => setBankSearch(e.target.value)}
+            allowClear
+            style={{ flex: 1 }}
+          />
+          <Select value={bankSortBy} onChange={setBankSortBy} style={{ width: 180 }}>
+            {sortOptions.map(opt => (
+              <Option key={opt.value} value={opt.value}>
+                <SortAscendingOutlined /> {opt.label}
+              </Option>
+            ))}
+          </Select>
+        </div>
+
+        {/* Bank Word List */}
+        {bankLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}><Spin size="large" /></div>
+        ) : bankFilteredWords.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              bankWords.length === 0
+                ? 'No words saved yet. Add words during learning!'
+                : 'No words match your search'
+            }
+          >
+            {bankWords.length === 0 ? null : (
+              <Button onClick={() => setBankSearch('')}>Clear Search</Button>
+            )}
+          </Empty>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {bankFilteredWords.map((entry) => (
+              <Card
+                key={entry.id}
+                size="small"
+                style={{
+                  borderRadius: 12,
+                  border: '1px solid #e5e7eb',
+                  transition: 'all 0.2s',
+                }}
+                hoverable
+                styles={{ body: { padding: '12px 16px' } }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Space size={8} align="center" wrap>
+                      <Text strong style={{ fontSize: 16 }}>{entry.text}</Text>
+                      {entry.difficulty_level && (
+                        <Tag color={
+                          entry.difficulty_level === 'beginner' ? 'green' :
+                          entry.difficulty_level === 'intermediate' ? 'blue' : 'orange'
+                        } style={{ borderRadius: 12 }}>
+                          {entry.difficulty_level}
+                        </Tag>
+                      )}
+                      {entry.part_of_speech && (
+                        <Tag style={{ borderRadius: 12 }}>{entry.part_of_speech}</Tag>
+                      )}
+                    </Space>
+                    <Paragraph style={{ margin: '6px 0 2px', color: '#374151', fontSize: 14 }} ellipsis={{ rows: 2 }}>
+                      {entry.definition}
+                    </Paragraph>
+                    {entry.example_sentence && (
+                      <Text italic style={{ color: '#9ca3af', fontSize: 12 }} ellipsis>
+                        &ldquo;{entry.example_sentence}&rdquo;
+                      </Text>
+                    )}
+                  </div>
+                  <Space size={4}>
+                    <Tooltip title="Listen">
+                      <Button
+                        shape="circle"
+                        size="small"
+                        icon={<SoundOutlined />}
+                        onClick={() => speakWord(entry.text)}
+                        style={{ color: '#059669', borderColor: '#86efac' }}
+                      />
+                    </Tooltip>
+                    <Tooltip title="Remove">
+                      <Button
+                        shape="circle"
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        danger
+                        onClick={() => confirmBankRemove(entry.id)}
+                      />
+                    </Tooltip>
+                  </Space>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Drawer>
+
+      {/* Bank Delete Confirm Modal */}
+      <Modal
+        title="Remove Word"
+        open={bankDeleteModalVisible}
+        onOk={removeBankWord}
+        onCancel={() => setBankDeleteModalVisible(false)}
+        okText="Remove"
+        okButtonProps={{ danger: true }}
+      >
+        <p>Are you sure you want to remove this word from your bank?</p>
+      </Modal>
+
+      {/* Bank Export Modal */}
+      <Modal
+        title="Export Word Bank"
+        open={bankExportModalVisible}
+        onCancel={() => setBankExportModalVisible(false)}
+        footer={null}
+      >
+        <Space direction="vertical" style={{ width: '100%', padding: '10px 0' }}>
+          <Button block icon={<ExportOutlined />} onClick={() => exportBankWords('csv')}>
+            Export as CSV (for Excel)
+          </Button>
+          <Button block icon={<ExportOutlined />} onClick={() => exportBankWords('json')}>
+            Export as JSON
+          </Button>
+          <Button block icon={<ExportOutlined />} onClick={() => exportBankWords('text')}>
+            Copy as Text List
+          </Button>
+        </Space>
+      </Modal>
+
+      {/* Bank Learning Modal */}
+      <Modal
+        title={null}
+        open={bankLearningOpen}
+        onCancel={() => setBankLearningOpen(false)}
+        footer={null}
+        width={640}
+        centered
+        styles={{ body: { padding: '24px' } }}
+      >
+        {currentBankLearningWord && (
+          <div>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text type="secondary">Word Bank Study</Text>
+                <Text strong>{bankLearningIndex + 1} / {bankLearningWords.length}</Text>
+              </div>
+              <Progress
+                percent={Math.round(((bankLearningIndex + 1) / bankLearningWords.length) * 100)}
+                showInfo={false}
+                strokeColor={{ from: '#059669', to: '#10b981' }}
+              />
+            </div>
+
+            <div style={{ textAlign: 'center', minHeight: 220, padding: '20px 0' }}>
+              <Title level={1} style={{ margin: 0, color: '#1a1a2e', fontSize: 36 }}>
+                {currentBankLearningWord.text}
+              </Title>
+              <Button
+                type="text"
+                icon={<SoundOutlined />}
+                onClick={() => speakWord(currentBankLearningWord.text)}
+                style={{ color: '#059669', marginTop: 4 }}
+              >
+                Listen
+              </Button>
+
+              {bankShowDef ? (
+                <div style={{
+                  textAlign: 'left',
+                  background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
+                  padding: 20, borderRadius: 12, marginTop: 16,
+                  border: '1px solid #a7f3d0',
+                }}>
+                  <Text strong style={{ color: '#059669' }}>Definition:</Text>
+                  <Paragraph style={{ margin: '8px 0', fontSize: 15 }}>
+                    {currentBankLearningWord.definition}
+                  </Paragraph>
+                  {currentBankLearningWord.example_sentence && (
+                    <>
+                      <Divider style={{ margin: '12px 0' }} />
+                      <Text strong style={{ color: '#059669' }}>Example:</Text>
+                      <Paragraph italic style={{ margin: '8px 0', color: '#6b7280' }}>
+                        &ldquo;{currentBankLearningWord.example_sentence}&rdquo;
+                      </Paragraph>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <Button type="dashed" size="large" onClick={() => setBankShowDef(true)} style={{ marginTop: 16 }}>
+                  Tap to Reveal Definition
+                </Button>
+              )}
+            </div>
+
+            {/* Encouragement */}
+            <div style={{ textAlign: 'center', marginTop: 8, marginBottom: 12 }}>
+              <Text type="secondary" italic style={{ fontSize: 13 }}>
+                {getRandomMsg(LEARN_ENCOURAGEMENTS)}
+              </Text>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+              <Button
+                size="large"
+                onClick={handleBankLearningNext}
+                type="primary"
+                style={{ minWidth: 120 }}
+              >
+                {bankLearningIndex < bankLearningWords.length - 1 ? 'Next Word' : 'Finish'}
+              </Button>
+              <Tooltip title="Remove this word from your bank">
+                <Button
+                  size="large"
+                  danger
+                  icon={<CloseOutlined />}
+                  onClick={() => handleRemoveFromBankLearning(currentBankLearningWord.id)}
+                  style={{ minWidth: 120 }}
+                >
+                  Remove from Bank
+                </Button>
+              </Tooltip>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

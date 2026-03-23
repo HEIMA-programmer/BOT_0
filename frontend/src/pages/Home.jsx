@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Typography, Card, Row, Col, Progress } from 'antd';
 import {
   ReadOutlined,
-  BookOutlined,
   SoundOutlined,
   AudioOutlined,
   RobotOutlined,
@@ -15,22 +14,6 @@ import { dailyLearningAPI } from '../api';
 const { Title, Text } = Typography;
 
 const modules = [
-  {
-    title: 'Daily Words',
-    icon: <ReadOutlined />,
-    path: '/daily-words',
-    desc: 'Learn new academic vocabulary every day',
-    color: '#2563eb',
-    bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
-  },
-  {
-    title: 'Word Bank',
-    icon: <BookOutlined />,
-    path: '/word-bank',
-    desc: 'Manage your saved vocabulary collection',
-    color: '#059669',
-    bg: 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
-  },
   {
     title: 'Listening Lab',
     icon: <SoundOutlined />,
@@ -48,12 +31,12 @@ const modules = [
     bg: 'linear-gradient(135deg, #fef2f2, #fecaca)',
   },
   {
-    title: 'AI Conversation',
-    icon: <RobotOutlined />,
-    path: '/ai-chat',
-    desc: 'Practice academic discussions with AI',
-    color: '#7c3aed',
-    bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
+    title: 'Vocabulary',
+    icon: <ReadOutlined />,
+    path: '/daily-words',
+    desc: 'Daily words, word bank & review all in one place',
+    color: '#2563eb',
+    bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
   },
   {
     title: 'Forum',
@@ -62,6 +45,14 @@ const modules = [
     desc: 'Share skills, experiences, and discuss academic culture',
     color: '#0891b2',
     bg: 'linear-gradient(135deg, #ecfeff, #cffafe)',
+  },
+  {
+    title: 'AI Conversation',
+    icon: <RobotOutlined />,
+    path: '/ai-chat',
+    desc: 'Practice academic discussions with AI',
+    color: '#7c3aed',
+    bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
   },
 ];
 
