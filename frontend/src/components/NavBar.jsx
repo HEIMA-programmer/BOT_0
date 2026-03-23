@@ -3,7 +3,6 @@ import { Menu, Layout, Button, Space, Avatar, Dropdown } from 'antd';
 import {
   HomeOutlined,
   ReadOutlined,
-  BookOutlined,
   SoundOutlined,
   AudioOutlined,
   MessageOutlined,
@@ -16,10 +15,9 @@ const { Header } = Layout;
 
 const menuItems = [
   { key: '/', icon: <HomeOutlined />, label: 'Home' },
-  { key: '/daily-words', icon: <ReadOutlined />, label: 'Daily Words' },
-  { key: '/word-bank', icon: <BookOutlined />, label: 'Word Bank' },
   { key: '/listening', icon: <SoundOutlined />, label: 'Listening' },
   { key: '/speaking', icon: <AudioOutlined />, label: 'Speaking' },
+  { key: '/daily-words', icon: <ReadOutlined />, label: 'Vocabulary' },
   { key: '/forum', icon: <MessageOutlined />, label: 'Forum' },
 ];
 
