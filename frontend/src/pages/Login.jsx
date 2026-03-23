@@ -1,17 +1,29 @@
-import React from 'react';
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Form, Input, Button, Typography, App } from 'antd';
 import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authAPI } from '../api';
+import AuthMascotPanel from '../components/AuthMascotPanel';
 
 const { Title, Text } = Typography;
 
 export default function Login({ onLogin }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [submitting, setSubmitting] = useState(false);
   const { message } = App.useApp();
+
+  const [submitting, setSubmitting] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(() => (
+    typeof window === 'undefined' ? 1280 : window.innerWidth
+  ));
+
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const onFinish = async (values) => {
     const payload = {
@@ -24,7 +36,6 @@ export default function Login({ onLogin }) {
       const res = await authAPI.login(payload);
       onLogin(res.data);
       message.success('Welcome back!');
-      // Navigate to the previous location or home
       const from = location.state?.from?.pathname || '/';
       navigate(from, { replace: true });
     } catch (err) {
@@ -36,66 +47,43 @@ export default function Login({ onLogin }) {
     }
   };
 
+  const stackedLayout = viewportWidth < 1100;
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
-    }}>
-      {/* Left: branding */}
-      <div style={{
-        flex: 1,
+    <div
+      style={{
+        minHeight: '100vh',
         display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        padding: '60px 80px',
-        color: '#fff',
-      }}>
-        <div style={{
-          background: 'linear-gradient(135deg, #60a5fa, #a78bfa)',
-          borderRadius: 16,
-          width: 56,
-          height: 56,
+        flexDirection: stackedLayout ? 'column' : 'row',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+      }}
+    >
+      <AuthMascotPanel
+        heading="Academic English Practice"
+        description="Sign in to continue your learning journey with guided vocabulary, lecture listening, speaking practice, and AI-based academic conversation."
+        stats={[
+          { num: '7', label: 'Animated Guides' },
+          { num: '500+', label: 'Academic Words' },
+          { num: 'AI', label: 'Practice Modes' },
+        ]}
+        emailFocused={emailFocused}
+        passwordActive={passwordFocused}
+        stackedLayout={stackedLayout}
+      />
+
+      <div
+        style={{
+          width: stackedLayout ? '100%' : 480,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 28,
-          fontWeight: 700,
-          marginBottom: 32,
-        }}>
-          A
-        </div>
-        <Title level={1} style={{ color: '#fff', fontSize: 40, fontWeight: 700, marginBottom: 16, lineHeight: 1.2 }}>
-          Academic English Practice
-        </Title>
-        <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 17, lineHeight: 1.7, maxWidth: 440 }}>
-          Build confidence for university lectures, seminars, and academic discussions.
-          Practice vocabulary, listening, speaking, and AI-powered conversations.
-        </Text>
-        <div style={{ marginTop: 48, display: 'flex', gap: 32 }}>
-          {[
-            { num: '500+', label: 'Academic Words' },
-            { num: '50+', label: 'Lecture Clips' },
-            { num: 'AI', label: 'Conversation' },
-          ].map((s) => (
-            <div key={s.label}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: '#60a5fa' }}>{s.num}</div>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Right: form */}
-      <div style={{
-        width: 480,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#fff',
-        borderRadius: '24px 0 0 24px',
-      }}>
-        <div style={{ width: 360, padding: '40px 0' }}>
+          background: '#fff',
+          borderRadius: stackedLayout ? '28px 28px 0 0' : '28px 0 0 28px',
+          padding: stackedLayout ? '28px 20px 36px' : '0 24px',
+          boxShadow: stackedLayout ? '0 -14px 40px rgba(15,23,42,0.18)' : 'none',
+        }}
+      >
+        <div style={{ width: '100%', maxWidth: 360, padding: '40px 0' }}>
           <Title level={2} style={{ marginBottom: 4, fontWeight: 700 }}>Welcome back</Title>
           <Text type="secondary" style={{ fontSize: 15 }}>Sign in to continue your learning journey</Text>
           <Form onFinish={onFinish} layout="vertical" style={{ marginTop: 32 }} size="large">
@@ -104,22 +92,44 @@ export default function Login({ onLogin }) {
               label="Email"
               rules={[{ required: true, type: 'email', message: 'Please enter a valid email' }]}
             >
-              <Input prefix={<MailOutlined style={{ color: '#9ca3af' }} />} placeholder="you@example.com" />
+              <Input
+                prefix={<MailOutlined style={{ color: '#9ca3af' }} />}
+                placeholder="you@example.com"
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
+              />
             </Form.Item>
             <Form.Item
               name="password"
               label="Password"
               rules={[{ required: true, message: 'Please enter your password' }]}
             >
-              <Input.Password prefix={<LockOutlined style={{ color: '#9ca3af' }} />} placeholder="Enter password" />
+              <Input.Password
+                prefix={<LockOutlined style={{ color: '#9ca3af' }} />}
+                placeholder="Enter password"
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => setPasswordFocused(false)}
+              />
             </Form.Item>
+            <div style={{ marginTop: -6, marginBottom: 20, color: '#6b7280', fontSize: 13 }}>
+              {passwordFocused
+                ? 'All seven guides put on sunglasses while you type your password.'
+                : 'Use the same account you created for vocabulary, listening, and speaking practice.'}
+            </div>
             <Form.Item style={{ marginTop: 8 }}>
-              <Button type="primary" htmlType="submit" block size="large" style={{
-                height: 48,
-                fontWeight: 600,
-                fontSize: 16,
-                borderRadius: 10,
-              }} loading={submitting}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                block
+                size="large"
+                style={{
+                  height: 48,
+                  fontWeight: 600,
+                  fontSize: 16,
+                  borderRadius: 10,
+                }}
+                loading={submitting}
+              >
                 Sign In
               </Button>
             </Form.Item>
