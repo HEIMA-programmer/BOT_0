@@ -13,12 +13,20 @@ from app.models.progress import Progress
 listening_bp = Blueprint('listening', __name__, url_prefix='/api/listening')
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-AUDIO_DIR = PROJECT_ROOT / 'Audio'
-TRANSCRIPT_DIR = PROJECT_ROOT / 'output'
-QUESTION_DIR = PROJECT_ROOT / 'generated_questions_md'
+LECTURE_AUDIO_DIR = PROJECT_ROOT / 'Audio'
+LECTURE_TRANSCRIPT_DIR = PROJECT_ROOT / 'output'
+LECTURE_QUESTION_DIR = PROJECT_ROOT / 'generated_questions_md'
+GROUP_DISCUSSION_DIR = PROJECT_ROOT / 'GroupDiscussion'
+QA_SESSION_DIR = PROJECT_ROOT / 'Q&ASession'
+OFFICE_HOUR_DIR = PROJECT_ROOT / 'OfficeHour'
 
 SUPPORTED_PRACTICE_LEVELS = {'beginner', 'intermediate'}
-SUPPORTED_PRACTICE_SCENARIOS = {'lecture-clips'}
+SUPPORTED_PRACTICE_SCENARIOS = {
+    'lecture-clips',
+    'group-discussion',
+    'qa-session',
+    'office-hour',
+}
 
 LEVELS = [
     {
@@ -72,7 +80,7 @@ QUESTION_SECTION_RULES = {
 }
 
 QUESTION_INSTRUCTIONS = {
-    'beginner': 'Listen to the lecture clip and answer the multiple-choice questions.',
+    'beginner': 'Listen to the recording and answer the multiple-choice questions.',
     'intermediate': 'Listen carefully, then complete the fill-in-the-blank and short-answer tasks.',
 }
 
@@ -133,6 +141,22 @@ def _display_title(stem):
 
 def _is_practice_available(level_id, scenario_id):
     return level_id in SUPPORTED_PRACTICE_LEVELS and scenario_id in SUPPORTED_PRACTICE_SCENARIOS
+
+
+def _create_source_record(scenario_id, audio_path, transcript_path, question_path):
+    canonical_stem = _canonical_stem(audio_path)
+    transcript = transcript_path.read_text(encoding='utf-8').strip()
+
+    return {
+        'scenario_id': scenario_id,
+        'source_slug': _slugify(canonical_stem),
+        'source_title': _display_title(canonical_stem),
+        'audio_dir': audio_path.parent,
+        'audio_filename': audio_path.name,
+        'transcript': transcript,
+        'transcript_preview': _preview_text(transcript),
+        'question_path': question_path,
+    }
 
 
 def _clean_markdown_text(value):
@@ -556,23 +580,27 @@ def _find_scenario(scenario_id):
     return next((scenario for scenario in SCENARIOS if scenario['id'] == scenario_id), None)
 
 
-def _find_source(source_slug):
-    return next((item for item in _load_sources() if item['source_slug'] == source_slug), None)
+def _find_source(source_slug, scenario_id=None):
+    if scenario_id:
+        sources = _load_sources_by_scenario().get(scenario_id, [])
+    else:
+        sources = _load_sources()
+    return next((item for item in sources if item['source_slug'] == source_slug), None)
 
 
-def _load_sources():
+def _load_directory_sources(scenario_id, audio_dir, transcript_dir, question_dir):
     transcript_map = {}
-    for transcript_path in sorted(TRANSCRIPT_DIR.glob('*.txt')):
+    for transcript_path in sorted(transcript_dir.glob('*.txt')):
         transcript_map[_canonical_stem(transcript_path)] = transcript_path
 
     question_map = {}
-    for question_path in sorted(QUESTION_DIR.glob('*_questions.md')):
+    for question_path in sorted(question_dir.glob('*_questions.md')):
         question_map[_canonical_question_stem(question_path)] = question_path
 
     sources = []
     seen_stems = set()
 
-    for audio_path in sorted(AUDIO_DIR.glob('*.mp3')):
+    for audio_path in sorted(audio_dir.glob('*.mp3')):
         canonical_stem = _canonical_stem(audio_path)
         if canonical_stem in seen_stems:
             continue
@@ -583,18 +611,67 @@ def _load_sources():
             continue
 
         seen_stems.add(canonical_stem)
-        transcript = transcript_path.read_text(encoding='utf-8').strip()
-        source_slug = _slugify(canonical_stem)
+        sources.append(_create_source_record(
+            scenario_id,
+            audio_path,
+            transcript_path,
+            question_path,
+        ))
 
-        sources.append({
-            'source_slug': source_slug,
-            'source_title': _display_title(canonical_stem),
-            'audio_filename': audio_path.name,
-            'transcript': transcript,
-            'transcript_preview': _preview_text(transcript),
-            'question_path': question_path,
-        })
+    return sources
 
+
+def _load_bundled_sources(scenario_id, content_dir):
+    transcript_map = {}
+    for transcript_path in sorted(content_dir.glob('*.txt')):
+        transcript_map[_canonical_stem(transcript_path)] = transcript_path
+
+    question_map = {}
+    for question_path in sorted(content_dir.glob('*.md')):
+        question_map[_canonical_stem(question_path)] = question_path
+
+    sources = []
+    seen_stems = set()
+
+    for audio_path in sorted(content_dir.glob('*.mp3')):
+        canonical_stem = _canonical_stem(audio_path)
+        if canonical_stem in seen_stems:
+            continue
+
+        transcript_path = transcript_map.get(canonical_stem)
+        question_path = question_map.get(canonical_stem)
+        if transcript_path is None or question_path is None:
+            continue
+
+        seen_stems.add(canonical_stem)
+        sources.append(_create_source_record(
+            scenario_id,
+            audio_path,
+            transcript_path,
+            question_path,
+        ))
+
+    return sources
+
+
+def _load_sources_by_scenario():
+    return {
+        'lecture-clips': _load_directory_sources(
+            'lecture-clips',
+            LECTURE_AUDIO_DIR,
+            LECTURE_TRANSCRIPT_DIR,
+            LECTURE_QUESTION_DIR,
+        ),
+        'group-discussion': _load_bundled_sources('group-discussion', GROUP_DISCUSSION_DIR),
+        'qa-session': _load_bundled_sources('qa-session', QA_SESSION_DIR),
+        'office-hour': _load_bundled_sources('office-hour', OFFICE_HOUR_DIR),
+    }
+
+
+def _load_sources():
+    sources = []
+    for scenario_sources in _load_sources_by_scenario().values():
+        sources.extend(scenario_sources)
     return sources
 
 
@@ -615,15 +692,16 @@ def _clip_from_source(source, level, scenario):
 
 
 def _build_catalog():
-    sources = _load_sources()
+    sources_by_scenario = _load_sources_by_scenario()
     levels = []
     for level in LEVELS:
         scenarios = []
         for scenario in SCENARIOS:
             is_available = _is_practice_available(level['id'], scenario['id'])
+            scenario_sources = sources_by_scenario.get(scenario['id'], [])
             clips = [
                 _clip_from_source(source, level, scenario)
-                for source in sources
+                for source in scenario_sources
             ] if is_available else []
             scenarios.append({
                 'id': scenario['id'],
@@ -646,7 +724,7 @@ def _build_catalog():
 
     return {
         'levels': levels,
-        'source_count': len(sources),
+        'source_count': sum(len(sources) for sources in sources_by_scenario.values()),
     }
 
 
@@ -664,7 +742,7 @@ def stream_audio(source_slug):
         return jsonify({'error': 'Clip not found'}), 404
 
     return send_from_directory(
-        AUDIO_DIR,
+        str(source['audio_dir']),
         source['audio_filename'],
         mimetype='audio/mpeg',
         as_attachment=False,
@@ -677,13 +755,16 @@ def stream_audio(source_slug):
 def get_listening_practice(level_id, scenario_id, source_slug):
     level = _find_level(level_id)
     scenario = _find_scenario(scenario_id)
-    source = _find_source(source_slug)
 
-    if level is None or scenario is None or source is None:
+    if level is None or scenario is None:
         return jsonify({'error': 'Practice material not found'}), 404
 
     if not _is_practice_available(level_id, scenario_id):
         return jsonify({'error': 'Practice for this level and scenario is coming soon'}), 404
+
+    source = _find_source(source_slug, scenario_id=scenario_id)
+    if source is None:
+        return jsonify({'error': 'Practice material not found'}), 404
 
     payload = _build_practice_payload(level, scenario, source)
     if payload is None:
@@ -700,13 +781,16 @@ def get_listening_practice(level_id, scenario_id, source_slug):
 def submit_listening_practice(level_id, scenario_id, source_slug):
     level = _find_level(level_id)
     scenario = _find_scenario(scenario_id)
-    source = _find_source(source_slug)
 
-    if level is None or scenario is None or source is None:
+    if level is None or scenario is None:
         return jsonify({'error': 'Practice material not found'}), 404
 
     if not _is_practice_available(level_id, scenario_id):
         return jsonify({'error': 'Practice for this level and scenario is coming soon'}), 404
+
+    source = _find_source(source_slug, scenario_id=scenario_id)
+    if source is None:
+        return jsonify({'error': 'Practice material not found'}), 404
 
     payload = request.get_json(silent=True) or {}
     answers = payload.get('answers')

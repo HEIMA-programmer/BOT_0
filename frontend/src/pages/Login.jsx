@@ -60,7 +60,7 @@ export default function Login({ onLogin }) {
     >
       <AuthMascotPanel
         heading="Academic English Practice"
-        description="Sign in to continue your learning journey with guided vocabulary, lecture listening, speaking practice, and AI-based academic conversation."
+        description="Sign in to continue your learning journey with guided vocabulary, listening practice, speaking practice, and AI-based academic conversation."
         stats={[
           { num: '7', label: 'Animated Guides' },
           { num: '500+', label: 'Academic Words' },

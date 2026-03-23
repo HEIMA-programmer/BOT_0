@@ -61,19 +61,35 @@ const catalogPayload = {
           id: 'group-discussion',
           label: 'Group Discussion',
           description: 'Follow multiple speakers.',
-          is_available: false,
-          coming_soon: true,
-          clip_count: 0,
-          clips: [],
+          is_available: true,
+          coming_soon: false,
+          clip_count: 1,
+          clips: [
+            {
+              id: 'beginner-group-discussion-best-way-to-learn-english',
+              title: 'Best Way To Learn English',
+              audio_url: '/api/listening/audio/best-way-to-learn-english',
+              source_slug: 'best-way-to-learn-english',
+              transcript_preview: 'Tom says the best way to learn English is to live in an English country...',
+            },
+          ],
         },
         {
           id: 'qa-session',
           label: 'Q&A Session',
           description: 'Practice quick questions.',
-          is_available: false,
-          coming_soon: true,
-          clip_count: 0,
-          clips: [],
+          is_available: true,
+          coming_soon: false,
+          clip_count: 1,
+          clips: [
+            {
+              id: 'beginner-qa-session-big-family',
+              title: 'Big Family',
+              audio_url: '/api/listening/audio/big-family',
+              source_slug: 'big-family',
+              transcript_preview: 'Mark asks Sorie about growing up in a big family...',
+            },
+          ],
         },
         {
           id: 'office-hour',
@@ -114,19 +130,35 @@ const catalogPayload = {
           id: 'group-discussion',
           label: 'Group Discussion',
           description: 'Follow multiple speakers.',
-          is_available: false,
-          coming_soon: true,
-          clip_count: 0,
-          clips: [],
+          is_available: true,
+          coming_soon: false,
+          clip_count: 1,
+          clips: [
+            {
+              id: 'intermediate-group-discussion-best-way-to-learn-english',
+              title: 'Best Way To Learn English',
+              audio_url: '/api/listening/audio/best-way-to-learn-english',
+              source_slug: 'best-way-to-learn-english',
+              transcript_preview: 'Tom says the best way to learn English is to live in an English country...',
+            },
+          ],
         },
         {
           id: 'qa-session',
           label: 'Q&A Session',
           description: 'Practice quick questions.',
-          is_available: false,
-          coming_soon: true,
-          clip_count: 0,
-          clips: [],
+          is_available: true,
+          coming_soon: false,
+          clip_count: 1,
+          clips: [
+            {
+              id: 'intermediate-qa-session-big-family',
+              title: 'Big Family',
+              audio_url: '/api/listening/audio/big-family',
+              source_slug: 'big-family',
+              transcript_preview: 'Mark asks Sorie about growing up in a big family...',
+            },
+          ],
         },
         {
           id: 'office-hour',
@@ -196,7 +228,7 @@ const beginnerPracticePayload = {
     audio_url: '/api/listening/audio/campus-welcome',
     source_slug: 'campus-welcome',
   },
-  instructions: 'Listen to the lecture clip and answer the multiple-choice questions.',
+  instructions: 'Listen to the recording and answer the multiple-choice questions.',
   question_count: 2,
   saved_attempt: null,
   questions: [
@@ -238,7 +270,7 @@ const libraryPracticePayload = {
     audio_url: '/api/listening/audio/library-tour',
     source_slug: 'library-tour',
   },
-  instructions: 'Listen to the lecture clip and answer the multiple-choice questions.',
+  instructions: 'Listen to the recording and answer the multiple-choice questions.',
   question_count: 1,
   saved_attempt: null,
   questions: [
@@ -253,6 +285,35 @@ const libraryPracticePayload = {
         { key: 'B', text: 'A librarian' },
         { key: 'C', text: 'A classmate' },
         { key: 'D', text: 'A coach' },
+      ],
+    },
+  ],
+};
+
+const groupDiscussionPracticePayload = {
+  level: { id: 'beginner', label: 'Beginner' },
+  scenario: { id: 'group-discussion', label: 'Group Discussion' },
+  clip: {
+    id: 'beginner-group-discussion-best-way-to-learn-english',
+    title: 'Best Way To Learn English',
+    audio_url: '/api/listening/audio/best-way-to-learn-english',
+    source_slug: 'best-way-to-learn-english',
+  },
+  instructions: 'Listen to the recording and answer the multiple-choice questions.',
+  question_count: 1,
+  saved_attempt: null,
+  questions: [
+    {
+      id: 'beginner-best-way-to-learn-english-multiple-choice-1',
+      number: 1,
+      type: 'multiple_choice',
+      section_label: 'Multiple choice',
+      prompt: 'According to Tom, what is the best way to learn English?',
+      options: [
+        { key: 'A', text: 'Only memorize grammar rules' },
+        { key: 'B', text: 'Live in an English-speaking country and make English friends' },
+        { key: 'C', text: 'Watch one movie every month' },
+        { key: 'D', text: 'Study alone without speaking' },
       ],
     },
   ],
@@ -376,7 +437,10 @@ describe('Listening page', () => {
     mockProgressAPI.trackTime.mockReset();
 
     mockListeningAPI.getCatalog.mockResolvedValue({ data: catalogPayload });
-    mockListeningAPI.getPractice.mockImplementation((levelId, _scenarioId, sourceSlug) => {
+    mockListeningAPI.getPractice.mockImplementation((levelId, scenarioId, sourceSlug) => {
+      if (scenarioId === 'group-discussion') {
+        return Promise.resolve({ data: groupDiscussionPracticePayload });
+      }
       if (levelId === 'intermediate') {
         return Promise.resolve({ data: intermediatePracticePayload });
       }
@@ -408,6 +472,26 @@ describe('Listening page', () => {
         'beginner',
         'lecture-clips',
         'campus-welcome'
+      );
+    });
+  });
+
+  it('switches to the group discussion scenario and loads its practice questions', async () => {
+    renderListening('/listening/beginner');
+
+    expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
+
+    fireEvent.click(screen.getAllByText('Group Discussion')[0]);
+
+    expect(
+      await screen.findByText('According to Tom, what is the best way to learn English?')
+    ).toBeTruthy();
+
+    await waitFor(() => {
+      expect(mockListeningAPI.getPractice).toHaveBeenLastCalledWith(
+        'beginner',
+        'group-discussion',
+        'best-way-to-learn-english'
       );
     });
   });
