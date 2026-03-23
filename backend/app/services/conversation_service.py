@@ -1,53 +1,20 @@
 """
 Gemini Conversation Service
-Handles real-time voice conversation with Google Gemini Live API
+Based on working demo - single event loop, thread-safe queues for cross-thread communication.
 """
 
 import asyncio
 import base64
+import queue
+import threading
 from google import genai
 from google.genai import types
-from flask import current_app
 import os
 
 
-class ConversationService:
-    def __init__(self):
-        self.api_key = os.getenv('GOOGLE_API_KEY')
-        if not self.api_key:
-            raise ValueError("GOOGLE_API_KEY not found in environment variables")
+MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
 
-        self.model = "gemini-2.5-flash-native-audio-preview-12-2025"
-        self.client = genai.Client(api_key=self.api_key)
-        self.session = None
-        self.running = False
-        self.audio_queue = asyncio.Queue()
-        self.response_queue = asyncio.Queue()
-
-    async def run_session(self):
-        """Main session loop - runs in async with block"""
-        try:
-            # Test network connectivity first
-            current_app.logger.info('Testing network connectivity to Google...')
-            try:
-                import httpx
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.get('https://www.google.com')
-                    current_app.logger.info(f'Network test successful: {response.status_code}')
-            except Exception as e:
-                current_app.logger.error(f'Network test failed: {e}')
-                raise Exception(f'Cannot reach Google servers. Please check VPN/proxy settings: {e}')
-
-            config = {
-                "response_modalities": ["AUDIO"],
-                "speech_config": {
-                    "voice_config": {
-                        "prebuilt_voice_config": {
-                            "voice_name": "Puck"
-                        }
-                    }
-                },
-                "system_instruction": """You are a friendly and helpful English conversation partner.
+SYSTEM_PROMPT = """You are a friendly and helpful English conversation partner.
 Your goal is to help the user practice English through natural conversation.
 
 Guidelines:
@@ -58,202 +25,165 @@ Guidelines:
 - Be encouraging and supportive
 - Adapt to the user's English level
 - Respond quickly to maintain conversation flow
-- Start by greeting the user warmly and asking how they are doing""",
-                "input_audio_transcription": {},
-                "output_audio_transcription": {},
-            }
+- Start by greeting the user warmly and asking how they are doing"""
 
-            self.running = True
-            current_app.logger.info('Starting Gemini Live session...')
 
-            async with self.client.aio.live.connect(model=self.model, config=config) as session:
-                self.session = session
-                current_app.logger.info('Gemini Live session connected')
+class ConversationService:
+    """
+    Runs Gemini Live session in a single background thread with a single event loop.
+    All cross-thread communication uses thread-safe queue.Queue.
+    """
 
-                # Debug: print available methods
-                current_app.logger.info(f'Session type: {type(session)}')
-                current_app.logger.info(f'Session methods: {[m for m in dir(session) if not m.startswith("_")]}')
+    def __init__(self):
+        api_key = os.getenv('GOOGLE_API_KEY')
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY not found in environment variables")
 
-                # Start response listener
-                receive_task = asyncio.create_task(self._receive_responses())
+        self.client = genai.Client(api_key=api_key)
+        self.audio_in_queue = queue.Queue()    # browser audio -> gemini
+        self.response_queue = queue.Queue()    # gemini responses -> browser
+        self.running = False
+        self.ai_is_speaking = False
+        self._thread = None
 
-                # Start audio sender
-                send_task = asyncio.create_task(self._send_audio_loop())
+    def start(self):
+        """Start the Gemini session in a background thread."""
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
 
-                # Send initial trigger to get AI greeting
-                current_app.logger.info('Sending initial trigger to Gemini...')
-                await self.session.send_realtime_input(text="")
-                current_app.logger.info('Initial trigger sent')
+    def _run(self):
+        """Background thread entry - creates one event loop and runs everything in it."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            print('[ConversationService] Starting session loop...')
+            loop.run_until_complete(self._session_loop())
+        except Exception as e:
+            print(f'[ConversationService] Session error: {e}')
+            self.response_queue.put({'type': 'error', 'message': str(e)})
+        finally:
+            print('[ConversationService] Session loop ended')
+            loop.close()
 
-                # Wait for tasks or stop signal
+    async def _session_loop(self):
+        """Main async session - mirrors the working demo structure."""
+        config = {
+            "response_modalities": ["AUDIO"],
+            "speech_config": {
+                "voice_config": {
+                    "prebuilt_voice_config": {
+                        "voice_name": "Puck"
+                    }
+                }
+            },
+            "system_instruction": SYSTEM_PROMPT,
+            "input_audio_transcription": {},
+            "output_audio_transcription": {},
+        }
+
+        try:
+            print('[ConversationService] Connecting to Gemini...')
+            async with self.client.aio.live.connect(model=MODEL, config=config) as session:
+                print('[ConversationService] Connected!')
+                self.running = True
+                self.response_queue.put({'type': 'ready'})
+
+                send_task = asyncio.create_task(self._send_audio(session))
+                recv_task = asyncio.create_task(self._recv_responses(session))
+
                 try:
-                    while self.running:
-                        await asyncio.sleep(0.1)
+                    await asyncio.gather(send_task, recv_task)
                 except asyncio.CancelledError:
                     pass
-                finally:
-                    receive_task.cancel()
-                    send_task.cancel()
-                    try:
-                        await receive_task
-                    except asyncio.CancelledError:
-                        pass
-                    try:
-                        await send_task
-                    except asyncio.CancelledError:
-                        pass
-
-                current_app.logger.info('Gemini Live session ended')
 
         except Exception as e:
-            current_app.logger.error(f'Failed to start Gemini session: {e}')
-            await self.response_queue.put({
-                'type': 'error',
-                'message': str(e)
-            })
-            raise
+            self.response_queue.put({'type': 'error', 'message': f'Connection failed: {e}'})
 
-    async def _send_audio_loop(self):
-        """Send audio from queue to Gemini"""
-        try:
-            while self.running:
-                try:
-                    audio_data = await asyncio.wait_for(self.audio_queue.get(), timeout=0.1)
-                    if self.session:
-                        current_app.logger.info(f'Sending audio chunk to Gemini: {len(audio_data)} bytes')
-                        await self.session.send_realtime_input(
-                            audio=types.Blob(data=audio_data, mime_type="audio/pcm;rate=16000")
-                        )
-                        current_app.logger.info('Audio chunk sent successfully')
-                except asyncio.TimeoutError:
+    async def _send_audio(self, session):
+        """Read from audio_in_queue and send to Gemini. Mirrors demo's send_audio."""
+        while self.running:
+            try:
+                data = self.audio_in_queue.get_nowait()
+                # Skip sending when AI is speaking (echo prevention, same as demo)
+                if not self.ai_is_speaking:
+                    await session.send_realtime_input(
+                        audio=types.Blob(data=data, mime_type="audio/pcm;rate=16000")
+                    )
+            except queue.Empty:
+                await asyncio.sleep(0.02)
+
+    async def _recv_responses(self, session):
+        """Receive from Gemini and put into response_queue. Mirrors demo's receive_audio."""
+        user_transcript = ""
+        ai_transcript = ""
+        ai_speaking = False
+
+        while self.running:
+            async for response in session.receive():
+                if not self.running:
+                    break
+
+                # Handle tool calls (must respond or session hangs)
+                if response.tool_call:
+                    function_responses = []
+                    for fc in response.tool_call.function_calls:
+                        function_responses.append(types.FunctionResponse(
+                            id=fc.id, name=fc.name, response={"result": "ok"}
+                        ))
+                    await session.send_tool_response(function_responses=function_responses)
+
+                if not response.server_content:
                     continue
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            current_app.logger.error(f'Error in audio send loop: {e}')
 
-    async def send_audio(self, audio_data):
-        """Queue audio data to be sent to Gemini"""
-        try:
-            await self.audio_queue.put(audio_data)
-        except Exception as e:
-            current_app.logger.error(f'Failed to queue audio: {e}')
-            raise
+                content = response.server_content
 
-    async def stop_audio_input(self):
-        """Signal that user has stopped speaking"""
-        # Gemini will automatically process when audio input stops
-        pass
+                # AI audio chunks
+                if content.model_turn and content.model_turn.parts:
+                    self.ai_is_speaking = True
+                    for part in content.model_turn.parts:
+                        if part.inline_data:
+                            audio_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                            self.response_queue.put({
+                                'type': 'ai_audio_chunk',
+                                'audio': audio_b64
+                            })
+                            if not ai_speaking:
+                                ai_speaking = True
 
-    async def _receive_responses(self):
-        """Receive and process responses from Gemini"""
-        try:
-            user_transcript = ""
-            ai_transcript = ""
-            ai_speaking = False
+                # User speech transcription (real-time)
+                if content.input_transcription and content.input_transcription.text:
+                    user_transcript += content.input_transcription.text
+                    self.response_queue.put({
+                        'type': 'user_transcript',
+                        'text': user_transcript
+                    })
 
-            current_app.logger.info('Starting to receive responses from Gemini...')
+                # AI speech transcription
+                if content.output_transcription and content.output_transcription.text:
+                    ai_transcript += content.output_transcription.text
 
-            # 外层 while：session.receive() 可能在一轮后结束，循环重连
-            while self.running:
-                current_app.logger.info('Entering receive loop...')
-                async for response in self.session.receive():
-                    current_app.logger.info(f'Received response from Gemini: {type(response)}')
-
-                    if not self.running:
-                        break
-
-                    # 处理工具调用（必须响应，否则 session 会挂起）
-                    if response.tool_call:
-                        current_app.logger.info('Received tool call, responding...')
-                        function_responses = []
-                        for fc in response.tool_call.function_calls:
-                            function_responses.append(types.FunctionResponse(
-                                id=fc.id,
-                                name=fc.name,
-                                response={"result": "ok"}
-                            ))
-                        await self.session.send_tool_response(function_responses=function_responses)
-
-                    if not response.server_content:
-                        current_app.logger.info('No server_content in response, skipping...')
-                        continue
-
-                    content = response.server_content
-                    current_app.logger.info(f'Processing server_content: input_transcription={bool(content.input_transcription)}, model_turn={bool(content.model_turn)}, output_transcription={bool(content.output_transcription)}, turn_complete={content.turn_complete}')
-
-                    # 用户语音转写（实时）
-                    if content.input_transcription and content.input_transcription.text:
-                        user_transcript += content.input_transcription.text
-                        current_app.logger.info(f'User transcript: {user_transcript}')
-                        await self.response_queue.put({
-                            'type': 'user_transcript',
+                # Turn complete
+                if content.turn_complete:
+                    if user_transcript:
+                        self.response_queue.put({
+                            'type': 'user_final',
                             'text': user_transcript
                         })
+                        user_transcript = ""
 
-                    # AI 音频（实时发送）
-                    if content.model_turn and content.model_turn.parts:
-                        for part in content.model_turn.parts:
-                            if part.inline_data:
-                                # 立即发送音频块
-                                audio_base64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                                current_app.logger.info(f'Sending AI audio chunk: {len(audio_base64)} chars')
-                                await self.response_queue.put({
-                                    'type': 'ai_audio_chunk',
-                                    'audio': audio_base64
-                                })
-                                if not ai_speaking:
-                                    ai_speaking = True
+                    if ai_transcript:
+                        self.response_queue.put({
+                            'type': 'ai_transcript',
+                            'text': ai_transcript
+                        })
+                        ai_transcript = ""
 
-                    # AI 语音转写
-                    if content.output_transcription and content.output_transcription.text:
-                        ai_transcript += content.output_transcription.text
-                        current_app.logger.info(f'AI transcript: {ai_transcript}')
+                    if ai_speaking:
+                        self.response_queue.put({'type': 'ai_speaking_end'})
+                        ai_speaking = False
 
-                    # Turn complete - 发送最终转写和结束信号
-                    if content.turn_complete:
-                        current_app.logger.info('Turn complete')
-                        # 发送用户最终转写
-                        if user_transcript:
-                            await self.response_queue.put({
-                                'type': 'user_final',
-                                'text': user_transcript
-                            })
-                            user_transcript = ""
+                    self.ai_is_speaking = False
 
-                        # 发送 AI 转写和结束信号
-                        if ai_transcript:
-                            current_app.logger.info(f'Sending AI transcript: {ai_transcript}')
-                            await self.response_queue.put({
-                                'type': 'ai_transcript',
-                                'text': ai_transcript
-                            })
-                            ai_transcript = ""
-
-                        if ai_speaking:
-                            current_app.logger.info('Sending AI speaking end signal')
-                            await self.response_queue.put({
-                                'type': 'ai_speaking_end'
-                            })
-                            ai_speaking = False
-
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            current_app.logger.error(f'Error receiving responses: {e}', exc_info=True)
-            await self.response_queue.put({
-                'type': 'error',
-                'message': str(e)
-            })
-
-    async def get_response(self):
-        """Get next response from queue"""
-        try:
-            return await asyncio.wait_for(self.response_queue.get(), timeout=30.0)
-        except asyncio.TimeoutError:
-            return None
-
-    async def close(self):
-        """Close the session"""
+    def stop(self):
+        """Signal the session to stop."""
         self.running = False
-        current_app.logger.info('Stopping Gemini Live session...')
