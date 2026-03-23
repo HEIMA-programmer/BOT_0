@@ -428,7 +428,7 @@ export default function Listening({ user }) {
             </Title>
             <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
               Beginner and Intermediate practice are ready now for Lecture Clips, Group Discussion,
-              and Q&A Session. Advanced content and Office Hour stay visible for future development.
+              Q&A Session, and Office Hour. Advanced content stays visible for future development.
             </Text>
           </Col>
           <Col xs={24} md={8} lg={6}>
@@ -964,7 +964,7 @@ export default function Listening({ user }) {
           Listening Lab
         </Title>
         <Text type="secondary">
-          Practice lectures, group discussions, and Q&A recordings with instant feedback.
+          Practice lectures, group discussions, Q&A, and office-hour recordings with instant feedback.
         </Text>
       </div>
 

@@ -31,7 +31,7 @@ const catalogPayload = {
       label: 'Beginner',
       description: 'Build confidence first.',
       is_available: true,
-      clip_count: 2,
+      clip_count: 5,
       scenarios: [
         {
           id: 'lecture-clips',
@@ -95,10 +95,18 @@ const catalogPayload = {
           id: 'office-hour',
           label: 'Office Hour',
           description: 'One-on-one support.',
-          is_available: false,
-          coming_soon: true,
-          clip_count: 0,
-          clips: [],
+          is_available: true,
+          coming_soon: false,
+          clip_count: 1,
+          clips: [
+            {
+              id: 'beginner-office-hour-grades',
+              title: 'Grades',
+              audio_url: '/api/listening/audio/grades',
+              source_slug: 'grades',
+              transcript_preview: 'Todd asks Nydja whether there should be no grades...',
+            },
+          ],
         },
       ],
     },
@@ -107,7 +115,7 @@ const catalogPayload = {
       label: 'Intermediate',
       description: 'Longer and richer clips.',
       is_available: true,
-      clip_count: 1,
+      clip_count: 4,
       scenarios: [
         {
           id: 'lecture-clips',
@@ -164,10 +172,18 @@ const catalogPayload = {
           id: 'office-hour',
           label: 'Office Hour',
           description: 'One-on-one support.',
-          is_available: false,
-          coming_soon: true,
-          clip_count: 0,
-          clips: [],
+          is_available: true,
+          coming_soon: false,
+          clip_count: 1,
+          clips: [
+            {
+              id: 'intermediate-office-hour-grades',
+              title: 'Grades',
+              audio_url: '/api/listening/audio/grades',
+              source_slug: 'grades',
+              transcript_preview: 'Todd asks Nydja whether there should be no grades...',
+            },
+          ],
         },
       ],
     },
@@ -319,6 +335,35 @@ const groupDiscussionPracticePayload = {
   ],
 };
 
+const officeHourPracticePayload = {
+  level: { id: 'beginner', label: 'Beginner' },
+  scenario: { id: 'office-hour', label: 'Office Hour' },
+  clip: {
+    id: 'beginner-office-hour-grades',
+    title: 'Grades',
+    audio_url: '/api/listening/audio/grades',
+    source_slug: 'grades',
+  },
+  instructions: 'Listen to the recording and answer the multiple-choice questions.',
+  question_count: 1,
+  saved_attempt: null,
+  questions: [
+    {
+      id: 'beginner-grades-multiple-choice-1',
+      number: 1,
+      type: 'multiple_choice',
+      section_label: 'Multiple choice',
+      prompt: 'How does Todd describe the idea of having no grades?',
+      options: [
+        { key: 'A', text: 'As a very competitive system' },
+        { key: 'B', text: 'As a binary system of achievement' },
+        { key: 'C', text: 'As a way to earn extra credit' },
+        { key: 'D', text: 'As a system only for colleges' },
+      ],
+    },
+  ],
+};
+
 const beginnerSubmitPayload = {
   score: 50,
   correct_count: 1,
@@ -438,6 +483,9 @@ describe('Listening page', () => {
 
     mockListeningAPI.getCatalog.mockResolvedValue({ data: catalogPayload });
     mockListeningAPI.getPractice.mockImplementation((levelId, scenarioId, sourceSlug) => {
+      if (scenarioId === 'office-hour') {
+        return Promise.resolve({ data: officeHourPracticePayload });
+      }
       if (scenarioId === 'group-discussion') {
         return Promise.resolve({ data: groupDiscussionPracticePayload });
       }
@@ -492,6 +540,26 @@ describe('Listening page', () => {
         'beginner',
         'group-discussion',
         'best-way-to-learn-english'
+      );
+    });
+  });
+
+  it('switches to the office hour scenario and loads its practice questions', async () => {
+    renderListening('/listening/beginner');
+
+    expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
+
+    fireEvent.click(screen.getAllByText('Office Hour')[0]);
+
+    expect(
+      await screen.findByText('How does Todd describe the idea of having no grades?')
+    ).toBeTruthy();
+
+    await waitFor(() => {
+      expect(mockListeningAPI.getPractice).toHaveBeenLastCalledWith(
+        'beginner',
+        'office-hour',
+        'grades'
       );
     });
   });
