@@ -1,5 +1,6 @@
 import { Typography, Card, Row, Col, Tag, Tabs } from 'antd';
 import { AudioOutlined, MessageOutlined, TrophyOutlined, RobotOutlined, CommentOutlined, TeamOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text } = Typography;
@@ -19,7 +20,8 @@ const speakingModes = [
     color: '#7c3aed',
     bg: '#f5f3ff',
     desc: 'Pick a topic card, express your thoughts in 30-60 seconds, and get AI feedback.',
-    status: 'Coming soon',
+    status: '',
+    clickable: true,
   },
   {
     title: 'Sentence Follow-along',
@@ -60,6 +62,7 @@ const aiChatScenarios = [
 
 export default function Speaking() {
   useLearningTimeTracker('speaking', 'study_time:speaking');
+  const navigate = useNavigate();
 
   function renderCards(items) {
     return (
@@ -71,9 +74,11 @@ export default function Speaking() {
                 borderRadius: 12,
                 border: '1px solid #e5e7eb',
                 height: '100%',
-                opacity: 0.7,
+                opacity: item.status === 'Coming soon' ? 0.7 : 1,
+                cursor: item.clickable ? 'pointer' : 'default',
               }}
               bodyStyle={{ padding: 24 }}
+              onClick={() => item.clickable && navigate('/speaking/structured')}
             >
               <div style={{
                 width: 48,
@@ -90,7 +95,9 @@ export default function Speaking() {
                 {item.icon}
               </div>
               <Title level={5} style={{ fontWeight: 600 }}>{item.title}</Title>
-              <Tag style={{ borderRadius: 12, marginBottom: 12 }}>{item.status}</Tag>
+              {item.status && (
+                <Tag style={{ borderRadius: 12, marginBottom: 12 }}>{item.status}</Tag>
+              )}
               <Text type="secondary" style={{ fontSize: 13, display: 'block' }}>
                 {item.desc}
               </Text>
