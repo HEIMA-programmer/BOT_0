@@ -277,17 +277,18 @@ SCORING GUIDELINES:
 - 60-70 is acceptable for simple but correct responses
 - Don't over-penalize for speech recognition errors
 - Focus on communication effectiveness, not perfection
-- When quoting words or phrases from the transcript, use "double quotes"
+- When quoting words or phrases from the transcript, use single quotes (') instead of double quotes
 
 Return ONLY a JSON object. No thinking, no explanation, no markdown. All feedback in ENGLISH.
+IMPORTANT: Do NOT use double quotes inside string values. Use single quotes (') to quote words or phrases.
 
 {{
   "vocabulary": <integer>,
   "grammar": <integer>,
   "topic": <integer>,
   "feedback": {{
-    "vocabulary": "<one specific English sentence about word choices, quote examples with double quotes>",
-    "grammar": "<one specific English sentence about grammar, quote examples with double quotes>",
+    "vocabulary": "<one specific English sentence about word choices, quote examples with single quotes>",
+    "grammar": "<one specific English sentence about grammar, quote examples with single quotes>",
     "topic": "<one specific English sentence about content>"
   }}
 }}
@@ -316,6 +317,12 @@ Return ONLY a JSON object. No thinking, no explanation, no markdown. All feedbac
             # Parse JSON
             raw = text_content.strip()
             raw = raw.replace("```json", "").replace("```", "").strip()
+
+            # Fix invalid escape sequences that Claude may produce
+            # JSON only allows: \" \\ \/ \b \f \n \r \t \uXXXX
+            # Claude may output: \' \` \_ \- \. \( \) etc.
+            import re
+            raw = re.sub(r'\\(?!["\\/bfnrtu])', '', raw)
 
             try:
                 content_result = json.loads(raw)
