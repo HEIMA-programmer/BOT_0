@@ -85,4 +85,15 @@ export const progressAPI = {
   trackTime: (payload) => api.post('/progress/track-time', payload),
 };
 
+// Follow Along APIs
+export const followAlongAPI = {
+  wordPractice: (audio, word, mimeType) =>
+    api.post('/follow-along/word', { audio, word, mimeType }),
+  sentencePractice: (audio, sentence, mimeType) =>
+    api.post('/follow-along/sentence', { audio, sentence, mimeType }),
+  getRecords: () => api.get('/follow-along/records'),
+  getStats: () => api.get('/follow-along/stats'),
+  checkConfig: () => api.get('/follow-along/config-check'),
+};
+
 export default api;

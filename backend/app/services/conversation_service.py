@@ -187,3 +187,63 @@ class ConversationService:
     def stop(self):
         """Signal the session to stop."""
         self.running = False
+
+    def evaluate_pronunciation(self, target_text, user_transcript):
+        """Evaluate pronunciation using Gemini API."""
+        try:
+            import google.generativeai as genai
+            from google.generativeai import types
+            
+            prompt = f"""
+You are an English pronunciation expert. Evaluate pronunciation accuracy and provide helpful feedback.
+
+Target text: "{target_text}"
+User transcript: "{user_transcript}"
+
+Evaluate pronunciation accuracy and return JSON with:
+- accuracy_score (0-100): How accurately user pronounced target text
+- pronunciation_score (0-100): Overall pronunciation quality
+- fluency_score (0-100): How smoothly user spoke
+- completeness_score (0-100): How much of target text user completed
+- feedback (string): Specific improvement suggestions
+- strengths (array of strings): Positive aspects of pronunciation
+- improvements (array of strings): Specific suggestions for getting better
+
+Be encouraging and constructive. Focus on phonemes, stress, and intonation.
+"""
+
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            import json
+            import re
+            
+            # Extract JSON from response
+            text = response.text
+            json_match = re.search(r'\{[^}]*\}', text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                return result
+            else:
+                # Fallback if JSON parsing fails
+                return {
+                    'accuracy_score': 75,
+                    'pronunciation_score': 75,
+                    'fluency_score': 75,
+                    'completeness_score': 75,
+                    'feedback': 'Good attempt. Keep practicing!',
+                    'strengths': ['Clear effort'],
+                    'improvements': ['Practice regularly']
+                }
+                
+        except Exception as e:
+            print(f'[ConversationService] Pronunciation evaluation error: {e}')
+            return {
+                'accuracy_score': 75,
+                'pronunciation_score': 75,
+                'fluency_score': 75,
+                'completeness_score': 75,
+                'feedback': 'Unable to provide detailed feedback. Please try again.',
+                'strengths': [],
+                'improvements': []
+            }

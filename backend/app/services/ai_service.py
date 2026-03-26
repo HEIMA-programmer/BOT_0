@@ -95,3 +95,35 @@ class AIService:
             response_format={'type': 'json_object'}
         )
         return response.choices[0].message.content
+
+    def evaluate_pronunciation(self, target_text, user_transcript):
+        """Evaluate pronunciation and provide feedback."""
+        self._check_client()
+
+        response = self.client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[
+                {
+                    'role': 'system',
+                    'content': (
+                        'You are an English pronunciation expert. Evaluate pronunciation '
+                        'accuracy and provide helpful feedback. Return JSON.'
+                    )
+                },
+                {
+                    'role': 'user',
+                    'content': (
+                        f'Target text: {target_text}\n'
+                        f'User transcript: {user_transcript}\n\n'
+                        f'Evaluate pronunciation accuracy and return JSON with: '
+                        f'accuracy_score (0-100), pronunciation_score (0-100), '
+                        f'fluency_score (0-100), completeness_score (0-100), '
+                        f'feedback (string with specific improvement suggestions), '
+                        f'strengths (array of strings), improvements (array of strings). '
+                        f'Be encouraging and constructive. Focus on phonemes, stress, and intonation.'
+                    )
+                }
+            ],
+            response_format={'type': 'json_object'}
+        )
+        return response.choices[0].message.content

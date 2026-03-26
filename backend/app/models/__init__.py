@@ -14,6 +14,7 @@ from app.models.chat_message import ChatMessage
 from app.models.progress import Progress
 from app.models.review_history import ReviewHistory
 from app.models.user_word_progress import UserWordProgress
+from app.models.follow_along_record import FollowAlongRecord
 
 
 @event.listens_for(Engine, 'connect')
@@ -35,4 +36,5 @@ __all__ = [
     'Progress',
     'ReviewHistory',
     'UserWordProgress',
+    'FollowAlongRecord',
 ]

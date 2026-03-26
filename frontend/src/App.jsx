@@ -8,6 +8,7 @@ import Listening from './pages/Listening';
 import Speaking from './pages/Speaking';
 import StructuredSpeaking from './pages/StructuredSpeaking';
 import FreeConversation from './pages/FreeConversation';
+import PronunciationPractice from './pages/PronunciationPractice';
 import Profile from './pages/Profile';
 import Forum from './pages/Forum';
 import Login from './pages/Login';
@@ -109,6 +110,9 @@ export default function App() {
               } />
               <Route path="/speaking/free-conversation" element={
                 <RequireAuth user={user} loading={loading}><FreeConversation /></RequireAuth>
+              } />
+              <Route path="/speaking/pronunciation-practice" element={
+                <RequireAuth user={user} loading={loading}><PronunciationPractice /></RequireAuth>
               } />
               <Route path="/forum" element={
                 <RequireAuth user={user} loading={loading}><Forum user={user} /></RequireAuth>

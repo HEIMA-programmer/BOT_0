@@ -11,8 +11,9 @@ const speakingModes = [
     icon: <AudioOutlined />,
     color: '#dc2626',
     bg: '#fef2f2',
-    desc: 'Record your voice, play back, and compare with native pronunciation.',
-    status: 'Coming soon',
+    desc: 'Practice pronunciation of words and sentences with AI-powered scoring.',
+    status: '',
+    clickable: true,
   },
   {
     title: 'Structured Speaking',
@@ -22,14 +23,6 @@ const speakingModes = [
     desc: 'Pick a topic card, express your thoughts in 30-60 seconds, and get AI feedback.',
     status: '',
     clickable: true,
-  },
-  {
-    title: 'Sentence Follow-along',
-    icon: <TrophyOutlined />,
-    color: '#059669',
-    bg: '#ecfdf5',
-    desc: 'Read sentences aloud and see how closely your speech matches the target.',
-    status: 'Coming soon',
   },
 ];
 
@@ -85,6 +78,8 @@ export default function Speaking() {
                     navigate('/speaking/structured');
                   } else if (item.title === 'Free Conversation') {
                     navigate('/speaking/free-conversation');
+                  } else if (item.title === 'Pronunciation Practice') {
+                    navigate('/speaking/pronunciation-practice');
                   }
                 }
               }}
