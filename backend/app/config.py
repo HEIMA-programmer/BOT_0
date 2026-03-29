@@ -12,6 +12,8 @@ class BaseConfig:
     AZURE_SPEECH_REGION = os.getenv('AZURE_SPEECH_REGION', 'eastasia')
     ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
     GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
+    DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
+    DEEPSEEK_API_URL = os.getenv('DEEPSEEK_API_URL', 'https://api.deepseek.com')
 
 
 class DevelopmentConfig(BaseConfig):
