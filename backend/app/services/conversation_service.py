@@ -34,17 +34,21 @@ class ConversationService:
     All cross-thread communication uses thread-safe queue.Queue.
     """
 
-    def __init__(self):
+    def __init__(self, system_prompt=None, voice_name=None, initial_message=None):
         api_key = os.getenv('GOOGLE_API_KEY')
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not found in environment variables")
 
         self.client = genai.Client(api_key=api_key)
+        self.system_prompt = system_prompt or SYSTEM_PROMPT
+        self.voice_name = voice_name or "Puck"
+        self.initial_message = initial_message  # text to send first to trigger AI to speak
         self.audio_in_queue = queue.Queue()    # browser audio -> gemini
         self.response_queue = queue.Queue()    # gemini responses -> browser
         self.running = False
         self.ai_is_speaking = False
         self._thread = None
+        self.messages = []  # accumulated conversation messages
 
     def start(self):
         """Start the Gemini session in a background thread."""
@@ -72,11 +76,11 @@ class ConversationService:
             "speech_config": {
                 "voice_config": {
                     "prebuilt_voice_config": {
-                        "voice_name": "Puck"
+                        "voice_name": self.voice_name
                     }
                 }
             },
-            "system_instruction": SYSTEM_PROMPT,
+            "system_instruction": self.system_prompt,
             "input_audio_transcription": {},
             "output_audio_transcription": {},
         }
@@ -87,6 +91,14 @@ class ConversationService:
                 print('[ConversationService] Connected!')
                 self.running = True
                 self.response_queue.put({'type': 'ready'})
+
+                # Send initial message to trigger AI to speak first
+                if self.initial_message:
+                    print(f'[ConversationService] Sending initial message to trigger AI...')
+                    await session.send_client_content(
+                        turns=[{"role": "user", "parts": [{"text": self.initial_message}]}],
+                        turn_complete=True
+                    )
 
                 send_task = asyncio.create_task(self._send_audio(session))
                 recv_task = asyncio.create_task(self._recv_responses(session))
@@ -100,23 +112,33 @@ class ConversationService:
             self.response_queue.put({'type': 'error', 'message': f'Connection failed: {e}'})
 
     async def _send_audio(self, session):
-        """Read from audio_in_queue and send to Gemini. Mirrors demo's send_audio."""
+        """Read from audio_in_queue and send to Gemini. Batch-drain for lower latency."""
         while self.running:
+            chunks = []
             try:
-                data = self.audio_in_queue.get_nowait()
-                # Skip sending when AI is speaking (echo prevention, same as demo)
-                if not self.ai_is_speaking:
-                    await session.send_realtime_input(
-                        audio=types.Blob(data=data, mime_type="audio/pcm;rate=16000")
-                    )
+                # Drain up to 10 chunks at once to reduce queue buildup
+                for _ in range(10):
+                    chunks.append(self.audio_in_queue.get_nowait())
             except queue.Empty:
+                pass
+
+            if chunks and not self.ai_is_speaking:
+                # Concatenate chunks and send as one blob for efficiency
+                combined = b''.join(chunks)
+                await session.send_realtime_input(
+                    audio=types.Blob(data=combined, mime_type="audio/pcm;rate=16000")
+                )
+            elif not chunks:
                 await asyncio.sleep(0.02)
 
     async def _recv_responses(self, session):
         """Receive from Gemini and put into response_queue. Mirrors demo's receive_audio."""
+        import time
+
         user_transcript = ""
         ai_transcript = ""
         ai_speaking = False
+        last_user_transcript_time = 0  # throttle user_transcript events
 
         while self.running:
             async for response in session.receive():
@@ -150,17 +172,27 @@ class ConversationService:
                             if not ai_speaking:
                                 ai_speaking = True
 
-                # User speech transcription (real-time)
+                # User speech transcription (real-time, throttled)
                 if content.input_transcription and content.input_transcription.text:
                     user_transcript += content.input_transcription.text
-                    self.response_queue.put({
-                        'type': 'user_transcript',
-                        'text': user_transcript
-                    })
+                    # Throttle: only send every 200ms to avoid flooding
+                    now = time.time()
+                    if now - last_user_transcript_time > 0.2:
+                        # Only send the last 200 chars for display efficiency
+                        display_text = user_transcript[-200:] if len(user_transcript) > 200 else user_transcript
+                        self.response_queue.put({
+                            'type': 'user_transcript',
+                            'text': display_text
+                        })
+                        last_user_transcript_time = now
 
-                # AI speech transcription
+                # AI speech transcription (stream incrementally for real-time display)
                 if content.output_transcription and content.output_transcription.text:
                     ai_transcript += content.output_transcription.text
+                    self.response_queue.put({
+                        'type': 'ai_transcript',
+                        'text': ai_transcript
+                    })
 
                 # Turn complete
                 if content.turn_complete:
@@ -169,13 +201,12 @@ class ConversationService:
                             'type': 'user_final',
                             'text': user_transcript
                         })
+                        self.messages.append({'role': 'user', 'content': user_transcript})
                         user_transcript = ""
+                        last_user_transcript_time = 0
 
                     if ai_transcript:
-                        self.response_queue.put({
-                            'type': 'ai_transcript',
-                            'text': ai_transcript
-                        })
+                        self.messages.append({'role': 'assistant', 'content': ai_transcript})
                         ai_transcript = ""
 
                     if ai_speaking:
@@ -183,6 +214,10 @@ class ConversationService:
                         ai_speaking = False
 
                     self.ai_is_speaking = False
+
+    def get_messages(self):
+        """Return accumulated conversation messages."""
+        return list(self.messages)
 
     def stop(self):
         """Signal the session to stop."""

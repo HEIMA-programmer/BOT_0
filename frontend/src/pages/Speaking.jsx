@@ -1,6 +1,6 @@
-import { Typography, Card, Row, Col, Tag, Tabs } from 'antd';
-import { AudioOutlined, MessageOutlined, TrophyOutlined, RobotOutlined, CommentOutlined, TeamOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { Typography, Card, Row, Col, Tag, Tabs, Button } from 'antd';
+import { AudioOutlined, MessageOutlined, TrophyOutlined, RobotOutlined, CommentOutlined, TeamOutlined, HistoryOutlined } from '@ant-design/icons';
+import { useNavigate, useLocation } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text } = Typography;
@@ -40,7 +40,8 @@ const aiChatScenarios = [
     color: '#2563eb',
     bg: '#eff6ff',
     desc: 'Practice asking your professor for help, clarifying assignment requirements, and discussing grades.',
-    status: 'Coming soon',
+    status: '',
+    clickable: true,
   },
   {
     title: 'Seminar Discussion',
@@ -48,7 +49,8 @@ const aiChatScenarios = [
     color: '#7c3aed',
     bg: '#f5f3ff',
     desc: 'Participate in academic group discussions, express agreement/disagreement, and build on ideas.',
-    status: 'Coming soon',
+    status: '',
+    clickable: true,
   },
   {
     title: 'Free Conversation',
@@ -64,6 +66,8 @@ const aiChatScenarios = [
 export default function Speaking() {
   useLearningTimeTracker('speaking', 'study_time:speaking');
   const navigate = useNavigate();
+  const location = useLocation();
+  const defaultTab = location.state?.tab || 'speaking';
 
   function renderCards(items) {
     return (
@@ -85,6 +89,10 @@ export default function Speaking() {
                     navigate('/speaking/structured');
                   } else if (item.title === 'Free Conversation') {
                     navigate('/speaking/free-conversation');
+                  } else if (item.title === 'Office Hours') {
+                    navigate('/speaking/office-hours');
+                  } else if (item.title === 'Seminar Discussion') {
+                    navigate('/speaking/seminar-discussion');
                   }
                 }
               }}
@@ -126,7 +134,20 @@ export default function Speaking() {
     {
       key: 'ai-chat',
       label: 'AI Conversation',
-      children: renderCards(aiChatScenarios),
+      children: (
+        <>
+          {renderCards(aiChatScenarios)}
+          <div style={{ textAlign: 'center', marginTop: 24 }}>
+            <Button
+              icon={<HistoryOutlined />}
+              onClick={() => navigate('/speaking/history')}
+              style={{ borderRadius: 20 }}
+            >
+              View Conversation History
+            </Button>
+          </div>
+        </>
+      ),
     },
   ];
 
@@ -142,7 +163,7 @@ export default function Speaking() {
       </div>
 
       <Tabs
-        defaultActiveKey="speaking"
+        defaultActiveKey={defaultTab}
         items={tabItems}
         style={{ marginTop: 24 }}
       />

@@ -48,6 +48,7 @@ def create_app(config_name=None):
     from app.routes.listening import listening_bp
     from app.routes.progress import progress_bp
     from app.routes.forum import forum_bp
+    from app.routes.chat_history import chat_history_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(daily_words_bp)
@@ -56,6 +57,7 @@ def create_app(config_name=None):
     app.register_blueprint(listening_bp)
     app.register_blueprint(progress_bp)
     app.register_blueprint(forum_bp)
+    app.register_blueprint(chat_history_bp)
 
     # Register SocketIO handlers
     from app.routes import speaking_ws  # noqa: F401

@@ -8,6 +8,8 @@ import Listening from './pages/Listening';
 import Speaking from './pages/Speaking';
 import StructuredSpeaking from './pages/StructuredSpeaking';
 import FreeConversation from './pages/FreeConversation';
+import GuidedConversation from './pages/GuidedConversation';
+import ConversationHistory from './pages/ConversationHistory';
 import Profile from './pages/Profile';
 import Forum from './pages/Forum';
 import Login from './pages/Login';
@@ -109,6 +111,15 @@ export default function App() {
               } />
               <Route path="/speaking/free-conversation" element={
                 <RequireAuth user={user} loading={loading}><FreeConversation /></RequireAuth>
+              } />
+              <Route path="/speaking/office-hours" element={
+                <RequireAuth user={user} loading={loading}><GuidedConversation scenarioType="office_hours" /></RequireAuth>
+              } />
+              <Route path="/speaking/seminar-discussion" element={
+                <RequireAuth user={user} loading={loading}><GuidedConversation scenarioType="seminar_discussion" /></RequireAuth>
+              } />
+              <Route path="/speaking/history" element={
+                <RequireAuth user={user} loading={loading}><ConversationHistory /></RequireAuth>
               } />
               <Route path="/forum" element={
                 <RequireAuth user={user} loading={loading}><Forum user={user} /></RequireAuth>

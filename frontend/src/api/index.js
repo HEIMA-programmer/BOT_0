@@ -85,4 +85,18 @@ export const progressAPI = {
   trackTime: (payload) => api.post('/progress/track-time', payload),
 };
 
+// Chat History APIs
+export const chatHistoryAPI = {
+  createSession: (data) => api.post('/chat-history/sessions', data),
+  getSessions: (params) => api.get('/chat-history/sessions', { params }),
+  getSession: (sessionId) => api.get(`/chat-history/sessions/${sessionId}`),
+  saveMessages: (sessionId, messages) =>
+    api.post(`/chat-history/sessions/${sessionId}/messages`, { messages }),
+  endSession: (sessionId, report) =>
+    api.put(`/chat-history/sessions/${sessionId}/end`, { report }),
+  getScenarioOptions: (scenarioType) =>
+    api.get(`/chat-history/scenarios/${scenarioType}`),
+  getScenarioPrompt: (data) => api.post('/chat-history/scenario-prompt', data),
+};
+
 export default api;
