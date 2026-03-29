@@ -1,24 +1,84 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Typography, Card, Tabs, Button, Tag, Input, Modal, Form, Select,
-  List, Avatar, Space, Tooltip, Empty, Spin, Upload, Pagination, App as AntdApp,
+  Alert,
+  App as AntdApp,
+  Avatar,
+  Button,
+  Card,
+  Empty,
+  Form,
+  Input,
+  List,
+  Modal,
+  Pagination,
+  Popconfirm,
+  Select,
+  Space,
+  Spin,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+  Upload,
 } from 'antd';
 import {
-  PlusOutlined, CommentOutlined, ShareAltOutlined, DeleteOutlined,
-  FileOutlined, VideoCameraOutlined, HistoryOutlined, UploadOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  FileOutlined,
+  HistoryOutlined,
+  MessageOutlined,
+  PaperClipOutlined,
+  PlusOutlined,
+  PushpinOutlined,
+  ShareAltOutlined,
+  UploadOutlined,
   UserOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons';
+
 import { forumAPI } from '../api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 const VIDEO_EXTS = /\.(mp4|webm|mov|ogg)(\?|$)/i;
+const TAG_CONFIG = {
+  skills: { label: 'Skills', color: 'blue', desc: 'Turnitin, Teams, plagiarism tips & more' },
+  experience: { label: 'Experience', color: 'green', desc: 'Share your academic journey' },
+  academic_culture: { label: 'Academic Culture', color: 'purple', desc: 'Cultural insights & norms' },
+  public: { label: 'Public', color: 'orange', desc: 'Open discussion' },
+};
+const STATUS_CONFIG = {
+  approved: { label: 'Approved', color: 'green' },
+  pending: { label: 'Pending Review', color: 'gold' },
+  rejected: { label: 'Rejected', color: 'red' },
+};
+const TAGS = Object.keys(TAG_CONFIG);
+
+function VideoLoadingOverlay({ inline }) {
+  return (
+    <div
+      style={{
+        ...(inline
+          ? { width: '100%', height: 220 }
+          : { position: 'absolute', inset: 0, zIndex: 1 }),
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#000',
+        color: '#fff',
+      }}
+    >
+      <Spin size="large" />
+      <Text style={{ color: 'rgba(255,255,255,0.72)', marginTop: 12 }}>Loading video...</Text>
+    </div>
+  );
+}
 
 function VideoPlayer({ url }) {
   const [loading, setLoading] = useState(true);
 
-  // YouTube
   const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
   if (ytMatch) {
     return (
@@ -27,7 +87,7 @@ function VideoPlayer({ url }) {
         <iframe
           src={`https://www.youtube.com/embed/${ytMatch[1]}`}
           title="Video"
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           loading="lazy"
@@ -37,7 +97,6 @@ function VideoPlayer({ url }) {
     );
   }
 
-  // Bilibili
   const biliMatch = url.match(/bilibili\.com\/video\/(BV[\w]+)/);
   if (biliMatch) {
     return (
@@ -46,7 +105,7 @@ function VideoPlayer({ url }) {
         <iframe
           src={`https://player.bilibili.com/player.html?bvid=${biliMatch[1]}&high_quality=1`}
           title="Video"
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
           allowFullScreen
           scrolling="no"
           loading="lazy"
@@ -56,7 +115,6 @@ function VideoPlayer({ url }) {
     );
   }
 
-  // Direct video file (remote URL or local upload)
   if (VIDEO_EXTS.test(url) || url.startsWith('/api/forum/uploads/')) {
     return (
       <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#000' }}>
@@ -64,7 +122,7 @@ function VideoPlayer({ url }) {
         <video
           controls
           preload="metadata"
-          style={{ width: '100%', borderRadius: 8, maxHeight: 400, display: loading ? 'none' : 'block' }}
+          style={{ width: '100%', maxHeight: 420, display: loading ? 'none' : 'block' }}
           src={url}
           onLoadedData={() => setLoading(false)}
           onError={() => setLoading(false)}
@@ -73,7 +131,6 @@ function VideoPlayer({ url }) {
     );
   }
 
-  // Fallback
   return (
     <a href={url} target="_blank" rel="noopener noreferrer">
       <VideoCameraOutlined /> Watch video
@@ -81,36 +138,53 @@ function VideoPlayer({ url }) {
   );
 }
 
-function VideoLoadingOverlay({ inline }) {
+function StatusTag({ status }) {
+  const config = STATUS_CONFIG[status];
+  if (!config) return null;
+  return <Tag color={config.color}>{config.label}</Tag>;
+}
+
+function AdminQueueCard({ post, onOpen, onReview }) {
   return (
-    <div style={{
-      ...(inline
-        ? { width: '100%', height: 220 }
-        : { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }),
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      background: '#000', color: '#fff',
-    }}>
-      <Spin size="large" />
-      <Text style={{ color: 'rgba(255,255,255,0.7)', marginTop: 12, fontSize: 13 }}>
-        Loading video...
-      </Text>
-    </div>
+    <Card
+      key={post.id}
+      hoverable
+      style={{ marginBottom: 12, borderRadius: 10, borderColor: '#fde68a' }}
+      styles={{ body: { padding: '16px 20px' } }}
+      onClick={() => onOpen(post.id)}
+    >
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <Space size={8} wrap>
+          <Avatar size={28} style={{ backgroundColor: '#b45309' }}>
+            {post.username?.charAt(0)?.toUpperCase() || 'U'}
+          </Avatar>
+          <Text strong>{post.username}</Text>
+          <StatusTag status={post.status} />
+          <Tag color={TAG_CONFIG[post.tag]?.color}>{TAG_CONFIG[post.tag]?.label}</Tag>
+        </Space>
+        <div>
+          <Title level={5} style={{ margin: 0 }}>{post.title}</Title>
+          <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '8px 0 0', color: '#6b7280' }}>
+            {post.content}
+          </Paragraph>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <Text type="secondary">{new Date(post.created_at).toLocaleString()}</Text>
+          <Space onClick={(e) => e.stopPropagation()}>
+            <Button size="small" onClick={() => onOpen(post.id)}>Preview</Button>
+            <Button size="small" type="primary" onClick={() => onReview(post, 'approve')}>Approve</Button>
+            <Button size="small" danger onClick={() => onReview(post, 'reject')}>Reject</Button>
+          </Space>
+        </div>
+      </Space>
+    </Card>
   );
 }
 
-const TAG_CONFIG = {
-  skills: { label: 'Skills', color: 'blue', desc: 'Turnitin, Teams, plagiarism tips & more' },
-  experience: { label: 'Experience', color: 'green', desc: 'Share your academic journey' },
-  academic_culture: { label: 'Academic Culture', color: 'purple', desc: 'Cultural insights & norms' },
-  public: { label: 'Public', color: 'orange', desc: 'Open discussion' },
-};
-
-const TAGS = Object.keys(TAG_CONFIG);
-
 export default function Forum({ user }) {
-  const { message: antMsg } = AntdApp.useApp();
+  const isAdmin = Boolean(user?.is_admin);
+  const { message } = AntdApp.useApp();
 
-  // State
   const [activeTab, setActiveTab] = useState('all');
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
@@ -119,7 +193,7 @@ export default function Forum({ user }) {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form] = Form.useForm();
+  const [createForm] = Form.useForm();
   const [fileList, setFileList] = useState([]);
 
   const [detailOpen, setDetailOpen] = useState(false);
@@ -139,7 +213,22 @@ export default function Forum({ user }) {
   const [myPage, setMyPage] = useState(1);
   const [myLoading, setMyLoading] = useState(false);
 
-  // Fetch posts
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm] = Form.useForm();
+
+  const [reviewItems, setReviewItems] = useState([]);
+  const [reviewTotal, setReviewTotal] = useState(0);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewingPost, setReviewingPost] = useState(null);
+  const [reviewAction, setReviewAction] = useState('approve');
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [rejectReasons, setRejectReasons] = useState([]);
+  const [reviewForm] = Form.useForm();
+
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
@@ -149,48 +238,70 @@ export default function Forum({ user }) {
       setPosts(res.data.posts);
       setTotal(res.data.total);
     } catch {
-      antMsg.error('Failed to load posts');
+      message.error('Failed to load posts');
     } finally {
       setLoading(false);
     }
-  }, [page, activeTab, antMsg]);
+  }, [activeTab, message, page]);
 
-  useEffect(() => { fetchPosts(); }, [fetchPosts]);
-
-  // Tab change resets page
-  const handleTabChange = (key) => {
-    setActiveTab(key);
-    setPage(1);
-  };
-
-  // Create post
-  const handleCreate = async () => {
+  const fetchPendingPosts = useCallback(async (targetPage = reviewPage) => {
+    if (!isAdmin) return;
+    setReviewLoading(true);
     try {
-      const values = await form.validateFields();
-      setCreating(true);
-      const fd = new FormData();
-      fd.append('tag', values.tag);
-      fd.append('title', values.title);
-      fd.append('content', values.content);
-      if (values.video_url) fd.append('video_url', values.video_url);
-      if (fileList.length > 0 && fileList[0].originFileObj) {
-        fd.append('file', fileList[0].originFileObj);
-      }
-      await forumAPI.createPost(fd);
-      antMsg.success('Post created!');
-      setCreateOpen(false);
-      form.resetFields();
-      setFileList([]);
-      setPage(1);
-      fetchPosts();
-    } catch (err) {
-      if (err.response) antMsg.error(err.response.data?.error || 'Create failed');
+      const res = await forumAPI.getPendingPosts({ page: targetPage, per_page: 8 });
+      setReviewItems(res.data.posts);
+      setReviewTotal(res.data.total);
+    } catch {
+      message.error('Failed to load review queue');
     } finally {
-      setCreating(false);
+      setReviewLoading(false);
     }
-  };
+  }, [isAdmin, message, reviewPage]);
 
-  // View post detail
+  const fetchMyPosts = useCallback(async (targetPage = myPage) => {
+    setMyLoading(true);
+    try {
+      const res = await forumAPI.getMyPosts({ page: targetPage, per_page: 10 });
+      setMyItems(res.data.items);
+      setMyTotal(res.data.total);
+    } catch {
+      message.error('Failed to load your posts');
+    } finally {
+      setMyLoading(false);
+    }
+  }, [message, myPage]);
+
+  const fetchRejectReasons = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const res = await forumAPI.getRejectionReasons();
+      setRejectReasons(res.data.reasons || []);
+    } catch {
+      message.error('Failed to load rejection reasons');
+    }
+  }, [isAdmin, message]);
+
+  useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchPendingPosts(reviewPage);
+      fetchRejectReasons();
+    }
+  }, [fetchPendingPosts, fetchRejectReasons, isAdmin, reviewPage]);
+
+  const refreshDetail = useCallback(async (postId) => {
+    try {
+      const res = await forumAPI.getPost(postId);
+      setDetailPost(res.data);
+    } catch {
+      setDetailOpen(false);
+      setDetailPost(null);
+    }
+  }, []);
+
   const openDetail = async (postId) => {
     setDetailOpen(true);
     setDetailLoading(true);
@@ -198,162 +309,275 @@ export default function Forum({ user }) {
       const res = await forumAPI.getPost(postId);
       setDetailPost(res.data);
     } catch {
-      antMsg.error('Failed to load post');
+      message.error('Failed to load post');
       setDetailOpen(false);
     } finally {
       setDetailLoading(false);
     }
   };
 
-  // Add comment
+  const handleCreate = async () => {
+    try {
+      const values = await createForm.validateFields();
+      setCreating(true);
+      const formData = new FormData();
+      formData.append('tag', values.tag);
+      formData.append('title', values.title);
+      formData.append('content', values.content);
+      if (values.video_url) formData.append('video_url', values.video_url);
+      if (fileList.length > 0 && fileList[0].originFileObj) {
+        formData.append('file', fileList[0].originFileObj);
+      }
+      const res = await forumAPI.createPost(formData);
+      message.success(res.data.message || 'Post submitted');
+      setCreateOpen(false);
+      createForm.resetFields();
+      setFileList([]);
+      setPage(1);
+      fetchPosts();
+      fetchMyPosts(1);
+      if (isAdmin) fetchPendingPosts(1);
+    } catch (err) {
+      if (err?.response) {
+        message.error(err.response.data?.error || 'Create failed');
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const handleComment = async () => {
     if (!commentText.trim() || !detailPost) return;
     setCommenting(true);
     try {
       await forumAPI.addComment(detailPost.id, commentText.trim());
       setCommentText('');
-      const res = await forumAPI.getPost(detailPost.id);
-      setDetailPost(res.data);
+      await refreshDetail(detailPost.id);
       fetchPosts();
-    } catch {
-      antMsg.error('Failed to add comment');
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to add comment');
     } finally {
       setCommenting(false);
     }
   };
 
-  // Delete comment
   const handleDeleteComment = async (commentId) => {
     try {
       await forumAPI.deleteComment(commentId);
-      const res = await forumAPI.getPost(detailPost.id);
-      setDetailPost(res.data);
+      message.success('Comment deleted');
+      if (detailPost) await refreshDetail(detailPost.id);
       fetchPosts();
     } catch {
-      antMsg.error('Failed to delete comment');
+      message.error('Failed to delete comment');
     }
   };
 
-  // Forward post
-  const openForward = (postId) => {
-    setForwardPostId(postId);
-    setForwardComment('');
-    setForwardOpen(true);
+  const handleDeletePost = async (postId) => {
+    try {
+      await forumAPI.deletePost(postId);
+      message.success('Post deleted');
+      if (detailPost?.id === postId) {
+        setDetailOpen(false);
+        setDetailPost(null);
+      }
+      fetchPosts();
+      fetchMyPosts(1);
+      if (isAdmin) fetchPendingPosts(1);
+    } catch {
+      message.error('Failed to delete post');
+    }
   };
 
   const handleForward = async () => {
+    if (!forwardPostId) return;
     setForwarding(true);
     try {
       await forumAPI.forwardPost(forwardPostId, forwardComment.trim() || undefined);
-      antMsg.success('Post forwarded!');
+      message.success('Post forwarded');
       setForwardOpen(false);
+      setForwardPostId(null);
+      setForwardComment('');
       fetchPosts();
+      fetchMyPosts(1);
     } catch (err) {
-      antMsg.error(err.response?.data?.error || 'Forward failed');
+      message.error(err.response?.data?.error || 'Forward failed');
     } finally {
       setForwarding(false);
     }
   };
 
-  // Delete post
-  const handleDelete = async (postId) => {
+  const openEdit = (post) => {
+    setEditingPost(post);
+    editForm.setFieldsValue({
+      tag: post.tag,
+      title: post.title,
+      content: post.content,
+      video_url: post.video_url || '',
+    });
+    setEditOpen(true);
+  };
+
+  const handleEdit = async () => {
+    if (!editingPost) return;
     try {
-      await forumAPI.deletePost(postId);
-      antMsg.success('Post deleted');
+      const values = await editForm.validateFields();
+      setEditSaving(true);
+      const res = await forumAPI.updatePost(editingPost.id, values);
+      message.success(res.data.message || 'Post updated');
+      setEditOpen(false);
+      setEditingPost(null);
       fetchPosts();
-    } catch {
-      antMsg.error('Failed to delete post');
-    }
-  };
-
-  // My posts
-  const openMyPosts = async () => {
-    setMyPostsOpen(true);
-    setMyPage(1);
-    await fetchMyPosts(1);
-  };
-
-  const fetchMyPosts = async (pg) => {
-    setMyLoading(true);
-    try {
-      const res = await forumAPI.getMyPosts({ page: pg, per_page: 10 });
-      setMyItems(res.data.items);
-      setMyTotal(res.data.total);
-    } catch {
-      antMsg.error('Failed to load your posts');
+      fetchMyPosts(myPage);
+      if (detailPost?.id === editingPost.id) await refreshDetail(editingPost.id);
+    } catch (err) {
+      if (err?.response) {
+        message.error(err.response.data?.error || 'Update failed');
+      }
     } finally {
-      setMyLoading(false);
+      setEditSaving(false);
     }
   };
 
-  // Tab items
+  const openReviewModal = (post, action) => {
+    setReviewingPost(post);
+    setReviewAction(action);
+    reviewForm.setFieldsValue({
+      rejection_reason: rejectReasons[0],
+      review_note: '',
+    });
+    setReviewOpen(true);
+  };
+
+  const handleReview = async () => {
+    if (!reviewingPost) return;
+    try {
+      setReviewSaving(true);
+      const payload = { action: reviewAction };
+      if (reviewAction === 'reject') {
+        const values = await reviewForm.validateFields();
+        payload.rejection_reason = values.rejection_reason;
+        payload.review_note = values.review_note?.trim() || undefined;
+      }
+      await forumAPI.reviewPost(reviewingPost.id, payload);
+      message.success(reviewAction === 'approve' ? 'Post approved' : 'Post rejected');
+      setReviewOpen(false);
+      setReviewingPost(null);
+      fetchPendingPosts(reviewPage);
+      fetchPosts();
+      fetchMyPosts(myPage);
+      if (detailPost?.id === reviewingPost.id) await refreshDetail(reviewingPost.id);
+    } catch (err) {
+      if (err?.response) {
+        message.error(err.response.data?.error || 'Review failed');
+      }
+    } finally {
+      setReviewSaving(false);
+    }
+  };
+
+  const handlePin = async (post) => {
+    try {
+      await forumAPI.pinPost(post.id, !post.is_pinned);
+      message.success(post.is_pinned ? 'Post unpinned' : 'Post pinned');
+      fetchPosts();
+      fetchMyPosts(myPage);
+      if (detailPost?.id === post.id) await refreshDetail(post.id);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Pin update failed');
+    }
+  };
+
   const tabItems = [
     { key: 'all', label: 'All Posts' },
-    ...TAGS.map((t) => ({
-      key: t,
-      label: (
-        <Space size={4}>
-          <Tag color={TAG_CONFIG[t].color} style={{ margin: 0 }}>{TAG_CONFIG[t].label}</Tag>
-        </Space>
-      ),
+    ...TAGS.map((tag) => ({
+      key: tag,
+      label: <Tag color={TAG_CONFIG[tag].color}>{TAG_CONFIG[tag].label}</Tag>,
     })),
   ];
 
-  // Post card renderer
-  const renderPost = (post) => (
+  const renderAttachment = (post) => {
+    if (!post.file_url) return null;
+    if (VIDEO_EXTS.test(post.file_name || post.file_url)) {
+      return (
+        <div style={{ marginTop: 12 }}>
+          <VideoPlayer url={post.file_url} />
+        </div>
+      );
+    }
+    return (
+      <div style={{ marginTop: 12 }}>
+        <a href={post.file_url} target="_blank" rel="noopener noreferrer">
+          <PaperClipOutlined /> {post.file_name || 'Download attachment'}
+        </a>
+      </div>
+    );
+  };
+
+  const renderPostCard = (post) => (
     <Card
       key={post.id}
+      hoverable
       style={{ marginBottom: 12, borderRadius: 10 }}
       styles={{ body: { padding: '16px 20px' } }}
-      hoverable
       onClick={() => openDetail(post.id)}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <Space size={8} style={{ marginBottom: 6 }}>
+          <Space size={8} wrap style={{ marginBottom: 6 }}>
             <Avatar size={28} style={{ backgroundColor: '#2563eb' }}>
               {post.username?.charAt(0)?.toUpperCase() || 'U'}
             </Avatar>
-            <Text strong style={{ fontSize: 13 }}>{post.username}</Text>
+            <Text strong>{post.username}</Text>
+            {post.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
             <Tag color={TAG_CONFIG[post.tag]?.color}>{TAG_CONFIG[post.tag]?.label}</Tag>
+            <StatusTag status={post.status} />
           </Space>
-          <Title level={5} style={{ margin: '4px 0 4px', fontSize: 15 }}>{post.title}</Title>
-          <Paragraph
-            ellipsis={{ rows: 2 }}
-            style={{ margin: 0, color: '#6b7280', fontSize: 13 }}
-          >
+          <Title level={5} style={{ margin: '4px 0' }}>{post.title}</Title>
+          <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
             {post.content}
           </Paragraph>
-          <Space size={16} style={{ marginTop: 8, fontSize: 12, color: '#9ca3af' }}>
-            {post.file_url && (
-              <Tooltip title="Has attachment">
-                <FileOutlined /> File
-              </Tooltip>
-            )}
-            {post.video_url && (
-              <Tooltip title="Has video">
-                <VideoCameraOutlined /> Video
-              </Tooltip>
-            )}
-            <span><CommentOutlined /> {post.comment_count}</span>
+          <Space size={16} style={{ marginTop: 8, color: '#9ca3af' }}>
+            {post.file_url && <span><FileOutlined /> File</span>}
+            {post.video_url && <span><VideoCameraOutlined /> Video</span>}
+            <span><MessageOutlined /> {post.comment_count}</span>
             <span><ShareAltOutlined /> {post.forward_count}</span>
             <span>{new Date(post.created_at).toLocaleDateString()}</span>
           </Space>
         </div>
         <Space size={4} onClick={(e) => e.stopPropagation()}>
-          <Tooltip title="Forward">
-            <Button
-              type="text" size="small" icon={<ShareAltOutlined />}
-              onClick={() => openForward(post.id)}
-            />
-          </Tooltip>
-          {post.user_id === user?.id && (
-            <Tooltip title="Delete">
+          {post.can_forward && (
+            <Tooltip title="Forward">
               <Button
-                type="text" size="small" danger icon={<DeleteOutlined />}
-                onClick={() => handleDelete(post.id)}
+                type="text"
+                size="small"
+                icon={<ShareAltOutlined />}
+                onClick={() => {
+                  setForwardPostId(post.id);
+                  setForwardComment('');
+                  setForwardOpen(true);
+                }}
               />
             </Tooltip>
+          )}
+          {post.can_edit && (
+            <Tooltip title="Edit">
+              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(post)} />
+            </Tooltip>
+          )}
+          {post.can_pin && (
+            <Tooltip title={post.is_pinned ? 'Unpin' : 'Pin'}>
+              <Button
+                type="text"
+                size="small"
+                icon={<PushpinOutlined />}
+                onClick={() => handlePin(post)}
+              />
+            </Tooltip>
+          )}
+          {post.can_delete && (
+            <Popconfirm title="Delete this post?" onConfirm={() => handleDeletePost(post.id)}>
+              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
           )}
         </Space>
       </div>
@@ -362,75 +586,111 @@ export default function Forum({ user }) {
 
   return (
     <div className="page-container">
-      {/* Header */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: 20,
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <Title level={3} style={{ margin: 0, fontWeight: 700 }}>Forum</Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>
+          <Text type="secondary">
             Share knowledge, discuss academic life, and help each other
           </Text>
         </div>
-        <Space>
-          <Button icon={<HistoryOutlined />} onClick={openMyPosts}>My Posts</Button>
+        <Space wrap>
+          <Button icon={<HistoryOutlined />} onClick={() => { setMyPostsOpen(true); setMyPage(1); fetchMyPosts(1); }}>
+            My Posts
+          </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             New Post
           </Button>
         </Space>
       </div>
 
-      {/* Tabs */}
-      <Tabs activeKey={activeTab} onChange={handleTabChange} items={tabItems} />
+      {isAdmin && (
+        <Card
+          title="Admin Review Queue"
+          extra={<Text type="secondary">{reviewTotal} pending</Text>}
+          style={{ marginBottom: 20, borderRadius: 12, borderColor: '#fcd34d' }}
+        >
+          {reviewLoading ? (
+            <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>
+          ) : reviewItems.length === 0 ? (
+            <Empty description="No posts waiting for review" />
+          ) : (
+            <>
+              {reviewItems.map((post) => (
+                <AdminQueueCard
+                  key={post.id}
+                  post={post}
+                  onOpen={openDetail}
+                  onReview={openReviewModal}
+                />
+              ))}
+              {reviewTotal > 8 && (
+                <div style={{ textAlign: 'center', marginTop: 12 }}>
+                  <Pagination
+                    current={reviewPage}
+                    total={reviewTotal}
+                    pageSize={8}
+                    onChange={(nextPage) => setReviewPage(nextPage)}
+                    showSizeChanger={false}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      )}
 
-      {/* Post list */}
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => {
+          setActiveTab(key);
+          setPage(1);
+        }}
+        items={tabItems}
+      />
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>
       ) : posts.length === 0 ? (
-        <Empty description="No posts yet. Be the first to share!" />
+        <Empty description={isAdmin ? 'No approved posts yet.' : 'No posts yet.'} />
       ) : (
         <>
-          {posts.map(renderPost)}
+          {posts.map(renderPostCard)}
           {total > 10 && (
             <div style={{ textAlign: 'center', marginTop: 16 }}>
-              <Pagination
-                current={page} total={total} pageSize={10}
-                onChange={(p) => setPage(p)} showSizeChanger={false}
-              />
+              <Pagination current={page} total={total} pageSize={10} onChange={setPage} showSizeChanger={false} />
             </div>
           )}
         </>
       )}
 
-      {/* Create Post Modal */}
       <Modal
         title="Create New Post"
         open={createOpen}
-        onCancel={() => { setCreateOpen(false); form.resetFields(); setFileList([]); }}
+        onCancel={() => {
+          setCreateOpen(false);
+          createForm.resetFields();
+          setFileList([]);
+        }}
         onOk={handleCreate}
         confirmLoading={creating}
         okText="Post"
-        width={600}
+        width={620}
       >
-        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+        <Form form={createForm} layout="vertical">
           <Form.Item name="tag" label="Tag" rules={[{ required: true, message: 'Please select a tag' }]}>
             <Select placeholder="Select a tag">
-              {TAGS.map((t) => (
-                <Select.Option key={t} value={t}>
-                  <Tag color={TAG_CONFIG[t].color}>{TAG_CONFIG[t].label}</Tag>
-                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
-                    {TAG_CONFIG[t].desc}
-                  </Text>
+              {TAGS.map((tag) => (
+                <Select.Option key={tag} value={tag}>
+                  {TAG_CONFIG[tag].label}
                 </Select.Option>
               ))}
             </Select>
           </Form.Item>
           <Form.Item name="title" label="Title" rules={[{ required: true, message: 'Please enter a title' }]}>
-            <Input placeholder="Post title" maxLength={200} />
+            <Input maxLength={200} placeholder="Post title" />
           </Form.Item>
           <Form.Item name="content" label="Content" rules={[{ required: true, message: 'Please enter content' }]}>
-            <TextArea rows={5} placeholder="Write your post content..." maxLength={5000} showCount />
+            <TextArea rows={5} maxLength={5000} showCount placeholder="Write your post content..." />
           </Form.Item>
           <Form.Item name="video_url" label="Video URL (optional)">
             <Input placeholder="https://youtube.com/..." />
@@ -439,7 +699,7 @@ export default function Forum({ user }) {
             <Upload
               beforeUpload={() => false}
               fileList={fileList}
-              onChange={({ fileList: fl }) => setFileList(fl.slice(-1))}
+              onChange={({ fileList: next }) => setFileList(next.slice(-1))}
               maxCount={1}
             >
               <Button icon={<UploadOutlined />}>Select File</Button>
@@ -448,20 +708,100 @@ export default function Forum({ user }) {
         </Form>
       </Modal>
 
-      {/* Post Detail Modal */}
+      <Modal
+        title={editingPost?.status === 'rejected' && !isAdmin ? 'Edit And Resubmit Post' : 'Edit Post'}
+        open={editOpen}
+        onCancel={() => {
+          setEditOpen(false);
+          setEditingPost(null);
+          editForm.resetFields();
+        }}
+        onOk={handleEdit}
+        confirmLoading={editSaving}
+        okText={editingPost?.status === 'rejected' && !isAdmin ? 'Resubmit' : 'Save'}
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item name="tag" label="Tag" rules={[{ required: true, message: 'Please select a tag' }]}>
+            <Select>
+              {TAGS.map((tag) => (
+                <Select.Option key={tag} value={tag}>
+                  {TAG_CONFIG[tag].label}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item name="title" label="Title" rules={[{ required: true, message: 'Please enter a title' }]}>
+            <Input maxLength={200} />
+          </Form.Item>
+          <Form.Item name="content" label="Content" rules={[{ required: true, message: 'Please enter content' }]}>
+            <TextArea rows={5} maxLength={5000} />
+          </Form.Item>
+          <Form.Item name="video_url" label="Video URL (optional)">
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={reviewAction === 'approve' ? 'Approve Post' : 'Reject Post'}
+        open={reviewOpen}
+        onCancel={() => {
+          setReviewOpen(false);
+          setReviewingPost(null);
+          reviewForm.resetFields();
+        }}
+        onOk={handleReview}
+        confirmLoading={reviewSaving}
+        okText={reviewAction === 'approve' ? 'Approve' : 'Reject'}
+        okButtonProps={{ danger: reviewAction === 'reject' }}
+      >
+        {reviewingPost && (
+          <div style={{ marginBottom: 12 }}>
+            <Text strong>{reviewingPost.title}</Text>
+            <Paragraph type="secondary" ellipsis={{ rows: 3 }} style={{ marginTop: 8 }}>
+              {reviewingPost.content}
+            </Paragraph>
+          </div>
+        )}
+        {reviewAction === 'reject' && (
+          <Form form={reviewForm} layout="vertical">
+            <Form.Item
+              name="rejection_reason"
+              label="Reason"
+              rules={[{ required: true, message: 'Please choose a rejection reason' }]}
+            >
+              <Select placeholder="Choose a reason">
+                {rejectReasons.map((reason) => (
+                  <Select.Option key={reason} value={reason}>
+                    {reason}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+            <Form.Item name="review_note" label="Additional note (optional)">
+              <TextArea rows={3} maxLength={255} placeholder="Add a short suggestion for the user..." />
+            </Form.Item>
+          </Form>
+        )}
+      </Modal>
+
       <Modal
         title={null}
         open={detailOpen}
-        onCancel={() => { setDetailOpen(false); setDetailPost(null); }}
+        onCancel={() => {
+          setDetailOpen(false);
+          setDetailPost(null);
+          setCommentText('');
+        }}
         footer={null}
-        width={700}
+        width={760}
         destroyOnClose
       >
         {detailLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
         ) : detailPost && (
           <div>
-            <Space size={8} style={{ marginBottom: 8 }}>
+            <Space size={8} wrap style={{ marginBottom: 8 }}>
               <Avatar size={32} style={{ backgroundColor: '#2563eb' }}>
                 {detailPost.username?.charAt(0)?.toUpperCase() || 'U'}
               </Avatar>
@@ -472,40 +812,63 @@ export default function Forum({ user }) {
                   {new Date(detailPost.created_at).toLocaleString()}
                 </Text>
               </div>
-              <Tag color={TAG_CONFIG[detailPost.tag]?.color}>
-                {TAG_CONFIG[detailPost.tag]?.label}
-              </Tag>
+              <Tag color={TAG_CONFIG[detailPost.tag]?.color}>{TAG_CONFIG[detailPost.tag]?.label}</Tag>
+              <StatusTag status={detailPost.status} />
+              {detailPost.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
             </Space>
-            <Title level={4} style={{ margin: '12px 0 8px' }}>{detailPost.title}</Title>
+
+            {detailPost.status === 'rejected' && (
+              <Alert
+                type="error"
+                showIcon
+                style={{ margin: '12px 0' }}
+                message={detailPost.rejection_reason || 'Rejected'}
+                description={detailPost.review_note || 'Please update the post and submit it again for review.'}
+              />
+            )}
+
+            {detailPost.status === 'pending' && detailPost.user_id === user?.id && !isAdmin && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ margin: '12px 0' }}
+                message="This post is waiting for admin review."
+              />
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+              <Title level={4} style={{ margin: '12px 0 8px' }}>{detailPost.title}</Title>
+              <Space wrap>
+                {detailPost.can_edit && (
+                  <Button icon={<EditOutlined />} onClick={() => openEdit(detailPost)}>
+                    {detailPost.status === 'rejected' && !isAdmin ? 'Edit & Resubmit' : 'Edit'}
+                  </Button>
+                )}
+                {detailPost.can_pin && (
+                  <Button icon={<PushpinOutlined />} onClick={() => handlePin(detailPost)}>
+                    {detailPost.is_pinned ? 'Unpin' : 'Pin'}
+                  </Button>
+                )}
+                {detailPost.can_delete && (
+                  <Popconfirm title="Delete this post?" onConfirm={() => handleDeletePost(detailPost.id)}>
+                    <Button danger icon={<DeleteOutlined />}>Delete</Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            </div>
+
             <Paragraph style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.7 }}>
               {detailPost.content}
             </Paragraph>
 
-            {detailPost.file_url && (
-              VIDEO_EXTS.test(detailPost.file_name || detailPost.file_url)
-                ? (
-                  <div style={{ margin: '12px 0' }}>
-                    <VideoPlayer url={detailPost.file_url} />
-                  </div>
-                )
-                : (
-                  <div style={{ margin: '8px 0' }}>
-                    <a href={detailPost.file_url} target="_blank" rel="noopener noreferrer">
-                      <FileOutlined /> {detailPost.file_name || 'Download attachment'}
-                    </a>
-                  </div>
-                )
-            )}
+            {renderAttachment(detailPost)}
             {detailPost.video_url && (
-              <div style={{ margin: '12px 0' }}>
+              <div style={{ marginTop: 12 }}>
                 <VideoPlayer url={detailPost.video_url} />
               </div>
             )}
 
-            {/* Comments section */}
-            <div style={{
-              borderTop: '1px solid #f0f0f0', marginTop: 16, paddingTop: 16,
-            }}>
+            <div style={{ borderTop: '1px solid #f0f0f0', marginTop: 20, paddingTop: 16 }}>
               <Text strong style={{ fontSize: 14 }}>
                 Comments ({detailPost.comments?.length || 0})
               </Text>
@@ -513,62 +876,60 @@ export default function Forum({ user }) {
                 style={{ marginTop: 8 }}
                 dataSource={detailPost.comments || []}
                 locale={{ emptyText: 'No comments yet' }}
-                renderItem={(c) => (
+                renderItem={(comment) => (
                   <List.Item
-                    style={{ padding: '8px 0' }}
                     actions={
-                      c.user_id === user?.id
+                      (comment.user_id === user?.id || isAdmin)
                         ? [
                             <Button
-                              key="del"
-                              type="text" size="small" danger
+                              key="delete"
+                              type="text"
+                              size="small"
+                              danger
                               icon={<DeleteOutlined />}
-                              onClick={() => handleDeleteComment(c.id)}
+                              onClick={() => handleDeleteComment(comment.id)}
                             />,
                           ]
                         : []
                     }
                   >
                     <List.Item.Meta
-                      avatar={
-                        <Avatar size={24} icon={<UserOutlined />} style={{ backgroundColor: '#7c3aed' }}>
-                          {c.username?.charAt(0)?.toUpperCase()}
-                        </Avatar>
-                      }
+                      avatar={<Avatar size={24} icon={<UserOutlined />} style={{ backgroundColor: '#7c3aed' }} />}
                       title={
                         <Space size={8}>
-                          <Text strong style={{ fontSize: 13 }}>{c.username}</Text>
+                          <Text strong>{comment.username}</Text>
                           <Text type="secondary" style={{ fontSize: 11 }}>
-                            {new Date(c.created_at).toLocaleString()}
+                            {new Date(comment.created_at).toLocaleString()}
                           </Text>
                         </Space>
                       }
-                      description={<Text style={{ fontSize: 13 }}>{c.content}</Text>}
+                      description={<Text>{comment.content}</Text>}
                     />
                   </List.Item>
                 )}
               />
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <TextArea
-                  rows={2} value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  placeholder="Write a comment..."
-                  maxLength={1000}
-                />
-                <Button
-                  type="primary" onClick={handleComment}
-                  loading={commenting} disabled={!commentText.trim()}
-                  style={{ alignSelf: 'flex-end' }}
-                >
-                  Send
-                </Button>
-              </div>
+
+              {detailPost.status === 'approved' ? (
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <TextArea
+                    rows={2}
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Write a comment..."
+                    maxLength={1000}
+                  />
+                  <Button type="primary" onClick={handleComment} loading={commenting} disabled={!commentText.trim()} style={{ alignSelf: 'flex-end' }}>
+                    Send
+                  </Button>
+                </div>
+              ) : (
+                <Alert type="info" showIcon style={{ marginTop: 12 }} message="Comments are enabled after the post is approved." />
+              )}
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Forward Modal */}
       <Modal
         title="Forward Post"
         open={forwardOpen}
@@ -578,20 +939,20 @@ export default function Forum({ user }) {
         okText="Forward"
       >
         <TextArea
-          rows={3} value={forwardComment}
+          rows={3}
+          value={forwardComment}
           onChange={(e) => setForwardComment(e.target.value)}
           placeholder="Add a comment to your forward (optional)..."
           maxLength={500}
         />
       </Modal>
 
-      {/* My Posts Modal */}
       <Modal
         title="My Posts & Forwards"
         open={myPostsOpen}
         onCancel={() => setMyPostsOpen(false)}
         footer={null}
-        width={650}
+        width={700}
       >
         {myLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
@@ -613,48 +974,31 @@ export default function Forum({ user }) {
                   {item.type === 'forward' ? (
                     <div style={{ width: '100%' }}>
                       <Tag color="cyan">Forwarded</Tag>
-                      {item.comment && (
-                        <Text style={{ fontSize: 13 }}>{item.comment}</Text>
-                      )}
-                      <Card
-                        size="small"
-                        style={{ marginTop: 6, background: '#fafafa', borderRadius: 8 }}
-                        styles={{ body: { padding: '10px 14px' } }}
-                      >
-                        <Text strong style={{ fontSize: 13 }}>
-                          {item.original_post?.title}
-                        </Text>
-                        <br />
-                        <Paragraph
-                          ellipsis={{ rows: 2 }}
-                          style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 12 }}
-                        >
+                      {item.comment && <Paragraph style={{ margin: '8px 0 6px' }}>{item.comment}</Paragraph>}
+                      <Card size="small" style={{ background: '#fafafa', borderRadius: 8 }}>
+                        <Text strong>{item.original_post?.title}</Text>
+                        <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '4px 0 0', color: '#6b7280' }}>
                           {item.original_post?.content}
                         </Paragraph>
                       </Card>
-                      <Text type="secondary" style={{ fontSize: 11 }}>
-                        {new Date(item.created_at).toLocaleString()}
-                      </Text>
                     </div>
                   ) : (
                     <div style={{ width: '100%' }}>
-                      <Space size={6}>
-                        <Tag color={TAG_CONFIG[item.tag]?.color}>
-                          {TAG_CONFIG[item.tag]?.label}
-                        </Tag>
-                        <Text strong style={{ fontSize: 14 }}>{item.title}</Text>
+                      <Space size={6} wrap>
+                        <Tag color={TAG_CONFIG[item.tag]?.color}>{TAG_CONFIG[item.tag]?.label}</Tag>
+                        <StatusTag status={item.status} />
+                        {item.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
+                        <Text strong>{item.title}</Text>
                       </Space>
-                      <Paragraph
-                        ellipsis={{ rows: 2 }}
-                        style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 13 }}
-                      >
+                      <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '6px 0 0', color: '#6b7280' }}>
                         {item.content}
                       </Paragraph>
-                      <Space size={12} style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
-                        <span><CommentOutlined /> {item.comment_count}</span>
-                        <span><ShareAltOutlined /> {item.forward_count}</span>
-                        <span>{new Date(item.created_at).toLocaleString()}</span>
-                      </Space>
+                      {item.status === 'rejected' && (
+                        <Text type="danger">
+                          Rejected: {item.rejection_reason}
+                          {item.review_note ? ` · ${item.review_note}` : ''}
+                        </Text>
+                      )}
                     </div>
                   )}
                 </List.Item>
@@ -663,9 +1007,15 @@ export default function Forum({ user }) {
             {myTotal > 10 && (
               <div style={{ textAlign: 'center', marginTop: 12 }}>
                 <Pagination
-                  current={myPage} total={myTotal} pageSize={10}
-                  onChange={(p) => { setMyPage(p); fetchMyPosts(p); }}
-                  showSizeChanger={false} size="small"
+                  current={myPage}
+                  total={myTotal}
+                  pageSize={10}
+                  onChange={(nextPage) => {
+                    setMyPage(nextPage);
+                    fetchMyPosts(nextPage);
+                  }}
+                  showSizeChanger={false}
+                  size="small"
                 />
               </div>
             )}
