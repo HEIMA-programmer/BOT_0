@@ -8,12 +8,7 @@ import {
 
 const { Text } = Typography;
 
-const AVATAR_COLORS = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#db2777', '#0891b2', '#d97706'];
-function getAvatarColor(username = '') {
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) hash += username.charCodeAt(i);
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
+import { getAvatarColor } from '../../utils/roomUtils';
 
 const MOCK_COMMENTS = [
   { id: 1, username: 'Alice', text: 'Great explanation here!', time: '18:42' },
@@ -146,7 +141,7 @@ export default function WatchTogether({ user }) {
               style={{ height: 4, background: '#334155', borderRadius: 2, marginBottom: 10, cursor: isHost ? 'pointer' : 'default' }}
               onClick={isHost ? (e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                setProgress(((e.clientX - rect.left) / rect.width) * 100);
+                setProgress(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)));
               } : undefined}
             >
               <div style={{ height: '100%', width: `${progress}%`, background: '#2563eb', borderRadius: 2, transition: 'width 0.5s linear' }} />
@@ -169,7 +164,7 @@ export default function WatchTogether({ user }) {
                 style={{ width: 80, height: 4, background: '#334155', borderRadius: 2, cursor: isHost ? 'pointer' : 'default' }}
                 onClick={isHost ? (e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
-                  setVolume(Math.round(((e.clientX - rect.left) / rect.width) * 100));
+                  setVolume(Math.max(0, Math.min(100, Math.round(((e.clientX - rect.left) / rect.width) * 100))));
                 } : undefined}
               >
                 <div style={{ height: '100%', width: `${volume}%`, background: '#60a5fa', borderRadius: 2 }} />

@@ -9,12 +9,7 @@ import {
 
 const { Text } = Typography;
 
-const AVATAR_COLORS = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#db2777', '#0891b2', '#d97706'];
-function getAvatarColor(username = '') {
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) hash += username.charCodeAt(i);
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
+import { getAvatarColor } from '../../utils/roomUtils';
 
 const MOCK_TOPICS = [
   'Free Talk', 'Daily Campus Life', 'Academic Writing',
@@ -56,7 +51,7 @@ export default function SpeakingRoom({ user }) {
   }, [isHost, members.length, navigate]);
 
   // Grid layout: 1 → 1 col, 2 → 2 cols, 3-4 → 2×2 grid
-  const gridCols = members.length <= 1 ? 1 : members.length === 2 ? 2 : 2;
+  const gridCols = members.length <= 1 ? 1 : 2;
   const tileSize = members.length <= 2 ? 280 : 200;
 
   return (

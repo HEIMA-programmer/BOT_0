@@ -54,12 +54,7 @@ const TABS = [
   { key: 'game', label: 'Game' },
 ];
 
-const AVATAR_COLORS = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#db2777', '#0891b2'];
-function getAvatarColor(username = '') {
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) hash += username.charCodeAt(i);
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
+import { getAvatarColor } from '../../utils/roomUtils';
 
 export default function MyRecords({ user }) {
   const navigate = useNavigate();
@@ -134,7 +129,7 @@ export default function MyRecords({ user }) {
                         <ClockCircleOutlined style={{ fontSize: 11, color: '#9ca3af' }} />
                         <Text type="secondary" style={{ fontSize: 12 }}>{record.duration}</Text>
                       </Space>
-                      <div style={{ display: 'flex', gap: -6 }}>
+                      <div style={{ display: 'flex' }}>
                         {record.participants.slice(0, 4).map((p, i) => (
                           <Avatar
                             key={p}

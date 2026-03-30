@@ -81,7 +81,7 @@ export default function App() {
   };
 
   const location = useLocation();
-  const hideNav = /^\/room\/.+\/(waiting|watch|speaking|game)/.test(location.pathname);
+  const hideNav = /^\/room\/[^/]+\/(waiting|watch|speaking|game)/.test(location.pathname);
 
   return (
     <ConfigProvider theme={theme}>

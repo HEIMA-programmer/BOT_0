@@ -65,13 +65,11 @@ export default function RoomLobby({ user }) {
   const [joining, setJoining] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      // production: GET /api/rooms/public
-      setRooms(prev => [...prev]);
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
+  // TODO: replace with real API polling when backend is ready
+  // useEffect(() => {
+  //   const timer = setInterval(() => fetchRooms(), 10000);
+  //   return () => clearInterval(timer);
+  // }, []);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
