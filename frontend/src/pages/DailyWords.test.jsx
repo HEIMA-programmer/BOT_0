@@ -142,8 +142,8 @@ describe('DailyWords page', () => {
 
     fireEvent.click(await screen.findByText('Start Learning'));
 
-    expect(await screen.findByText('American')).toBeTruthy();
-    expect(screen.getByText('British')).toBeTruthy();
+    expect(await screen.findByRole('radio', { name: /American/ })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /British/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('radio', { name: 'British' }));
     fireEvent.click(screen.getByRole('button', { name: /Listen \(UK\)/ }));
