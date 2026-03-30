@@ -1,4 +1,9 @@
+import React from 'react';
 import { vi } from 'vitest';
+
+// Ensure React is available globally for components that rely on automatic JSX
+// runtime in development but need the classic runtime in the test environment.
+globalThis.React = React;
 
 class ResizeObserverMock {
   observe() {}
@@ -29,6 +34,9 @@ Object.defineProperty(window, 'scrollTo', {
   writable: true,
   value: vi.fn(),
 });
+
+// Mock scrollIntoView for components that use ref.scrollIntoView()
+Element.prototype.scrollIntoView = vi.fn();
 
 Object.defineProperty(window, 'getComputedStyle', {
   writable: true,
