@@ -44,7 +44,10 @@ Object.defineProperty(window, 'speechSynthesis', {
   writable: true,
   value: {
     cancel: vi.fn(),
+    getVoices: vi.fn(() => []),
     speak: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
   },
 });
 

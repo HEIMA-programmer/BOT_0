@@ -1,18 +1,20 @@
 import React from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Typography, Card, Tag, Button, App, Tooltip, Spin, Modal, InputNumber,
   Empty, Progress, Divider, List, Space, Input, Drawer, Select, Badge
 } from 'antd';
 import {
-  SoundOutlined, PlusOutlined, CheckOutlined, CalendarOutlined,
+  PlusOutlined, CheckOutlined, CalendarOutlined,
   BookOutlined, SettingOutlined, PlayCircleOutlined, EyeOutlined,
   ReloadOutlined, TrophyOutlined, SearchOutlined, StarOutlined,
   DeleteOutlined, ExportOutlined, SortAscendingOutlined, CloseOutlined,
   FireOutlined
 } from '@ant-design/icons';
 import { dailyLearningAPI, wordBankAPI } from '../api';
+import WordPronunciationControl from '../components/WordPronunciationControl';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
+import useWordPronunciation from '../hooks/useWordPronunciation';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -109,6 +111,12 @@ export default function DailyWords() {
   const [bankShowDef, setBankShowDef] = useState(false);
 
   const { message } = App.useApp();
+  const speechWarningShownRef = useRef(false);
+  const {
+    selectedAccent,
+    setSelectedAccent,
+    speak: speakWithAccent,
+  } = useWordPronunciation();
 
   // Load today's data
   const loadToday = useCallback(async () => {
@@ -148,15 +156,24 @@ export default function DailyWords() {
   }, []);
 
   // Speech
-  const speakWord = (text) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.8;
-      window.speechSynthesis.speak(utterance);
+  const handleSpeakWord = (text, accent = selectedAccent) => {
+    const didSpeak = speakWithAccent(text, accent);
+
+    if (!didSpeak && !speechWarningShownRef.current) {
+      speechWarningShownRef.current = true;
+      message.warning('Text-to-speech is not available in this browser.');
     }
   };
+
+  const renderWordPronunciation = (text, options = {}) => (
+    <WordPronunciationControl
+      text={text}
+      selectedAccent={selectedAccent}
+      onAccentChange={setSelectedAccent}
+      onSpeak={handleSpeakWord}
+      {...options}
+    />
+  );
 
   // Settings
   const handleSaveSettings = () => {
@@ -773,14 +790,10 @@ export default function DailyWords() {
                 <Title level={1} style={{ margin: 0, color: '#1a1a2e', fontSize: 36 }}>
                   {currentLearningWord.text}
                 </Title>
-                <Button
-                  type="text"
-                  icon={<SoundOutlined />}
-                  onClick={() => speakWord(currentLearningWord.text)}
-                  style={{ color: '#667eea', marginTop: 4 }}
-                >
-                  Listen
-                </Button>
+                {renderWordPronunciation(currentLearningWord.text, {
+                  mode: 'learning',
+                  buttonStyle: { color: '#667eea', marginTop: 4 },
+                })}
               </div>
 
               {currentLearningWord.part_of_speech && (
@@ -925,14 +938,10 @@ export default function DailyWords() {
                 <Title level={1} style={{ margin: 0, color: '#1a1a2e', fontSize: 36 }}>
                   {currentReviewWord.text}
                 </Title>
-                <Button
-                  type="text"
-                  icon={<SoundOutlined />}
-                  onClick={() => speakWord(currentReviewWord.text)}
-                  style={{ color: '#f5576c', marginTop: 4 }}
-                >
-                  Listen
-                </Button>
+                {renderWordPronunciation(currentReviewWord.text, {
+                  mode: 'learning',
+                  buttonStyle: { color: '#f5576c', marginTop: 4 },
+                })}
               </div>
 
               {showReviewDef ? (
@@ -1018,12 +1027,10 @@ export default function DailyWords() {
           renderItem={(word) => (
             <List.Item
               actions={[
-                <Button
-                  key="sound"
-                  type="text"
-                  icon={<SoundOutlined />}
-                  onClick={() => speakWord(word.text)}
-                />,
+                renderWordPronunciation(word.text, {
+                  key: 'sound',
+                  size: 'small',
+                }),
                 <Button
                   key="bank"
                   type="text"
@@ -1132,7 +1139,9 @@ export default function DailyWords() {
                   title={
                     <Space>
                       <Text strong>{word.text}</Text>
-                      <Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} />
+                      {renderWordPronunciation(word.text, {
+                        size: 'small',
+                      })}
                     </Space>
                   }
                   description={word.definition}
@@ -1158,12 +1167,10 @@ export default function DailyWords() {
             renderItem={(word) => (
               <List.Item
                 actions={[
-                  <Button
-                    key="sound"
-                    type="text"
-                    icon={<SoundOutlined />}
-                    onClick={() => speakWord(word.text)}
-                  />,
+                  renderWordPronunciation(word.text, {
+                    key: 'sound',
+                    size: 'small',
+                  }),
                   <Button
                     key="bank"
                     type="text"
@@ -1210,12 +1217,10 @@ export default function DailyWords() {
             renderItem={(word) => (
               <List.Item
                 actions={[
-                  <Button
-                    key="sound"
-                    type="text"
-                    icon={<SoundOutlined />}
-                    onClick={() => speakWord(word.text)}
-                  />,
+                  renderWordPronunciation(word.text, {
+                    key: 'sound',
+                    size: 'small',
+                  }),
                   <Button
                     key="bank"
                     type="text"
@@ -1375,15 +1380,12 @@ export default function DailyWords() {
                     )}
                   </div>
                   <Space size={4}>
-                    <Tooltip title="Listen">
-                      <Button
-                        shape="circle"
-                        size="small"
-                        icon={<SoundOutlined />}
-                        onClick={() => speakWord(entry.text)}
-                        style={{ color: '#059669', borderColor: '#86efac' }}
-                      />
-                    </Tooltip>
+                    {renderWordPronunciation(entry.text, {
+                      size: 'small',
+                      buttonType: 'default',
+                      buttonStyle: { color: '#059669', borderColor: '#86efac' },
+                      dropdownButtonStyle: { color: '#059669', borderColor: '#86efac' },
+                    })}
                     <Tooltip title="Remove">
                       <Button
                         shape="circle"
@@ -1461,14 +1463,10 @@ export default function DailyWords() {
               <Title level={1} style={{ margin: 0, color: '#1a1a2e', fontSize: 36 }}>
                 {currentBankLearningWord.text}
               </Title>
-              <Button
-                type="text"
-                icon={<SoundOutlined />}
-                onClick={() => speakWord(currentBankLearningWord.text)}
-                style={{ color: '#059669', marginTop: 4 }}
-              >
-                Listen
-              </Button>
+              {renderWordPronunciation(currentBankLearningWord.text, {
+                mode: 'learning',
+                buttonStyle: { color: '#059669', marginTop: 4 },
+              })}
 
               {bankShowDef ? (
                 <div style={{
