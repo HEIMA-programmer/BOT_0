@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import { wordBankAPI, dailyLearningAPI } from '../api';
 import WordPronunciationControl from '../components/WordPronunciationControl';
+import useAwlExampleSentences, { highlightWordInSentence } from '../hooks/useAwlExampleSentences';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 import useWordPronunciation from '../hooks/useWordPronunciation';
 
@@ -72,6 +73,7 @@ export default function WordBank() {
     setSelectedAccent,
     speak: speakWithAccent,
   } = useWordPronunciation();
+  const { getExampleSentence } = useAwlExampleSentences();
 
   // ==================== Data Loading ====================
   const loadWordBank = async () => {
@@ -179,6 +181,42 @@ export default function WordBank() {
       {...options}
     />
   );
+
+  const getWordExampleSentence = (word) => (
+    word ? getExampleSentence(word.text, word.example_sentence) : ''
+  );
+
+  const renderExampleBlock = (word, labelColor) => {
+    const exampleSentence = getWordExampleSentence(word);
+
+    if (!exampleSentence) {
+      return null;
+    }
+
+    return (
+      <>
+        <Divider style={{ margin: '12px 0' }} />
+        <Text strong style={{ color: labelColor }}>Example:</Text>
+        <Paragraph italic style={{ margin: '8px 0', color: '#6b7280' }}>
+          &ldquo;{highlightWordInSentence(exampleSentence, word.text)}&rdquo;
+        </Paragraph>
+      </>
+    );
+  };
+
+  const renderInlineExampleSentence = (word, style = {}, ellipsis = false) => {
+    const exampleSentence = getWordExampleSentence(word);
+
+    if (!exampleSentence) {
+      return null;
+    }
+
+    return (
+      <Paragraph italic style={style} ellipsis={ellipsis}>
+        &ldquo;{highlightWordInSentence(exampleSentence, word.text)}&rdquo;
+      </Paragraph>
+    );
+  };
 
   // ==================== Export ====================
   const exportWords = async (format) => {
@@ -520,11 +558,11 @@ export default function WordBank() {
                   <Paragraph style={{ margin: '8px 0 4px', color: '#374151', fontSize: 15 }}>
                     {entry.definition}
                   </Paragraph>
-                  {entry.example_sentence && (
-                    <Text italic style={{ color: '#6b7280', fontSize: 14, display: 'block', marginBottom: 4 }}>
-                      &ldquo;{entry.example_sentence}&rdquo;
-                    </Text>
-                  )}
+                  {renderInlineExampleSentence(entry, {
+                    color: '#6b7280',
+                    fontSize: 14,
+                    margin: '0 0 4px',
+                  })}
                   <Text type="secondary" style={{ fontSize: 12 }}>
                     Added: {new Date(entry.added_at).toLocaleDateString()}
                   </Text>
@@ -594,15 +632,7 @@ export default function WordBank() {
                   <Paragraph style={{ margin: '8px 0', fontSize: 15 }}>
                     {currentLearningWord.definition}
                   </Paragraph>
-                  {currentLearningWord.example_sentence && (
-                    <>
-                      <Divider style={{ margin: '12px 0' }} />
-                      <Text strong style={{ color: '#059669' }}>Example:</Text>
-                      <Paragraph italic style={{ margin: '8px 0', color: '#6b7280' }}>
-                        &ldquo;{currentLearningWord.example_sentence}&rdquo;
-                      </Paragraph>
-                    </>
-                  )}
+                  {renderExampleBlock(currentLearningWord, '#059669')}
                 </div>
               ) : (
                 <Button type="dashed" size="large" onClick={() => setShowDef(true)} style={{ marginTop: 16 }}>

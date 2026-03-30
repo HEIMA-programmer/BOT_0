@@ -65,6 +65,41 @@ Object.defineProperty(navigator, 'clipboard', {
   },
 });
 
+Object.defineProperty(globalThis, 'fetch', {
+  writable: true,
+  value: vi.fn((input) => {
+    const url = String(input);
+
+    if (url.includes('/AWL/AWL.csv')) {
+      return Promise.resolve({
+        ok: true,
+        text: async () => [
+          'hypothesis,A proposed explanation.',
+          'empirical,Based on observation.',
+          'analysis,A detailed investigation of the parts of something',
+        ].join('\n'),
+      });
+    }
+
+    if (url.includes('/AWL/AWL_example_sentences.txt')) {
+      return Promise.resolve({
+        ok: true,
+        text: async () => [
+          'The hypothesis was supported by classroom evidence.',
+          'The empirical study relied on direct observation.',
+          'The analysis revealed a clear pattern in the results.',
+        ].join('\n'),
+      });
+    }
+
+    return Promise.resolve({
+      ok: false,
+      status: 404,
+      text: async () => '',
+    });
+  }),
+});
+
 if (!window.localStorage || typeof window.localStorage.clear !== 'function') {
   let store = {};
   Object.defineProperty(window, 'localStorage', {
