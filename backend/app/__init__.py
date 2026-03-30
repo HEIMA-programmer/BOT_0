@@ -115,16 +115,16 @@ def _ensure_runtime_schema():
             db.session.execute(text(ddl))
 
     db.session.execute(text(
-        "UPDATE forum_posts SET status = COALESCE(status, 'approved')"
+        "UPDATE forum_posts SET status = 'approved' WHERE status IS NULL"
     ))
     db.session.execute(text(
-        'UPDATE forum_posts SET is_pinned = COALESCE(is_pinned, 0)'
+        'UPDATE forum_posts SET is_pinned = 0 WHERE is_pinned IS NULL'
     ))
     db.session.execute(text(
-        'UPDATE forum_posts SET updated_at = COALESCE(updated_at, created_at)'
+        'UPDATE forum_posts SET updated_at = created_at WHERE updated_at IS NULL'
     ))
     db.session.execute(text(
-        "UPDATE users SET is_admin = COALESCE(is_admin, 0)"
+        'UPDATE users SET is_admin = 0 WHERE is_admin IS NULL'
     ))
     db.session.commit()
 
@@ -187,6 +187,13 @@ def _ensure_dev_admin_user(app):
     """Create a development admin account if it doesn't exist."""
     from app.models.user import User
 
+    admin_password = os.getenv('DEV_ADMIN_PASSWORD')
+    if not admin_password:
+        app.logger.warning(
+            'DEV_ADMIN_PASSWORD not set; skipping creation of development admin account'
+        )
+        return
+
     admin = User.query.filter_by(email='admin@example.com').first()
     if admin:
         if not admin.is_admin:
@@ -196,8 +203,8 @@ def _ensure_dev_admin_user(app):
         return
 
     admin = User(username='adminuser', email='admin@example.com')
-    admin.set_password('admin12345')
+    admin.set_password(admin_password)
     admin.is_admin = True
     db.session.add(admin)
     db.session.commit()
-    app.logger.info('Created dev admin user: admin@example.com / admin12345')
+    app.logger.info('Created dev admin user: admin@example.com')

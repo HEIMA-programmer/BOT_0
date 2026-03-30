@@ -22,6 +22,11 @@ REJECTION_REASONS = (
     'The post contains inappropriate or unfriendly language',
     'The attachment or external link does not meet the requirements',
 )
+VALID_POST_STATUSES = (
+    ForumPost.STATUS_PENDING,
+    ForumPost.STATUS_APPROVED,
+    ForumPost.STATUS_REJECTED,
+)
 
 
 def _allowed_file(filename):
@@ -62,6 +67,8 @@ def _get_visible_post_or_404(post_id):
 def _serialise_post(post, include_comments=False):
     data = post.to_dict(include_comments=include_comments)
     data['can_delete'] = _is_admin() or post.user_id == current_user.id
+    # Intentional policy: admins can edit their own posts at any status, while
+    # regular users can only revise their own rejected posts for resubmission.
     data['can_edit'] = (_is_admin() and post.user_id == current_user.id) or (
         not _is_admin() and post.user_id == current_user.id and post.status == ForumPost.STATUS_REJECTED
     )
@@ -77,7 +84,7 @@ def _touch_post(post):
 
 def _post_query_for_current_user():
     if _is_admin():
-        return ForumPost.query.filter_by(status=ForumPost.STATUS_APPROVED)
+        return ForumPost.query
     return ForumPost.query.filter_by(status=ForumPost.STATUS_APPROVED)
 
 
@@ -98,7 +105,7 @@ def get_posts():
         query = query.filter_by(tag=tag)
     if user_id:
         query = query.filter_by(user_id=user_id)
-    if _is_admin() and status == ForumPost.STATUS_APPROVED:
+    if _is_admin() and status in VALID_POST_STATUSES:
         query = query.filter_by(status=status)
 
     query = query.order_by(ForumPost.is_pinned.desc(), ForumPost.created_at.desc())
@@ -340,7 +347,8 @@ def my_posts():
 @forum_bp.route('/admin/rejection-reasons', methods=['GET'])
 @login_required
 def get_rejection_reasons():
-    if (resp := _require_admin()) is not None:
+    resp = _require_admin()
+    if resp is not None:
         return resp
     return jsonify({'reasons': list(REJECTION_REASONS)}), 200
 
@@ -348,7 +356,8 @@ def get_rejection_reasons():
 @forum_bp.route('/admin/pending-posts', methods=['GET'])
 @login_required
 def get_pending_posts():
-    if (resp := _require_admin()) is not None:
+    resp = _require_admin()
+    if resp is not None:
         return resp
 
     page = request.args.get('page', 1, type=int)
@@ -368,7 +377,8 @@ def get_pending_posts():
 @forum_bp.route('/admin/posts/<int:post_id>/review', methods=['POST'])
 @login_required
 def review_post(post_id):
-    if (resp := _require_admin()) is not None:
+    resp = _require_admin()
+    if resp is not None:
         return resp
 
     post = db.session.get(ForumPost, post_id)
@@ -405,7 +415,8 @@ def review_post(post_id):
 @forum_bp.route('/admin/posts/<int:post_id>/pin', methods=['POST'])
 @login_required
 def pin_post(post_id):
-    if (resp := _require_admin()) is not None:
+    resp = _require_admin()
+    if resp is not None:
         return resp
 
     post = db.session.get(ForumPost, post_id)

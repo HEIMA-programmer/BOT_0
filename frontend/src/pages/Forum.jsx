@@ -54,6 +54,9 @@ const STATUS_CONFIG = {
   rejected: { label: 'Rejected', color: 'red' },
 };
 const TAGS = Object.keys(TAG_CONFIG);
+const POSTS_PAGE_SIZE = 10;
+const REVIEW_PAGE_SIZE = 8;
+const MY_POSTS_PAGE_SIZE = 10;
 
 function VideoLoadingOverlay({ inline }) {
   return (
@@ -232,7 +235,7 @@ export default function Forum({ user }) {
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, per_page: 10 };
+      const params = { page, per_page: POSTS_PAGE_SIZE };
       if (activeTab !== 'all') params.tag = activeTab;
       const res = await forumAPI.getPosts(params);
       setPosts(res.data.posts);
@@ -244,11 +247,11 @@ export default function Forum({ user }) {
     }
   }, [activeTab, message, page]);
 
-  const fetchPendingPosts = useCallback(async (targetPage = reviewPage) => {
+  const fetchPendingPosts = useCallback(async (targetPage) => {
     if (!isAdmin) return;
     setReviewLoading(true);
     try {
-      const res = await forumAPI.getPendingPosts({ page: targetPage, per_page: 8 });
+      const res = await forumAPI.getPendingPosts({ page: targetPage, per_page: REVIEW_PAGE_SIZE });
       setReviewItems(res.data.posts);
       setReviewTotal(res.data.total);
     } catch {
@@ -256,12 +259,12 @@ export default function Forum({ user }) {
     } finally {
       setReviewLoading(false);
     }
-  }, [isAdmin, message, reviewPage]);
+  }, [isAdmin, message]);
 
   const fetchMyPosts = useCallback(async (targetPage = myPage) => {
     setMyLoading(true);
     try {
-      const res = await forumAPI.getMyPosts({ page: targetPage, per_page: 10 });
+      const res = await forumAPI.getMyPosts({ page: targetPage, per_page: MY_POSTS_PAGE_SIZE });
       setMyItems(res.data.items);
       setMyTotal(res.data.total);
     } catch {
@@ -623,12 +626,12 @@ export default function Forum({ user }) {
                   onReview={openReviewModal}
                 />
               ))}
-              {reviewTotal > 8 && (
+              {reviewTotal > REVIEW_PAGE_SIZE && (
                 <div style={{ textAlign: 'center', marginTop: 12 }}>
                   <Pagination
                     current={reviewPage}
                     total={reviewTotal}
-                    pageSize={8}
+                    pageSize={REVIEW_PAGE_SIZE}
                     onChange={(nextPage) => setReviewPage(nextPage)}
                     showSizeChanger={false}
                   />
@@ -655,9 +658,9 @@ export default function Forum({ user }) {
       ) : (
         <>
           {posts.map(renderPostCard)}
-          {total > 10 && (
+          {total > POSTS_PAGE_SIZE && (
             <div style={{ textAlign: 'center', marginTop: 16 }}>
-              <Pagination current={page} total={total} pageSize={10} onChange={setPage} showSizeChanger={false} />
+              <Pagination current={page} total={total} pageSize={POSTS_PAGE_SIZE} onChange={setPage} showSizeChanger={false} />
             </div>
           )}
         </>
@@ -1004,12 +1007,12 @@ export default function Forum({ user }) {
                 </List.Item>
               )}
             />
-            {myTotal > 10 && (
+            {myTotal > MY_POSTS_PAGE_SIZE && (
               <div style={{ textAlign: 'center', marginTop: 12 }}>
                 <Pagination
                   current={myPage}
                   total={myTotal}
-                  pageSize={10}
+                  pageSize={MY_POSTS_PAGE_SIZE}
                   onChange={(nextPage) => {
                     setMyPage(nextPage);
                     fetchMyPosts(nextPage);
