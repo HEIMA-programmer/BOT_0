@@ -177,7 +177,7 @@ describe('DailyWords page', () => {
     renderWithProviders(<DailyWords />);
 
     fireEvent.click(await screen.findByText('Start Learning'));
-    fireEvent.click(screen.getByRole('button', { name: /Tap to Reveal Definition/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Tap to Reveal Definition/i }));
 
     await waitFor(() => {
       const exampleNode = [...document.body.querySelectorAll('*')].find(
