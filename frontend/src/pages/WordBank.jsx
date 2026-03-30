@@ -1,17 +1,19 @@
 import React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Typography, Card, Button, Tag, Empty, Tooltip, Input, Space, Spin,
   Modal, Select, List, Progress, Divider, App
 } from 'antd';
 import {
-  DeleteOutlined, SoundOutlined, SearchOutlined, BookOutlined,
+  DeleteOutlined, SearchOutlined, BookOutlined,
   ReloadOutlined, ExportOutlined, SortAscendingOutlined,
   PlayCircleOutlined, CheckOutlined, PlusOutlined, EyeOutlined,
   StarOutlined, CloseOutlined
 } from '@ant-design/icons';
 import { wordBankAPI, dailyLearningAPI } from '../api';
+import WordPronunciationControl from '../components/WordPronunciationControl';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
+import useWordPronunciation from '../hooks/useWordPronunciation';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -64,6 +66,12 @@ export default function WordBank() {
   const [masteredLoading, setMasteredLoading] = useState(false);
 
   const { message } = App.useApp();
+  const speechWarningShownRef = useRef(false);
+  const {
+    selectedAccent,
+    setSelectedAccent,
+    speak: speakWithAccent,
+  } = useWordPronunciation();
 
   // ==================== Data Loading ====================
   const loadWordBank = async () => {
@@ -153,15 +161,24 @@ export default function WordBank() {
   };
 
   // ==================== Speech ====================
-  const speakWord = (text) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.8;
-      window.speechSynthesis.speak(utterance);
+  const handleSpeakWord = (text, accent = selectedAccent) => {
+    const didSpeak = speakWithAccent(text, accent);
+
+    if (!didSpeak && !speechWarningShownRef.current) {
+      speechWarningShownRef.current = true;
+      message.warning('Text-to-speech is not available in this browser.');
     }
   };
+
+  const renderWordPronunciation = (text, options = {}) => (
+    <WordPronunciationControl
+      text={text}
+      selectedAccent={selectedAccent}
+      onAccentChange={setSelectedAccent}
+      onSpeak={handleSpeakWord}
+      {...options}
+    />
+  );
 
   // ==================== Export ====================
   const exportWords = async (format) => {
@@ -514,14 +531,12 @@ export default function WordBank() {
                 </div>
                 {!batchDeleteMode && (
                   <Space size={8}>
-                    <Tooltip title="Listen">
-                      <Button
-                        shape="circle"
-                        icon={<SoundOutlined />}
-                        onClick={() => speakWord(entry.text)}
-                        style={{ color: '#2563eb', borderColor: '#93c5fd' }}
-                      />
-                    </Tooltip>
+                    {renderWordPronunciation(entry.text, {
+                      size: 'small',
+                      buttonType: 'default',
+                      buttonStyle: { color: '#2563eb', borderColor: '#93c5fd' },
+                      dropdownButtonStyle: { color: '#2563eb', borderColor: '#93c5fd' },
+                    })}
                     <Tooltip title="Remove">
                       <Button
                         shape="circle"
@@ -566,14 +581,10 @@ export default function WordBank() {
               <Title level={1} style={{ margin: 0, color: '#1a1a2e', fontSize: 36 }}>
                 {currentLearningWord.text}
               </Title>
-              <Button
-                type="text"
-                icon={<SoundOutlined />}
-                onClick={() => speakWord(currentLearningWord.text)}
-                style={{ color: '#059669', marginTop: 4 }}
-              >
-                Listen
-              </Button>
+              {renderWordPronunciation(currentLearningWord.text, {
+                mode: 'learning',
+                buttonStyle: { color: '#059669', marginTop: 4 },
+              })}
 
               {showDef ? (
                 <div style={{
@@ -688,7 +699,12 @@ export default function WordBank() {
                 ),
               ].filter(Boolean)}>
                 <List.Item.Meta
-                  title={<Space><Text strong>{word.text}</Text><Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} /></Space>}
+                  title={
+                    <Space>
+                      <Text strong>{word.text}</Text>
+                      {renderWordPronunciation(word.text, { size: 'small' })}
+                    </Space>
+                  }
                   description={word.definition}
                 />
 
@@ -724,7 +740,12 @@ export default function WordBank() {
                 </Button>,
               ]}>
                 <List.Item.Meta
-                  title={<Space><Text strong>{word.text}</Text><Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} /></Space>}
+                  title={
+                    <Space>
+                      <Text strong>{word.text}</Text>
+                      {renderWordPronunciation(word.text, { size: 'small' })}
+                    </Space>
+                  }
                   description={word.definition}
                 />
               </List.Item>
@@ -760,7 +781,12 @@ export default function WordBank() {
                 </Button>,
               ]}>
                 <List.Item.Meta
-                  title={<Space><Text strong>{word.text}</Text><Button type="text" size="small" icon={<SoundOutlined />} onClick={() => speakWord(word.text)} /></Space>}
+                  title={
+                    <Space>
+                      <Text strong>{word.text}</Text>
+                      {renderWordPronunciation(word.text, { size: 'small' })}
+                    </Space>
+                  }
                   description={word.definition}
                 />
               </List.Item>
