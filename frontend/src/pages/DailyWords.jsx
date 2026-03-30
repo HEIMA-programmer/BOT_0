@@ -13,6 +13,7 @@ import {
 } from '@ant-design/icons';
 import { dailyLearningAPI, wordBankAPI } from '../api';
 import WordPronunciationControl from '../components/WordPronunciationControl';
+import useAwlExampleSentences, { highlightWordInSentence } from '../hooks/useAwlExampleSentences';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 import useWordPronunciation from '../hooks/useWordPronunciation';
 
@@ -117,6 +118,7 @@ export default function DailyWords() {
     setSelectedAccent,
     speak: speakWithAccent,
   } = useWordPronunciation();
+  const { getExampleSentence } = useAwlExampleSentences();
 
   // Load today's data
   const loadToday = useCallback(async () => {
@@ -174,6 +176,42 @@ export default function DailyWords() {
       {...options}
     />
   );
+
+  const getWordExampleSentence = (word) => (
+    word ? getExampleSentence(word.text, word.example_sentence) : ''
+  );
+
+  const renderExampleBlock = (word, labelColor) => {
+    const exampleSentence = getWordExampleSentence(word);
+
+    if (!exampleSentence) {
+      return null;
+    }
+
+    return (
+      <>
+        <Divider style={{ margin: '12px 0' }} />
+        <Text strong style={{ color: labelColor }}>Example:</Text>
+        <Paragraph italic style={{ margin: '8px 0', color: '#6b7280' }}>
+          &ldquo;{highlightWordInSentence(exampleSentence, word.text)}&rdquo;
+        </Paragraph>
+      </>
+    );
+  };
+
+  const renderInlineExampleSentence = (word, style = {}, ellipsis = false) => {
+    const exampleSentence = getWordExampleSentence(word);
+
+    if (!exampleSentence) {
+      return null;
+    }
+
+    return (
+      <Paragraph italic style={style} ellipsis={ellipsis}>
+        &ldquo;{highlightWordInSentence(exampleSentence, word.text)}&rdquo;
+      </Paragraph>
+    );
+  };
 
   // Settings
   const handleSaveSettings = () => {
@@ -813,15 +851,7 @@ export default function DailyWords() {
                   <Paragraph style={{ margin: '8px 0', fontSize: 15 }}>
                     {currentLearningWord.definition}
                   </Paragraph>
-                  {currentLearningWord.example_sentence && (
-                    <>
-                      <Divider style={{ margin: '12px 0' }} />
-                      <Text strong style={{ color: '#667eea' }}>Example:</Text>
-                      <Paragraph italic style={{ margin: '8px 0', color: '#6b7280' }}>
-                        &ldquo;{currentLearningWord.example_sentence}&rdquo;
-                      </Paragraph>
-                    </>
-                  )}
+                  {renderExampleBlock(currentLearningWord, '#667eea')}
                 </div>
               ) : (
                 <Button
@@ -957,15 +987,7 @@ export default function DailyWords() {
                   <Paragraph style={{ margin: '8px 0', fontSize: 15 }}>
                     {currentReviewWord.definition}
                   </Paragraph>
-                  {currentReviewWord.example_sentence && (
-                    <>
-                      <Divider style={{ margin: '12px 0' }} />
-                      <Text strong style={{ color: '#f5576c' }}>Example:</Text>
-                      <Paragraph italic style={{ margin: '8px 0', color: '#6b7280' }}>
-                        &ldquo;{currentReviewWord.example_sentence}&rdquo;
-                      </Paragraph>
-                    </>
-                  )}
+                  {renderExampleBlock(currentReviewWord, '#f5576c')}
                 </div>
               ) : (
                 <Button
@@ -1373,10 +1395,10 @@ export default function DailyWords() {
                     <Paragraph style={{ margin: '6px 0 2px', color: '#374151', fontSize: 14 }} ellipsis={{ rows: 2 }}>
                       {entry.definition}
                     </Paragraph>
-                    {entry.example_sentence && (
-                      <Text italic style={{ color: '#9ca3af', fontSize: 12 }} ellipsis>
-                        &ldquo;{entry.example_sentence}&rdquo;
-                      </Text>
+                    {renderInlineExampleSentence(
+                      entry,
+                      { color: '#9ca3af', fontSize: 12, margin: 0 },
+                      { rows: 1 }
                     )}
                   </div>
                   <Space size={4}>
@@ -1479,15 +1501,7 @@ export default function DailyWords() {
                   <Paragraph style={{ margin: '8px 0', fontSize: 15 }}>
                     {currentBankLearningWord.definition}
                   </Paragraph>
-                  {currentBankLearningWord.example_sentence && (
-                    <>
-                      <Divider style={{ margin: '12px 0' }} />
-                      <Text strong style={{ color: '#059669' }}>Example:</Text>
-                      <Paragraph italic style={{ margin: '8px 0', color: '#6b7280' }}>
-                        &ldquo;{currentBankLearningWord.example_sentence}&rdquo;
-                      </Paragraph>
-                    </>
-                  )}
+                  {renderExampleBlock(currentBankLearningWord, '#059669')}
                 </div>
               ) : (
                 <Button type="dashed" size="large" onClick={() => setBankShowDef(true)} style={{ marginTop: 16 }}>

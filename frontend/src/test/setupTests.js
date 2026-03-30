@@ -1,4 +1,9 @@
+import React from 'react';
 import { vi } from 'vitest';
+
+// Ensure React is available globally for components that rely on automatic JSX
+// runtime in development but need the classic runtime in the test environment.
+globalThis.React = React;
 
 class ResizeObserverMock {
   observe() {}
@@ -29,6 +34,9 @@ Object.defineProperty(window, 'scrollTo', {
   writable: true,
   value: vi.fn(),
 });
+
+// Mock scrollIntoView for components that use ref.scrollIntoView()
+Element.prototype.scrollIntoView = vi.fn();
 
 Object.defineProperty(window, 'getComputedStyle', {
   writable: true,
@@ -63,6 +71,41 @@ Object.defineProperty(navigator, 'clipboard', {
   value: {
     writeText: vi.fn(),
   },
+});
+
+Object.defineProperty(globalThis, 'fetch', {
+  writable: true,
+  value: vi.fn((input) => {
+    const url = String(input);
+
+    if (url.includes('/AWL/AWL.csv')) {
+      return Promise.resolve({
+        ok: true,
+        text: async () => [
+          'hypothesis,A proposed explanation.',
+          'empirical,Based on observation.',
+          'analysis,A detailed investigation of the parts of something',
+        ].join('\n'),
+      });
+    }
+
+    if (url.includes('/AWL/AWL_example_sentences.txt')) {
+      return Promise.resolve({
+        ok: true,
+        text: async () => [
+          'The hypothesis was supported by classroom evidence.',
+          'The empirical study relied on direct observation.',
+          'The analysis revealed a clear pattern in the results.',
+        ].join('\n'),
+      });
+    }
+
+    return Promise.resolve({
+      ok: false,
+      status: 404,
+      text: async () => '',
+    });
+  }),
 });
 
 if (!window.localStorage || typeof window.localStorage.clear !== 'function') {

@@ -38,6 +38,7 @@ describe('WordBank page', () => {
     Object.values(mockWordBankAPI).forEach((fn) => fn.mockReset());
     Object.values(mockDailyLearningAPI).forEach((fn) => fn.mockReset());
     Object.values(mockProgressAPI).forEach((fn) => fn.mockReset());
+    fetch.mockClear();
   });
 
   it('renders saved words and filters them by search term', async () => {
@@ -69,15 +70,15 @@ describe('WordBank page', () => {
     renderWithProviders(<WordBank />);
 
     expect(await screen.findByText('My Word Bank')).toBeTruthy();
-    expect(await screen.findByText('hypothesis')).toBeTruthy();
-    expect(await screen.findByText('empirical')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'hypothesis' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'empirical' })).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText('Search words...'), {
       target: { value: 'hypo' },
     });
 
     await waitFor(() => {
-      expect(screen.getByText('hypothesis')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'hypothesis' })).toBeTruthy();
       expect(screen.queryByText('empirical')).toBeNull();
     });
   });
@@ -144,5 +145,37 @@ describe('WordBank page', () => {
 
     await waitFor(() => expect(mockWordBankAPI.getAll).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('rubric')).toBeTruthy();
+  });
+
+  it('shows AWL example sentences for saved words and bolds the matching word', async () => {
+    mockWordBankAPI.getAll.mockResolvedValue({
+      data: {
+        words: [
+          {
+            id: 1,
+            word_id: 11,
+            text: 'hypothesis',
+            definition: 'A proposed explanation.',
+            added_at: '2026-03-18T10:00:00',
+            difficulty_level: 'intermediate',
+            part_of_speech: 'noun',
+          },
+        ],
+      },
+    });
+
+    const { container } = renderWithProviders(<WordBank />);
+
+    expect(await screen.findByRole('heading', { name: 'hypothesis' })).toBeTruthy();
+
+    await waitFor(() => {
+      const exampleNode = [...container.querySelectorAll('*')].find(
+        (node) =>
+          node.textContent?.includes('The hypothesis was supported by classroom evidence.') &&
+          node.querySelector('strong')?.textContent === 'hypothesis'
+      );
+
+      expect(exampleNode).toBeTruthy();
+    });
   });
 });

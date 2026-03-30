@@ -36,6 +36,7 @@ describe('DailyWords page', () => {
     Object.values(mockDailyLearningAPI).forEach((fn) => fn.mockReset());
     Object.values(mockWordBankAPI).forEach((fn) => fn.mockReset());
     Object.values(mockProgressAPI).forEach((fn) => fn.mockReset());
+    fetch.mockClear();
     window.speechSynthesis.cancel.mockClear();
     window.speechSynthesis.speak.mockClear();
     window.speechSynthesis.getVoices.mockClear();
@@ -150,5 +151,42 @@ describe('DailyWords page', () => {
 
     await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalledTimes(1));
     expect(window.speechSynthesis.speak.mock.lastCall[0].lang).toBe('en-GB');
+  });
+
+  it('shows AWL example sentences in the learning card and bolds the current word', async () => {
+    mockDailyLearningAPI.getToday.mockResolvedValue({
+      data: {
+        date: '2026-03-18',
+        words: [
+          {
+            id: 11,
+            word_id: 1,
+            text: 'hypothesis',
+            definition: 'A proposed explanation.',
+            part_of_speech: 'noun',
+            status: 'pending',
+          },
+        ],
+        review_count: 0,
+        mastered_count: 0,
+        total_words: 1,
+      },
+    });
+    mockWordBankAPI.getAll.mockResolvedValue({ data: { words: [] } });
+
+    renderWithProviders(<DailyWords />);
+
+    fireEvent.click(await screen.findByText('Start Learning'));
+    fireEvent.click(await screen.findByRole('button', { name: /Tap to Reveal Definition/i }));
+
+    await waitFor(() => {
+      const exampleNode = [...document.body.querySelectorAll('*')].find(
+        (node) =>
+          node.textContent?.includes('The hypothesis was supported by classroom evidence.') &&
+          node.querySelector('strong')?.textContent === 'hypothesis'
+      );
+
+      expect(exampleNode).toBeTruthy();
+    });
   });
 });
