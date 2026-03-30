@@ -141,7 +141,9 @@ describe('DailyWords page', () => {
 
     renderWithProviders(<DailyWords />);
 
-    fireEvent.click(await screen.findByText('Start Learning'));
+    // Wait for API data to load before clicking (otherwise todayWords is empty and startLearning early-returns)
+    await screen.findByText('1 words to learn today');
+    fireEvent.click(screen.getByText('Start Learning'));
 
     expect(await screen.findByRole('radio', { name: /American/ })).toBeTruthy();
     expect(screen.getByRole('radio', { name: /British/ })).toBeTruthy();
@@ -176,7 +178,9 @@ describe('DailyWords page', () => {
 
     renderWithProviders(<DailyWords />);
 
-    fireEvent.click(await screen.findByText('Start Learning'));
+    // Wait for API data to load before clicking (otherwise todayWords is empty and startLearning early-returns)
+    await screen.findByText('1 words to learn today');
+    fireEvent.click(screen.getByText('Start Learning'));
     fireEvent.click(await screen.findByRole('button', { name: /Tap to Reveal Definition/i }));
 
     await waitFor(() => {
