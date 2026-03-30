@@ -7,9 +7,14 @@ import asyncio
 import base64
 import queue
 import threading
-from google import genai
-from google.genai import types
 import os
+
+try:
+    from google import genai
+    from google.genai import types as genai_types
+except ImportError:
+    genai = None
+    genai_types = None
 
 
 MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
@@ -38,6 +43,12 @@ class ConversationService:
         api_key = os.getenv('GOOGLE_API_KEY')
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not found in environment variables")
+
+        if genai is None or genai_types is None:
+            raise RuntimeError(
+                "Gemini SDK 未安装，请在 backend 目录执行 `pip install -r requirements.txt` "
+                "或单独安装 `google-genai`。"
+            )
 
         self.client = genai.Client(api_key=api_key)
         self.system_prompt = system_prompt or SYSTEM_PROMPT
@@ -126,7 +137,7 @@ class ConversationService:
                 # Concatenate chunks and send as one blob for efficiency
                 combined = b''.join(chunks)
                 await session.send_realtime_input(
-                    audio=types.Blob(data=combined, mime_type="audio/pcm;rate=16000")
+                    audio=genai_types.Blob(data=combined, mime_type="audio/pcm;rate=16000")
                 )
             elif not chunks:
                 await asyncio.sleep(0.02)
@@ -149,7 +160,7 @@ class ConversationService:
                 if response.tool_call:
                     function_responses = []
                     for fc in response.tool_call.function_calls:
-                        function_responses.append(types.FunctionResponse(
+                        function_responses.append(genai_types.FunctionResponse(
                             id=fc.id, name=fc.name, response={"result": "ok"}
                         ))
                     await session.send_tool_response(function_responses=function_responses)

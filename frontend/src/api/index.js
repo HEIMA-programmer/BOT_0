@@ -71,6 +71,7 @@ export const forumAPI = {
     api.post('/forum/posts', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  updatePost: (id, data) => api.patch(`/forum/posts/${id}`, data),
   deletePost: (id) => api.delete(`/forum/posts/${id}`),
   addComment: (postId, content) =>
     api.post(`/forum/posts/${postId}/comments`, { content }),
@@ -78,6 +79,10 @@ export const forumAPI = {
   forwardPost: (postId, comment) =>
     api.post(`/forum/posts/${postId}/forward`, { comment }),
   getMyPosts: (params) => api.get('/forum/my-posts', { params }),
+  getPendingPosts: (params) => api.get('/forum/admin/pending-posts', { params }),
+  reviewPost: (id, data) => api.post(`/forum/admin/posts/${id}/review`, data),
+  pinPost: (id, isPinned) => api.post(`/forum/admin/posts/${id}/pin`, { is_pinned: isPinned }),
+  getRejectionReasons: () => api.get('/forum/admin/rejection-reasons'),
 };
 
 export const progressAPI = {
