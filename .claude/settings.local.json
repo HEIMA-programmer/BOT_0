@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npx vitest:*)",
-      "Bash(python -m pytest tests/ -v --tb=short)"
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(gh run:*)"
     ]
   }
 }

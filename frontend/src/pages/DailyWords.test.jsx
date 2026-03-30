@@ -176,9 +176,10 @@ describe('DailyWords page', () => {
 
     renderWithProviders(<DailyWords />);
 
-    fireEvent.click(await screen.findByText('Start Learning'));
-    const revealBtn = await screen.findByRole('button', { name: /Tap to Reveal Definition/i }, { timeout: 3000 });
-    fireEvent.click(revealBtn);
+    // Wait for API data to load before clicking (otherwise todayWords is empty and startLearning early-returns)
+    await screen.findByText('1 words to learn today');
+    fireEvent.click(screen.getByText('Start Learning'));
+    fireEvent.click(await screen.findByRole('button', { name: /Tap to Reveal Definition/i }));
 
     await waitFor(() => {
       const exampleNode = [...document.body.querySelectorAll('*')].find(
