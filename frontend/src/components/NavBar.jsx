@@ -8,6 +8,7 @@ import {
   MessageOutlined,
   UserOutlined,
   LogoutOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -19,6 +20,7 @@ const menuItems = [
   { key: '/speaking', icon: <AudioOutlined />, label: 'Speaking' },
   { key: '/daily-words', icon: <ReadOutlined />, label: 'Vocabulary' },
   { key: '/forum', icon: <MessageOutlined />, label: 'Forum' },
+  { key: '/room', icon: <AppstoreOutlined />, label: 'Room' },
 ];
 
 export default function NavBar({ user, onLogout }) {

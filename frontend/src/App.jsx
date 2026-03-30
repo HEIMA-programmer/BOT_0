@@ -14,6 +14,12 @@ import Profile from './pages/Profile';
 import Forum from './pages/Forum';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import RoomLobby from './pages/room/RoomLobby';
+import WaitingRoom from './pages/room/WaitingRoom';
+import WatchTogether from './pages/room/WatchTogether';
+import SpeakingRoom from './pages/room/SpeakingRoom';
+import GameRoom from './pages/room/GameRoom';
+import MyRecords from './pages/room/MyRecords';
 import { authAPI } from './api';
 import './App.css';
 
@@ -74,11 +80,14 @@ export default function App() {
     },
   };
 
+  const location = useLocation();
+  const hideNav = /^\/room\/[^/]+\/(waiting|watch|speaking|game)/.test(location.pathname);
+
   return (
     <ConfigProvider theme={theme}>
       <AntdApp>
         <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-          {user && <NavBar user={user} onLogout={handleLogout} />}
+          {user && !hideNav && <NavBar user={user} onLogout={handleLogout} />}
           <Content style={{ background: '#f0f2f5' }}>
             <Routes>
               {/* Public routes */}
@@ -126,6 +135,26 @@ export default function App() {
               } />
               <Route path="/profile" element={
                 <RequireAuth user={user} loading={loading}><Profile user={user} /></RequireAuth>
+              } />
+
+              {/* Room module */}
+              <Route path="/room" element={
+                <RequireAuth user={user} loading={loading}><RoomLobby user={user} /></RequireAuth>
+              } />
+              <Route path="/room/records" element={
+                <RequireAuth user={user} loading={loading}><MyRecords user={user} /></RequireAuth>
+              } />
+              <Route path="/room/:id/waiting" element={
+                <RequireAuth user={user} loading={loading}><WaitingRoom user={user} /></RequireAuth>
+              } />
+              <Route path="/room/:id/watch" element={
+                <RequireAuth user={user} loading={loading}><WatchTogether user={user} /></RequireAuth>
+              } />
+              <Route path="/room/:id/speaking" element={
+                <RequireAuth user={user} loading={loading}><SpeakingRoom user={user} /></RequireAuth>
+              } />
+              <Route path="/room/:id/game" element={
+                <RequireAuth user={user} loading={loading}><GameRoom user={user} /></RequireAuth>
               } />
 
               {/* Fallback */}
