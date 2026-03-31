@@ -1,5 +1,5 @@
-import { Typography, Card, Row, Col, Button, Space, Breadcrumb, Divider, message, Spin } from 'antd';
-import { AudioOutlined, PlayCircleOutlined, ArrowLeftOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Typography, Card, Row, Col, Button, Space, Breadcrumb, Divider, message, Spin, Progress } from 'antd';
+import { AudioOutlined, PlayCircleOutlined, ArrowLeftOutlined, CheckCircleOutlined, LoadingOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';

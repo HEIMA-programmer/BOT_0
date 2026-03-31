@@ -141,8 +141,12 @@ const menuItems = [
 export default function Schedule({ onClose }) {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState(() => {
-    const savedTasks = localStorage.getItem('scheduleTasks');
-    return savedTasks ? JSON.parse(savedTasks) : [];
+    try {
+      const savedTasks = localStorage.getItem('scheduleTasks');
+      return savedTasks ? JSON.parse(savedTasks) : [];
+    } catch {
+      return [];
+    }
   });
   const [selectedTab, setSelectedTab] = useState('today');
   const [newTask, setNewTask] = useState({
@@ -294,11 +298,6 @@ export default function Schedule({ onClose }) {
     if (onClose) {
       onClose();
     }
-  };
-
-  const handleCloseDetail = () => {
-    setDetailModalVisible(false);
-    setSelectedTask(null);
   };
 
   const getModuleInfo = (moduleKey) => {
