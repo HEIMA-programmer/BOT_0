@@ -108,3 +108,15 @@ Visit http://localhost:5173 — recommend **Chrome** for full voice features.
 - **Firefox**: Full support
 - **Edge**: Full support
 - **Safari**: Limited — Web Speech API has limited support. Voice features show a graceful fallback message.
+
+## Our Team
+
+| GitHub Username | Real Name |
+| :--- | :--- |
+| HEIMA-programmer | Yanbin Xu |
+| ColdFF | Junfan Zhou |
+| RainYans | Yanshuo Liu |
+| Lizzy-zhi | Weike Jin |
+| 1294201870 | Yupei Yang |
+| qwqsad11 | Chenxi Huang |
+| KoCookie | Ruoqi Hu |
