@@ -44,7 +44,7 @@ export default function StructuredSpeaking() {
 
   // WebSocket connection
   useEffect(() => {
-    const socket = io('http://localhost:5000');
+    const socket = io('/');
     socketRef.current = socket;
 
     socket.on('connected', () => {

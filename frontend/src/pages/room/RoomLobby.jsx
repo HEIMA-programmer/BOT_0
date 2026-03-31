@@ -11,14 +11,11 @@ import {
   ReloadOutlined, HistoryOutlined,
   CrownOutlined, GlobalOutlined, LockOutlined,
 } from '@ant-design/icons';
+import { io } from 'socket.io-client';
+import { roomAPI } from '../../api/index';
+import { TYPE_CONFIG } from '../../utils/roomUtils';
 
 const { Title, Text } = Typography;
-
-const TYPE_CONFIG = {
-  watch: { label: 'Watch Together', color: '#2563eb', bg: '#dbeafe', Icon: PlayCircleOutlined },
-  speaking: { label: 'Speaking Room', color: '#16a34a', bg: '#dcfce7', Icon: VideoCameraOutlined },
-  game: { label: 'Game Room', color: '#ea580c', bg: '#ffedd5', Icon: TrophyOutlined },
-};
 
 const TYPE_CARDS = [
   { key: 'watch', label: 'Watch Together', Icon: PlayCircleOutlined, color: '#2563eb', desc: 'Watch content in sync' },
@@ -26,27 +23,12 @@ const TYPE_CARDS = [
   { key: 'game', label: 'Game Room', Icon: TrophyOutlined, color: '#ea580c', desc: 'Vocabulary games' },
 ];
 
-const MOCK_ROOMS = [
-  { id: 'r001', name: "Alice's Speaking Room", type: 'speaking', host: 'Alice', hostId: 101, players: 2, maxPlayers: 4, status: 'waiting', detail: 'Topic: Daily Campus Life' },
-  { id: 'r002', name: 'Word Duel Battle', type: 'game', host: 'Bob', hostId: 102, players: 3, maxPlayers: 4, status: 'waiting', detail: 'Game: Word Duel' },
-  { id: 'r003', name: 'Study Together', type: 'watch', host: 'Carol', hostId: 103, players: 4, maxPlayers: 4, status: 'active', detail: 'Academic Vocabulary Basics' },
-  { id: 'r004', name: 'English Corner', type: 'speaking', host: 'David', hostId: 104, players: 1, maxPlayers: 4, status: 'waiting', detail: 'Topic: Free Talk' },
-  { id: 'r005', name: 'Vocab Challenge', type: 'game', host: 'Eve', hostId: 105, players: 2, maxPlayers: 4, status: 'waiting', detail: 'Game: Context Guesser' },
-];
-
+// TODO: replace with real API when /rooms/records endpoint is implemented
 const MOCK_RECENT = [
   { id: 'rec1', type: 'game', name: 'Word Battle', date: '2026-03-29', summary: 'Won · 5 rounds' },
   { id: 'rec2', type: 'speaking', name: 'English Practice', date: '2026-03-28', summary: 'Talked 23 min' },
   { id: 'rec3', type: 'watch', name: 'Study Session', date: '2026-03-27', summary: 'Watched 20 min' },
 ];
-
-function genCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
-}
-
-function genId() {
-  return 'room_' + Date.now();
-}
 
 export default function RoomLobby({ user }) {
   const navigate = useNavigate();
@@ -58,83 +40,113 @@ export default function RoomLobby({ user }) {
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [isPublic, setIsPublic] = useState(true);
   const [roomName, setRoomName] = useState('');
-  const [rooms, setRooms] = useState(MOCK_ROOMS);
+  const [rooms, setRooms] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [joining, setJoining] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  // TODO: replace with real API polling when backend is ready
-  // useEffect(() => {
-  //   const timer = setInterval(() => fetchRooms(), 10000);
-  //   return () => clearInterval(timer);
-  // }, []);
-
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRooms([...MOCK_ROOMS]);
-      setRefreshing(false);
-    }, 600);
+  const fetchRooms = useCallback(async () => {
+    try {
+      const res = await roomAPI.list();
+      setRooms(res.data.rooms || []);
+    } catch {
+      // Silently fail on background refresh; errors on user-triggered refresh are shown below
+    }
   }, []);
 
-  const handleCreate = useCallback(() => {
+  // Initial load
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
+
+  // Real-time lobby updates via WebSocket
+  useEffect(() => {
+    const socket = io('/room', { withCredentials: true });
+
+    socket.on('connect', () => {
+      socket.emit('join_lobby');
+    });
+
+    socket.on('rooms_updated', () => {
+      fetchRooms();
+    });
+
+    return () => {
+      socket.emit('leave_lobby');
+      socket.disconnect();
+    };
+  }, [fetchRooms]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchRooms();
+    } catch {
+      message.error('Failed to refresh rooms');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchRooms, message]);
+
+  const handleCreate = useCallback(async () => {
     if (!roomName.trim()) {
       message.warning('Please enter a room name');
       return;
     }
     setCreating(true);
-    setTimeout(() => {
-      const roomId = genId();
-      const room = {
-        id: roomId,
+    try {
+      const res = await roomAPI.create({
         name: roomName.trim(),
-        type: selectedType,
-        maxPlayers,
+        room_type: selectedType,
+        max_players: maxPlayers,
         visibility: isPublic ? 'public' : 'private',
-        inviteCode: genCode(),
-        hostId: user?.id,
-        hostName: user?.username,
-      };
-      setCreating(false);
+      });
+      const { room } = res.data;
       setShowCreate(false);
       setRoomName('');
-      navigate(`/room/${roomId}/waiting`, { state: { room } });
-    }, 400);
-  }, [roomName, selectedType, maxPlayers, isPublic, user, navigate, message]);
+      navigate(`/room/${room.id}/waiting`, { state: { room } });
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to create room';
+      message.error(msg);
+    } finally {
+      setCreating(false);
+    }
+  }, [roomName, selectedType, maxPlayers, isPublic, navigate, message]);
 
-  const handleJoin = useCallback(() => {
+  const handleJoin = useCallback(async () => {
     if (joinCode.length < 6) return;
     setJoining(true);
     setJoinError('');
-    setTimeout(() => {
-      if (joinCode === 'AAAAAA') {
-        setJoinError('Invalid code or room not found');
-        setJoining(false);
-        return;
-      }
-      const roomId = 'r_' + joinCode;
-      const room = {
-        id: roomId,
-        name: 'Room ' + joinCode,
-        type: 'speaking',
-        maxPlayers: 4,
-        visibility: 'private',
-        inviteCode: joinCode,
-        hostId: 999,
-        hostName: 'Host',
-      };
-      setJoining(false);
+    try {
+      const res = await roomAPI.join(joinCode);
+      const { room } = res.data;
       setShowJoin(false);
       setJoinCode('');
-      navigate(`/room/${roomId}/waiting`, { state: { room } });
-    }, 600);
+      navigate(`/room/${room.id}/waiting`, { state: { room } });
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Invalid code or room not found';
+      setJoinError(msg);
+    } finally {
+      setJoining(false);
+    }
   }, [joinCode, navigate]);
 
-  const handleJoinOpen = useCallback((room) => {
-    navigate(`/room/${room.id}/waiting`, { state: { room } });
-  }, [navigate]);
+  const handleJoinOpen = useCallback(async (room) => {
+    // Join via invite code (using the room's invite_code from the list)
+    setJoining(true);
+    try {
+      const res = await roomAPI.join(room.invite_code);
+      const { room: joinedRoom } = res.data;
+      navigate(`/room/${joinedRoom.id}/waiting`, { state: { room: joinedRoom } });
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to join room';
+      message.error(msg);
+    } finally {
+      setJoining(false);
+    }
+  }, [navigate, message]);
 
   const openCreate = () => {
     setRoomName('');
@@ -173,7 +185,7 @@ export default function RoomLobby({ user }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <Title level={4} style={{ margin: 0 }}>Open Rooms</Title>
           <Space>
-            <Text type="secondary" style={{ fontSize: 12 }}>Auto-refreshes every 10s</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>Updates in real time</Text>
             <Button size="small" icon={<ReloadOutlined spin={refreshing} />} onClick={handleRefresh}>
               Refresh
             </Button>
@@ -185,8 +197,9 @@ export default function RoomLobby({ user }) {
         ) : (
           <Row gutter={[16, 16]}>
             {rooms.map(room => {
-              const tc = TYPE_CONFIG[room.type];
-              const isFull = room.players >= room.maxPlayers;
+              const tc = TYPE_CONFIG[room.room_type];
+              if (!tc) return null;
+              const isFull = room.player_count >= room.max_players;
               const inProgress = room.status === 'active';
               const canJoin = !isFull && !inProgress;
               return (
@@ -232,14 +245,14 @@ export default function RoomLobby({ user }) {
                       </Space>
                       <Space size={6}>
                         <TeamOutlined style={{ fontSize: 12, color: '#6b7280' }} />
-                        <Text style={{ fontSize: 13 }}>{room.players}/{room.maxPlayers} players</Text>
+                        <Text style={{ fontSize: 13 }}>{room.player_count}/{room.max_players} players</Text>
                       </Space>
-                      <Text type="secondary" style={{ fontSize: 12 }}>{room.detail}</Text>
                     </Space>
 
                     <Button
                       type="primary"
                       block
+                      loading={joining}
                       disabled={!canJoin}
                       onClick={() => handleJoinOpen(room)}
                       style={{ borderRadius: 8 }}
@@ -254,7 +267,7 @@ export default function RoomLobby({ user }) {
         )}
       </div>
 
-      {/* Recent */}
+      {/* Recent — TODO: replace MOCK_RECENT with roomAPI.getRecords() */}
       {MOCK_RECENT.length > 0 && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
