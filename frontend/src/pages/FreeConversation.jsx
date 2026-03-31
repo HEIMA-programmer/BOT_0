@@ -1,7 +1,7 @@
 import { Typography, Button, Card, Space } from 'antd';
 import { ArrowLeftOutlined, RobotOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 import useConversation from '../hooks/useConversation';
 import ConversationView from '../components/ConversationView';
@@ -14,6 +14,8 @@ const { Title, Text } = Typography;
 export default function FreeConversation() {
   useLearningTimeTracker('speaking', 'study_time:free-conversation');
   const navigate = useNavigate();
+  const location = useLocation();
+  const state = location.state || {};
 
   const [phase, setPhase] = useState('setup'); // setup | conversation | results
   const [voiceName, setVoiceName] = useState(
@@ -157,6 +159,9 @@ export default function FreeConversation() {
         onClose={() => {
           setShowScoring(false);
           if (conversation.scoringStatus === 'done') {
+            if (state.taskId) {
+              window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId: state.taskId } }));
+            }
             navigate('/speaking', { state: { tab: 'ai-chat' } });
           }
         }}

@@ -25,7 +25,7 @@ import {
   SoundOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 
 import AudioPlayer from '../components/AudioPlayer';
 import { listeningAPI } from '../api';
@@ -118,10 +118,16 @@ export default function Listening({ user }) {
   useLearningTimeTracker('listening', 'study_time:listening');
 
   const navigate = useNavigate();
-  const { levelId } = useParams();
+  const { levelId, type, item } = useParams();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const state = location.state || {};
+  
+  const difficulty = searchParams.get('difficulty') || state.difficulty || levelId;
 
   const [catalog, setCatalog] = useState({ levels: [], source_count: 0 });
   const [loading, setLoading] = useState(true);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [error, setError] = useState('');
   const [selectedScenarioId, setSelectedScenarioId] = useState(null);
   const [selectedClipId, setSelectedClipId] = useState(null);
@@ -156,15 +162,18 @@ export default function Listening({ user }) {
 
     const fetchCatalog = async () => {
       setLoading(true);
+      setCatalogLoaded(false);
       try {
         const response = await listeningAPI.getCatalog();
         if (!active) return;
         setCatalog(response.data);
+        setCatalogLoaded(true);
         setError('');
       } catch (fetchError) {
         console.error('Failed to load listening catalog:', fetchError);
         if (!active) return;
         setCatalog({ levels: [], source_count: 0 });
+        setCatalogLoaded(true);
         setError('Failed to load listening materials. Please try again.');
       } finally {
         if (active) {
@@ -180,7 +189,7 @@ export default function Listening({ user }) {
   }, []);
 
   const levels = catalog.levels || [];
-  const selectedLevel = levels.find((level) => level.id === levelId) || null;
+  const selectedLevel = levels.find((level) => level.id === difficulty) || null;
   const selectedScenario = selectedLevel?.scenarios?.find(
     (scenario) => scenario.id === selectedScenarioId
   ) || null;
@@ -205,7 +214,7 @@ export default function Listening({ user }) {
   }, [answerCache, submissionCache, timeSpentCache, user?.id]);
 
   useEffect(() => {
-    if (!levelId || !selectedLevel?.scenarios?.length) {
+    if (!difficulty || !selectedLevel?.scenarios?.length) {
       setSelectedScenarioId(null);
       setSelectedClipId(null);
       return;
@@ -216,7 +225,53 @@ export default function Listening({ user }) {
         || selectedLevel.scenarios[0];
       setSelectedScenarioId(defaultScenario?.id || null);
     }
-  }, [levelId, selectedLevel, selectedScenarioId]);
+  }, [difficulty, selectedLevel, selectedScenarioId]);
+
+  useEffect(() => {
+    if (!catalogLoaded) {
+      return;
+    }
+
+    const targetScenarioId = type || state.type;
+    const targetItem = item || state.item;
+    const targetDifficulty = difficulty || state.difficulty || levelId;
+
+    if (!levels.length) {
+      return;
+    }
+
+    if (targetDifficulty && !selectedLevel) {
+      const difficultyLevel = levels.find(l => l.id === targetDifficulty);
+      if (difficultyLevel) {
+        if (!selectedScenarioId && targetScenarioId) {
+          const scenarioId = difficultyLevel.scenarios?.find(s => s.id === targetScenarioId)?.id;
+          if (scenarioId) {
+            setSelectedScenarioId(scenarioId);
+          }
+        }
+        if (!selectedClipId && targetItem && selectedScenarioId) {
+          const clipId = difficultyLevel.scenarios?.find(s => s.id === selectedScenarioId)?.clips?.find(c => c.source_slug === targetItem)?.id;
+          if (clipId) {
+            setSelectedClipId(clipId);
+          }
+        }
+      }
+    }
+
+    if (targetScenarioId && selectedLevel && selectedLevel.id === targetDifficulty) {
+      const scenarioId = selectedLevel.scenarios?.find(s => s.id === targetScenarioId)?.id;
+      if (scenarioId && scenarioId !== selectedScenarioId) {
+        setSelectedScenarioId(scenarioId);
+      }
+    }
+    
+    if (targetItem && selectedLevel && selectedLevel.id === targetDifficulty && selectedScenarioId) {
+      const clipId = selectedLevel.scenarios?.find(s => s.id === selectedScenarioId)?.clips?.find(c => c.source_slug === targetItem)?.id;
+      if (clipId && clipId !== selectedClipId) {
+        setSelectedClipId(clipId);
+      }
+    }
+  }, [catalogLoaded, type, item, difficulty, state.type, state.item, state.difficulty, levels, selectedLevel, selectedScenarioId, selectedClipId]);
 
   useEffect(() => {
     if (!selectedScenario) {
@@ -243,7 +298,7 @@ export default function Listening({ user }) {
   }, [selectedScenario, selectedClipId]);
 
   useEffect(() => {
-    if (!levelId || !selectedLevel || !selectedScenario?.is_available || !selectedClip) {
+    if (!difficulty || !selectedLevel || !selectedScenario?.is_available || !selectedClip) {
       setPracticeData(null);
       setPracticeError('');
       setAnswers({});
@@ -298,7 +353,7 @@ export default function Listening({ user }) {
     return () => {
       active = false;
     };
-  }, [levelId, selectedLevel, selectedScenario, selectedClip]);
+  }, [difficulty, selectedLevel, selectedScenario, selectedClip]);
 
   useEffect(() => {
     const flushActivePracticeTime = () => {
@@ -377,6 +432,10 @@ export default function Listening({ user }) {
           ...currentCache,
           [selectedPracticeKey]: response.data,
         }));
+      }
+      
+      if (state.taskId) {
+        window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId: state.taskId } }));
       }
     } catch (submitError) {
       console.error('Failed to submit listening practice:', submitError);
@@ -990,9 +1049,9 @@ export default function Listening({ user }) {
         </Card>
       ) : null}
 
-      {!loading && levels.length && !levelId ? renderLanding() : null}
+      {!loading && levels.length && !difficulty ? renderLanding() : null}
 
-      {!loading && levels.length && levelId && !selectedLevel ? (
+      {!loading && levels.length && difficulty && !selectedLevel ? (
         <Card style={{ borderRadius: 16, border: '1px solid #e5e7eb' }} styles={{ body: { padding: 24 } }}>
           <Empty description="That listening level was not found.">
             <Button type="primary" onClick={() => navigate('/listening')}>

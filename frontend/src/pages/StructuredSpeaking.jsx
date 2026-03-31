@@ -1,7 +1,7 @@
 import { Typography, Card, Row, Col, Button, Space, Progress, Breadcrumb, Input, Divider, Tag, message, Spin } from 'antd';
 import { AudioOutlined, MessageOutlined, PauseCircleOutlined, ArrowLeftOutlined, PlusOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
@@ -11,6 +11,29 @@ const { TextArea } = Input;
 export default function StructuredSpeaking() {
   useLearningTimeTracker('speaking', 'study_time:structured-speaking');
   const navigate = useNavigate();
+  const location = useLocation();
+  const state = location.state || {};
+
+  const scenarioType = state.type || null;
+
+  const scenarioTopics = {
+    'office_hours': [
+      { id: 1, title: 'Assignment Questions', desc: 'Ask your professor about assignment requirements, format, and expectations' },
+      { id: 2, title: 'Discuss Grades', desc: 'Talk about your academic performance and seek improvement suggestions' },
+      { id: 3, title: 'Request Extension', desc: 'Practice politely requesting deadline extensions for assignments' },
+      { id: 4, title: 'Research Guidance', desc: 'Seek help with research projects or thesis work' },
+      { id: 5, title: 'Custom Scenario', desc: 'Describe your own office hours scenario' },
+    ],
+    'seminar_discussion': [
+      { id: 1, title: 'Present Research', desc: 'Share your research findings with the seminar group' },
+      { id: 2, title: 'Paper Discussion', desc: 'Analyze and discuss academic papers with peers' },
+      { id: 3, title: 'Defend Thesis', desc: 'Practice defending your thesis in a seminar setting' },
+      { id: 4, title: 'Brainstorming', desc: 'Collaborate to generate and develop research ideas' },
+      { id: 5, title: 'Custom Scenario', desc: 'Describe your own seminar discussion scenario' },
+    ],
+  };
+
+  const currentTopics = scenarioType ? scenarioTopics[scenarioType] : recommendedTopics;
 
   // State management
   const [selectedTopic, setSelectedTopic] = useState(null);
@@ -62,6 +85,10 @@ export default function StructuredSpeaking() {
       setProgressMessage('');
       setResult(data);
       message.success('Scoring complete! 🎉');
+      
+      if (state.taskId) {
+        window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId: state.taskId } }));
+      }
     });
 
     socket.on('error', (data) => {
@@ -292,11 +319,11 @@ export default function StructuredSpeaking() {
         </Card>
 
         <Divider>
-          <Tag color="blue">Recommended Topics</Tag>
+          <Tag color="blue">{scenarioType ? 'Selected Scenario Topics' : 'Recommended Topics'}</Tag>
         </Divider>
 
         <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
-          {recommendedTopics.map((topic) => (
+          {currentTopics.map((topic) => (
             <Col xs={24} sm={12} key={topic.id}>
               <Card
                 style={{

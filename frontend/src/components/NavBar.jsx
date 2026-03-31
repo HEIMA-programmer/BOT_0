@@ -9,6 +9,7 @@ import {
   UserOutlined,
   LogoutOutlined,
   AppstoreOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -23,7 +24,7 @@ const menuItems = [
   { key: '/room', icon: <AppstoreOutlined />, label: 'Room' },
 ];
 
-export default function NavBar({ user, onLogout }) {
+export default function NavBar({ user, onLogout, onScheduleClick }) {
   const navigate = useNavigate();
   const location = useLocation();
   const selectedKey = (
@@ -86,6 +87,22 @@ export default function NavBar({ user, onLogout }) {
         onClick={({ key }) => navigate(key)}
         style={{ flex: 1, minWidth: 0, background: 'transparent', borderBottom: 'none' }}
       />
+      <Button
+        type="text"
+        icon={<CalendarOutlined />}
+        onClick={onScheduleClick}
+        style={{
+          color: '#e5e7eb',
+          fontSize: 14,
+          fontWeight: 500,
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        Schedule
+      </Button>
       <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
         <Space style={{ cursor: 'pointer' }}>
           <Avatar
