@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Layout, ConfigProvider, Spin, App as AntdApp } from 'antd';
+import { Layout, ConfigProvider, Spin, App as AntdApp, Modal } from 'antd';
 import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import DailyWords from './pages/DailyWords';
@@ -14,6 +14,7 @@ import Profile from './pages/Profile';
 import Forum from './pages/Forum';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Schedule from './pages/Schedule';
 import RoomLobby from './pages/room/RoomLobby';
 import WaitingRoom from './pages/room/WaitingRoom';
 import WatchTogether from './pages/room/WatchTogether';
@@ -43,6 +44,7 @@ function RequireAuth({ user, loading, children }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
 
   useEffect(() => {
     authAPI.me()
@@ -87,7 +89,7 @@ export default function App() {
     <ConfigProvider theme={theme}>
       <AntdApp>
         <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-          {user && !hideNav && <NavBar user={user} onLogout={handleLogout} />}
+          {user && !hideNav && <NavBar user={user} onLogout={handleLogout} onScheduleClick={() => setScheduleModalVisible(true)} />}
           <Content style={{ background: '#f0f2f5' }}>
             <Routes>
               {/* Public routes */}
@@ -105,6 +107,9 @@ export default function App() {
               <Route path="/daily-words" element={
                 <RequireAuth user={user} loading={loading}><DailyWords /></RequireAuth>
               } />
+              <Route path="/daily-words/:count" element={
+                <RequireAuth user={user} loading={loading}><DailyWords /></RequireAuth>
+              } />
               <Route path="/word-bank" element={<Navigate to="/daily-words" replace />} />
               <Route path="/listening" element={
                 <RequireAuth user={user} loading={loading}><Listening user={user} /></RequireAuth>
@@ -112,7 +117,13 @@ export default function App() {
               <Route path="/listening/:levelId" element={
                 <RequireAuth user={user} loading={loading}><Listening user={user} /></RequireAuth>
               } />
+              <Route path="/listening/:type/:item" element={
+                <RequireAuth user={user} loading={loading}><Listening user={user} /></RequireAuth>
+              } />
               <Route path="/speaking" element={
+                <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>
+              } />
+              <Route path="/speaking/:scenario/:type" element={
                 <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>
               } />
               <Route path="/speaking/structured" element={
@@ -162,6 +173,19 @@ export default function App() {
             </Routes>
           </Content>
         </Layout>
+
+        <Modal
+          title={null}
+          open={scheduleModalVisible}
+          onCancel={() => setScheduleModalVisible(false)}
+          footer={null}
+          width={1200}
+          centered
+          styles={{ body: { padding: 0 } }}
+          closeIcon={null}
+        >
+          <Schedule onClose={() => setScheduleModalVisible(false)} />
+        </Modal>
       </AntdApp>
     </ConfigProvider>
   );

@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import { Typography, Card, Row, Col, Tag, Tabs, Button } from 'antd';
 import { AudioOutlined, MessageOutlined, TrophyOutlined, RobotOutlined, CommentOutlined, TeamOutlined, HistoryOutlined } from '@ant-design/icons';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text } = Typography;
@@ -67,7 +68,23 @@ export default function Speaking() {
   useLearningTimeTracker('speaking', 'study_time:speaking');
   const navigate = useNavigate();
   const location = useLocation();
+  const { scenario, type } = useParams();
   const defaultTab = location.state?.tab || 'speaking';
+
+  useEffect(() => {
+    if (scenario && type) {
+      const scenarioMap = {
+        'office-hours': 'Office Hours',
+        'seminar-discussion': 'Seminar Discussion',
+        'free-conversation': 'Free Conversation',
+      };
+      
+      const scenarioTitle = scenarioMap[scenario];
+      if (scenarioTitle) {
+        navigate(`/speaking/${scenario}`, { replace: true });
+      }
+    }
+  }, [scenario, type, navigate]);
 
   function renderCards(items) {
     return (

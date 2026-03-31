@@ -13,6 +13,7 @@
   "dependencies": {
     "antd": "^6.3.3",
     "axios": "^1.13.6",
+    "dayjs": "^1.11.20",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.1",
