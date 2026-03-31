@@ -111,7 +111,6 @@ export const roomAPI = {
   join:       (code)    => api.post('/rooms/join', { invite_code: code }),
   getRoom:    (roomId)  => api.get(`/rooms/${roomId}`),
   leave:      (roomId)  => api.delete(`/rooms/${roomId}/members/me`),
-getRecords: (params)  => api.get('/rooms/records', { params }),
 };
 
 export default api;

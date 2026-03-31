@@ -1,4 +1,5 @@
 import secrets
+import string
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
@@ -13,14 +14,16 @@ room_bp = Blueprint('room', __name__, url_prefix='/api/rooms')
 VALID_TYPES = ('game', 'speaking', 'watch')
 VALID_VISIBILITY = ('public', 'private')
 
+_INVITE_ALPHABET = string.ascii_uppercase + string.digits
+
 
 def _generate_invite_code():
     """Generate a unique 6-character uppercase alphanumeric invite code."""
-    for _ in range(10):
-        code = secrets.token_urlsafe(4).upper()[:6]
+    for _ in range(50):
+        code = ''.join(secrets.choice(_INVITE_ALPHABET) for _ in range(6))
         if not Room.query.filter_by(invite_code=code).first():
             return code
-    raise RuntimeError('Failed to generate unique invite code after 10 attempts')
+    raise RuntimeError('Failed to generate unique invite code after 50 attempts')
 
 
 def _auto_leave_active_rooms(user_id):
@@ -104,16 +107,26 @@ def join_room():
     if not invite_code:
         return jsonify({'error': 'invite_code is required'}), 400
 
-    room = Room.query.filter_by(invite_code=invite_code).first()
+    # Lock the room row to prevent concurrent joins from exceeding max_players.
+    # with_for_update() acquires a row-level lock held until commit/rollback.
+    room = (
+        Room.query
+        .filter_by(invite_code=invite_code)
+        .with_for_update()
+        .first()
+    )
     if not room or room.status == 'ended':
         return jsonify({'error': 'Invalid code or room not found'}), 404
 
     # Idempotent: return existing membership if already in this room
     existing = RoomMember.query.filter_by(room_id=room.id, user_id=current_user.id).first()
     if existing:
+        db.session.commit()  # release the FOR UPDATE lock
         return jsonify({'room': room.to_dict(), 'member': existing.to_dict()}), 200
 
-    if len(room.members) >= room.max_players:
+    current_count = RoomMember.query.filter_by(room_id=room.id).count()
+    if current_count >= room.max_players:
+        db.session.commit()  # release the FOR UPDATE lock
         return jsonify({'error': 'Room is full'}), 409
 
     # Auto-leave any other active rooms so the user is never in two rooms at once
@@ -137,6 +150,15 @@ def get_room(room_id):
     room = db.session.get(Room, room_id)
     if not room:
         return jsonify({'error': 'Room not found'}), 404
+
+    # Private rooms: only members can view details
+    if room.visibility == 'private':
+        is_member = RoomMember.query.filter_by(
+            room_id=room_id, user_id=current_user.id
+        ).first()
+        if not is_member:
+            return jsonify({'error': 'Room not found'}), 404
+
     # Order by joined_at so members appear left-to-right in join order
     members = (
         RoomMember.query
@@ -165,7 +187,12 @@ def leave_room(room_id):
     db.session.delete(member)
     db.session.flush()
 
-    remaining = RoomMember.query.filter_by(room_id=room_id).all()
+    remaining = (
+        RoomMember.query
+        .filter_by(room_id=room_id)
+        .order_by(RoomMember.joined_at.asc())
+        .all()
+    )
     if not remaining:
         room.status = 'ended'
         room.ended_at = datetime.now(timezone.utc)

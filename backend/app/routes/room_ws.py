@@ -19,6 +19,8 @@ from flask_login import current_user
 from app import socketio, db
 from app.models.room import Room, RoomMember
 
+# Lock protecting all three dicts below — acquire before reading or mutating.
+_state_lock = threading.Lock()
 # room_id (int) → set of socket sids currently in that room
 active_rooms: dict = {}
 # sid → room_id
@@ -32,23 +34,31 @@ def _deferred_cleanup(app, user_id, room_id):
     DB cleanup after a 1-second grace period following socket disconnect.
     Runs in a background thread. Cancelled if the user reconnects in time
     (handles React StrictMode's intentional unmount→remount cycle).
-    Only called for 'waiting' rooms — active games handle leave themselves.
     """
-    pending_cleanups.pop(user_id, None)
+    with _state_lock:
+        pending_cleanups.pop(user_id, None)
+
     with app.app_context():
         member = RoomMember.query.filter_by(room_id=room_id, user_id=user_id).first()
         if not member:
             return  # already cleaned up via REST leave — nothing to do
 
+        # Re-check room status: if the room became active (game started) during
+        # the grace period, do NOT remove the member — they are in-game.
+        room = db.session.get(Room, room_id)
+        if not room or room.status != 'waiting':
+            return
+
         was_host = member.role == 'host'
         db.session.delete(member)
         db.session.flush()
 
-        remaining = RoomMember.query.filter_by(room_id=room_id).all()
-        room = db.session.get(Room, room_id)
-        if not room:
-            db.session.commit()
-            return
+        remaining = (
+            RoomMember.query
+            .filter_by(room_id=room_id)
+            .order_by(RoomMember.joined_at.asc())
+            .all()
+        )
 
         if not remaining:
             room.status = 'ended'
@@ -88,14 +98,16 @@ def handle_connect():
 @socketio.on('disconnect', namespace='/room')
 def handle_disconnect():
     sid = request.sid
-    room_id = sid_room.pop(sid, None)
-    if room_id is None:
-        return
 
-    if room_id in active_rooms:
-        active_rooms[room_id].discard(sid)
-        if not active_rooms[room_id]:
-            del active_rooms[room_id]
+    with _state_lock:
+        room_id = sid_room.pop(sid, None)
+        if room_id is None:
+            return
+
+        if room_id in active_rooms:
+            active_rooms[room_id].discard(sid)
+            if not active_rooms[room_id]:
+                del active_rooms[room_id]
 
     leave_room(str(room_id), namespace='/room')
 
@@ -116,7 +128,8 @@ def handle_disconnect():
             app = current_app._get_current_object()
             user_id = current_user.id
             timer = threading.Timer(1.0, _deferred_cleanup, args=[app, user_id, room_id])
-            pending_cleanups[user_id] = timer
+            with _state_lock:
+                pending_cleanups[user_id] = timer
             timer.start()
 
     current_app.logger.info(f'Room WS disconnected: {sid} from room {room_id}')
@@ -143,7 +156,8 @@ def handle_join_waiting_room(data):
         return
 
     # Cancel any pending disconnect cleanup — handles StrictMode unmount→remount
-    timer = pending_cleanups.pop(current_user.id, None)
+    with _state_lock:
+        timer = pending_cleanups.pop(current_user.id, None)
     if timer:
         timer.cancel()
 
@@ -162,8 +176,9 @@ def handle_join_waiting_room(data):
 
     sid = request.sid
     join_room(str(room_id), namespace='/room')
-    sid_room[sid] = room_id
-    active_rooms.setdefault(room_id, set()).add(sid)
+    with _state_lock:
+        sid_room[sid] = room_id
+        active_rooms.setdefault(room_id, set()).add(sid)
 
     socketio.emit(
         'member_joined',

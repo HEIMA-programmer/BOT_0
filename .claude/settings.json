@@ -1,9 +1,5 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(xargs grep:*)",
-      "Bash(grep -r \"alembic\\\\|migration\\\\|migrate\" /d/桌面/敏捷软件/BOT_0/backend/ --include=*.py)",
-      "Bash(xargs file:*)"
-    ]
+    "allow": []
   }
 }
