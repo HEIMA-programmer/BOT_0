@@ -11,6 +11,7 @@ import {
   DeleteOutlined, ExportOutlined, SortAscendingOutlined, CloseOutlined,
   FireOutlined
 } from '@ant-design/icons';
+import { useLocation, useParams } from 'react-router-dom';
 import { dailyLearningAPI, wordBankAPI } from '../api';
 import WordPronunciationControl from '../components/WordPronunciationControl';
 import useAwlExampleSentences, { highlightWordInSentence } from '../hooks/useAwlExampleSentences';
@@ -60,6 +61,17 @@ export default function DailyWords() {
   const [learningIndex, setLearningIndex] = useState(0);
   const [showDef, setShowDef] = useState(false);
   const [cardFlipping, setCardFlipping] = useState(false);
+
+  const location = useLocation();
+  const { count } = useParams();
+  const state = location.state || {};
+
+  useEffect(() => {
+    const targetCount = count ? parseInt(count, 10) : state.count;
+    if (targetCount && !isNaN(targetCount)) {
+      setDailyCount(targetCount);
+    }
+  }, [count, state.count]);
 
   // Review modal state
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -304,6 +316,10 @@ export default function DailyWords() {
         setLearningOpen(false);
         message.success('Learning session complete!');
         loadToday();
+        
+        if (state.taskId) {
+          window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId: state.taskId } }));
+        }
       }
       setCardFlipping(false);
     }, 300);
@@ -354,6 +370,10 @@ export default function DailyWords() {
       setReviewOpen(false);
       message.success('Review session complete!');
       loadToday();
+      
+      if (state.taskId) {
+        window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId: state.taskId } }));
+      }
     }
   };
 

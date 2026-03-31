@@ -1,7 +1,7 @@
 import { Typography, Button, Card, Row, Col, Input, Space, Spin } from 'antd';
 import { ArrowLeftOutlined, CommentOutlined, TeamOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 import useConversation from '../hooks/useConversation';
 import ConversationView from '../components/ConversationView';
@@ -30,6 +30,8 @@ const SCENARIO_CONFIG = {
 export default function GuidedConversation({ scenarioType }) {
   useLearningTimeTracker('speaking', `study_time:${scenarioType}`);
   const navigate = useNavigate();
+  const location = useLocation();
+  const state = location.state || {};
   const config = SCENARIO_CONFIG[scenarioType] || SCENARIO_CONFIG.office_hours;
 
   const [phase, setPhase] = useState('setup'); // setup | conversation
@@ -266,6 +268,9 @@ export default function GuidedConversation({ scenarioType }) {
         onClose={() => {
           setShowScoring(false);
           if (conversation.scoringStatus === 'done') {
+            if (state.taskId) {
+              window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId: state.taskId } }));
+            }
             navigate('/speaking', { state: { tab: 'ai-chat' } });
           }
         }}
