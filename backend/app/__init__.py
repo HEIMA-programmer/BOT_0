@@ -50,6 +50,7 @@ def create_app(config_name=None):
     from app.routes.progress import progress_bp
     from app.routes.forum import forum_bp
     from app.routes.chat_history import chat_history_bp
+    from app.routes.room import room_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(daily_words_bp)
@@ -59,10 +60,12 @@ def create_app(config_name=None):
     app.register_blueprint(progress_bp)
     app.register_blueprint(forum_bp)
     app.register_blueprint(chat_history_bp)
+    app.register_blueprint(room_bp)
 
     # Register SocketIO handlers
     from app.routes import speaking_ws  # noqa: F401
     from app.routes import conversation_ws  # noqa: F401
+    from app.routes import room_ws  # noqa: F401
 
     # Create database tables and auto-seed on first run
     with app.app_context():
@@ -81,6 +84,8 @@ def create_app(config_name=None):
             forum_post,
             forum_comment,
             forum_forward,
+            room,
+            room_record,
         )
         db.create_all()
         _ensure_runtime_schema()

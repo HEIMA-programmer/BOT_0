@@ -104,4 +104,13 @@ export const chatHistoryAPI = {
   getScenarioPrompt: (data) => api.post('/chat-history/scenario-prompt', data),
 };
 
+// Room APIs
+export const roomAPI = {
+  list:       (params)  => api.get('/rooms', { params }),
+  create:     (data)    => api.post('/rooms', data),
+  join:       (code)    => api.post('/rooms/join', { invite_code: code }),
+  getRoom:    (roomId)  => api.get(`/rooms/${roomId}`),
+  leave:      (roomId)  => api.delete(`/rooms/${roomId}/members/me`),
+};
+
 export default api;

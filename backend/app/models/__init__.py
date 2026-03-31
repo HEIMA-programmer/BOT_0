@@ -14,6 +14,8 @@ from app.models.chat_message import ChatMessage
 from app.models.progress import Progress
 from app.models.review_history import ReviewHistory
 from app.models.user_word_progress import UserWordProgress
+from app.models.room import Room, RoomMember
+from app.models.room_record import RoomRecord
 
 
 @event.listens_for(Engine, 'connect')
@@ -35,4 +37,7 @@ __all__ = [
     'Progress',
     'ReviewHistory',
     'UserWordProgress',
+    'Room',
+    'RoomMember',
+    'RoomRecord',
 ]

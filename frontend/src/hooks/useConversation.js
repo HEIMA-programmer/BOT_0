@@ -126,7 +126,7 @@ export default function useConversation() {
     setScores(null);
     setScoringStatus('idle');
 
-    const socket = io('http://localhost:5000/conversation');
+    const socket = io('/conversation');
     socketRef.current = socket;
 
     socket.on('connect', () => {

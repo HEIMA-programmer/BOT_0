@@ -1,24 +1,19 @@
-import { useState, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import {
   Typography, Button, Tag, Modal, Space, Avatar, App as AntdApp,
   Popover, Select, Row, Col, Tooltip,
 } from 'antd';
 import {
-  PlayCircleOutlined, VideoCameraOutlined, TrophyOutlined,
+  PlayCircleOutlined,
   CrownOutlined, TeamOutlined, LinkOutlined, CheckOutlined,
   ArrowLeftOutlined,
 } from '@ant-design/icons';
+import { io } from 'socket.io-client';
+import { roomAPI } from '../../api/index';
+import { TYPE_CONFIG, getAvatarColor } from '../../utils/roomUtils';
 
 const { Text } = Typography;
-
-const TYPE_CONFIG = {
-  watch: { label: 'Watch Together', color: '#2563eb', bg: '#dbeafe', Icon: PlayCircleOutlined },
-  speaking: { label: 'Speaking Room', color: '#16a34a', bg: '#dcfce7', Icon: VideoCameraOutlined },
-  game: { label: 'Game Room', color: '#ea580c', bg: '#ffedd5', Icon: TrophyOutlined },
-};
-
-import { getAvatarColor } from '../../utils/roomUtils';
 
 const MOCK_TOPICS = [
   'Free Talk', 'Daily Campus Life', 'Academic Writing',
@@ -43,100 +38,190 @@ const GAMES = [
   },
 ];
 
-const MOCK_ROOM = {
-  id: 'demo_room',
-  name: 'Demo Room',
-  type: 'speaking',
-  maxPlayers: 4,
-  visibility: 'public',
-  inviteCode: 'DEMO01',
-  hostId: 1,
-  hostName: 'You',
-};
-
 export default function WaitingRoom({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id: roomIdParam } = useParams();
   const { message } = AntdApp.useApp();
 
-  const { room: initialRoom } = location.state || {};
-  const [room] = useState(initialRoom || MOCK_ROOM);
-
-  const userId = user?.id || 0;
-  const isHost = room.hostId === userId;
-
-  const buildInitialMembers = () => {
-    if (isHost) {
-      return [
-        { id: userId, username: user?.username || 'You', role: 'host', isReady: false },
-        { id: 2001, username: 'Alice', role: 'member', isReady: false },
-      ];
-    }
-    return [
-      { id: room.hostId || 999, username: room.hostName || 'Host', role: 'host', isReady: true },
-      { id: userId, username: user?.username || 'You', role: 'member', isReady: false },
-      { id: 2001, username: 'Alice', role: 'member', isReady: true },
-    ];
-  };
-
-  const [members, setMembers] = useState(buildInitialMembers);
+  const [room, setRoom] = useState(location.state?.room || null);
+  const [members, setMembers] = useState([]);
   const [showInvite, setShowInvite] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [transferTarget, setTransferTarget] = useState(null);
   const [showTopicModal, setShowTopicModal] = useState(false);
-  const [topic, setTopic] = useState(room.topic || 'Free Talk');
+  const [topic, setTopic] = useState('Free Talk');
   const [selectedGame, setSelectedGame] = useState(null);
   const [gameStep, setGameStep] = useState(1);
 
-  const tc = TYPE_CONFIG[room.type] || TYPE_CONFIG.speaking;
-  const myMember = members.find(m => m.id === userId);
-  const canStart = members.every(m => m.isReady) && members.length >= 2;
+  const socketRef = useRef(null);
+  const isStartingRef = useRef(false);   // true when navigating to game or clicking Leave
+  const leaveTimerRef = useRef(null);    // delayed leave — cancelled on StrictMode remount
+  const userId = user?.id || 0;
 
+  // Derive host status from live members array so it stays in sync
+  const myMember = members.find(m => m.user_id === userId);
+  const isHost = myMember?.role === 'host';
+  const canStart = members.length >= 2 && members.every(m => m.is_ready);
+
+  const roomId = room?.id ? Number(room.id) : Number(roomIdParam);
+  const tc = TYPE_CONFIG[room?.room_type] || TYPE_CONFIG.speaking;
+
+  // Used by game_started to navigate with latest state (avoids stale socket closure)
+  const [gameLaunching, setGameLaunching] = useState(false);
+
+  // ── Load room data ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!roomId) return;
+
+    const load = async () => {
+      try {
+        const res = await roomAPI.getRoom(roomId);
+        setRoom(res.data.room);
+        setMembers(res.data.members || []);
+        if (res.data.room.topic) setTopic(res.data.room.topic);
+      } catch {
+        message.error('Failed to load room');
+        navigate('/room');
+      }
+    };
+
+    // Use location.state for the fast path (member list still needs a fetch)
+    if (location.state?.room) {
+      setRoom(location.state.room);
+    }
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+
+  // ── Navigate when game starts (uses latest state, avoids stale socket closure) ──
+  useEffect(() => {
+    if (!gameLaunching || !room) return;
+    const path = room.room_type === 'watch' ? 'watch'
+      : room.room_type === 'speaking' ? 'speaking'
+      : 'game';
+    navigate(`/room/${roomId}/${path}`, {
+      state: { room: { ...room, topic, gameType: selectedGame }, members },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameLaunching]);
+
+  // ── WebSocket connection ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!roomId || !userId) return;
+
+    // Cancel any leave timer from the previous mount (React StrictMode double-invoke)
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+
+    const socket = io('/room', { withCredentials: true });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('join_waiting_room', { room_id: roomId });
+    });
+
+    socket.on('member_joined', ({ member }) => {
+      setMembers(prev => {
+        if (prev.find(m => m.user_id === member.user_id)) return prev;
+        return [...prev, member];
+      });
+    });
+
+    socket.on('member_left', ({ user_id }) => {
+      setMembers(prev => prev.filter(m => m.user_id !== user_id));
+    });
+
+    socket.on('ready_changed', ({ user_id, is_ready }) => {
+      setMembers(prev =>
+        prev.map(m => m.user_id === user_id ? { ...m, is_ready } : m)
+      );
+    });
+
+    socket.on('host_changed', ({ new_host_user_id }) => {
+      setMembers(prev =>
+        prev.map(m => ({
+          ...m,
+          // Set new host; demote anyone who was previously host (works on all clients)
+          role: m.user_id === new_host_user_id ? 'host' : m.role === 'host' ? 'member' : m.role,
+        }))
+      );
+    });
+
+    socket.on('game_started', () => {
+      isStartingRef.current = true;
+      setGameLaunching(true);  // triggers the navigation useEffect above with fresh state
+    });
+
+    socket.on('room_error', ({ message: errMsg }) => {
+      message.error(errMsg);
+    });
+
+    return () => {
+      socket.disconnect();
+      // Delay the REST leave so React StrictMode's intentional unmount→remount cycle
+      // can cancel it (remount clears leaveTimerRef above). Real navigation will not
+      // remount, so the timer fires and cleans up the DB record.
+      if (!isStartingRef.current) {
+        leaveTimerRef.current = setTimeout(() => {
+          roomAPI.leave(roomId).catch(() => {});
+        }, 300);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, userId]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
   const handleToggleReady = useCallback(() => {
-    setMembers(prev => prev.map(m =>
-      m.id === userId ? { ...m, isReady: !m.isReady } : m
-    ));
-  }, [userId]);
+    const newReady = !myMember?.is_ready;
+    socketRef.current?.emit('set_ready', { room_id: roomId, is_ready: newReady });
+  }, [myMember, roomId]);
 
   const handleCopyCode = useCallback(() => {
-    navigator.clipboard.writeText(room.inviteCode || '').then(() => {
+    navigator.clipboard.writeText(room?.invite_code || '').then(() => {
       setCodeCopied(true);
       setTimeout(() => setCodeCopied(false), 2000);
     });
-  }, [room.inviteCode]);
+  }, [room?.invite_code]);
 
-  const handleTransferHost = useCallback((memberId) => {
-    setMembers(prev => prev.map(m => ({
-      ...m,
-      role: m.id === memberId ? 'host' : m.id === userId ? 'member' : m.role,
-    })));
-    message.success('Host transferred');
-  }, [userId, message]);
+  const handleTransferHost = useCallback((targetUserId) => {
+    socketRef.current?.emit('transfer_host', { room_id: roomId, new_host_user_id: targetUserId });
+    message.success('Host transfer requested');
+  }, [roomId, message]);
 
-  const handleLeave = useCallback(() => {
+  const handleLeave = useCallback(async () => {
     if (isHost && members.length > 1) {
       setShowLeaveModal(true);
     } else {
-      navigate('/room');
+      isStartingRef.current = true;  // prevent double-leave in cleanup
+      try {
+        await roomAPI.leave(roomId);
+      } finally {
+        navigate('/room');
+      }
     }
-  }, [isHost, members.length, navigate]);
+  }, [isHost, members.length, roomId, navigate]);
 
-  const confirmLeave = useCallback(() => {
+  const confirmLeave = useCallback(async () => {
     if (transferTarget) handleTransferHost(transferTarget);
     setShowLeaveModal(false);
-    navigate('/room');
-  }, [transferTarget, handleTransferHost, navigate]);
+    isStartingRef.current = true;  // prevent double-leave in cleanup
+    try {
+      await roomAPI.leave(roomId);
+    } finally {
+      navigate('/room');
+    }
+  }, [transferTarget, handleTransferHost, roomId, navigate]);
 
   const handleStart = useCallback(() => {
     if (!canStart) return;
-    const path = room.type === 'watch' ? 'watch'
-      : room.type === 'speaking' ? 'speaking'
-      : 'game';
-    navigate(`/room/${room.id}/${path}`, {
-      state: { room: { ...room, topic, gameType: selectedGame }, members },
-    });
-  }, [canStart, room, topic, selectedGame, members, navigate]);
+    socketRef.current?.emit('start_game', { room_id: roomId });
+  }, [canStart, roomId]);
+
+  if (!room) return null;
 
   const ActivityIcon = tc.Icon;
 
@@ -179,7 +264,7 @@ export default function WaitingRoom({ user }) {
                   letterSpacing: 4, color: '#1a1a2e', textAlign: 'center',
                   background: '#f0f2f5', borderRadius: 8, padding: '8px 0',
                 }}>
-                  {room.inviteCode || '------'}
+                  {room.invite_code || '------'}
                 </div>
                 <Button
                   icon={codeCopied ? <CheckOutlined /> : <LinkOutlined />}
@@ -204,18 +289,18 @@ export default function WaitingRoom({ user }) {
         {/* Member Grid */}
         <div style={{ marginBottom: 28 }}>
           <Text type="secondary" style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 16 }}>
-            Members — {members.length}/{room.maxPlayers}
+            Members — {members.length}/{room.max_players}
           </Text>
           <Row gutter={[16, 16]}>
             {members.map(member => {
-              const isMe = member.id === userId;
+              const isMe = member.user_id === userId;
               const memberMenu = isHost && !isMe ? (
                 <div>
                   <Button
                     type="text"
                     size="small"
                     icon={<CrownOutlined style={{ color: '#d97706' }} />}
-                    onClick={() => handleTransferHost(member.id)}
+                    onClick={() => handleTransferHost(member.user_id)}
                     style={{ width: '100%', textAlign: 'left' }}
                   >
                     Transfer Host
@@ -224,7 +309,7 @@ export default function WaitingRoom({ user }) {
               ) : null;
 
               return (
-                <Col xs={12} sm={8} md={6} key={member.id}>
+                <Col xs={12} sm={8} md={6} key={member.user_id}>
                   <Popover content={memberMenu} trigger={memberMenu ? 'click' : ''} placement="top">
                     <div style={{
                       textAlign: 'center',
@@ -240,7 +325,7 @@ export default function WaitingRoom({ user }) {
                           size={56}
                           style={{ background: getAvatarColor(member.username), fontSize: 22, fontWeight: 700 }}
                         >
-                          {member.username.charAt(0).toUpperCase()}
+                          {(member.username || '?').charAt(0).toUpperCase()}
                         </Avatar>
                         {member.role === 'host' && (
                           <CrownOutlined style={{
@@ -254,10 +339,10 @@ export default function WaitingRoom({ user }) {
                         {member.username}{isMe ? ' (You)' : ''}
                       </Text>
                       <Tag
-                        color={member.isReady ? 'success' : 'default'}
+                        color={member.is_ready ? 'success' : 'default'}
                         style={{ marginTop: 4, borderRadius: 6, fontSize: 11 }}
                       >
-                        {member.isReady ? 'Ready' : 'Waiting'}
+                        {member.is_ready ? 'Ready' : 'Waiting'}
                       </Tag>
                     </div>
                   </Popover>
@@ -269,7 +354,7 @@ export default function WaitingRoom({ user }) {
 
         {/* Type-specific Config */}
         <div style={{ background: '#fff', borderRadius: 12, padding: '20px 24px', border: '1px solid #e5e7eb' }}>
-          {room.type === 'watch' && (
+          {room.room_type === 'watch' && (
             <div>
               <Text strong style={{ display: 'block', marginBottom: 12 }}>Content</Text>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -295,7 +380,7 @@ export default function WaitingRoom({ user }) {
             </div>
           )}
 
-          {room.type === 'speaking' && (
+          {room.room_type === 'speaking' && (
             <div>
               <Text strong style={{ display: 'block', marginBottom: 12 }}>Conversation Topic</Text>
               <div style={{
@@ -311,7 +396,7 @@ export default function WaitingRoom({ user }) {
             </div>
           )}
 
-          {room.type === 'game' && (
+          {room.room_type === 'game' && (
             <div>
               <Text strong style={{ display: 'block', marginBottom: 12 }}>
                 {gameStep === 1 ? 'Select a Game' : `Game Config — ${GAMES.find(g => g.key === selectedGame)?.label}`}
@@ -414,11 +499,11 @@ export default function WaitingRoom({ user }) {
         <Space size={10}>
           <Button
             size="large"
-            type={myMember?.isReady ? 'default' : 'primary'}
+            type={myMember?.is_ready ? 'default' : 'primary'}
             onClick={handleToggleReady}
-            style={myMember?.isReady ? { borderColor: '#16a34a', color: '#16a34a' } : {}}
+            style={myMember?.is_ready ? { borderColor: '#16a34a', color: '#16a34a' } : {}}
           >
-            {myMember?.isReady ? '✓ Ready' : 'Ready'}
+            {myMember?.is_ready ? '✓ Ready' : 'Ready'}
           </Button>
           {isHost && (
             <Tooltip title={!canStart ? 'All members must be ready (min 2 players)' : ''}>
@@ -477,8 +562,8 @@ export default function WaitingRoom({ user }) {
           value={transferTarget}
           onChange={setTransferTarget}
           options={members
-            .filter(m => m.id !== userId)
-            .map(m => ({ value: m.id, label: m.username }))
+            .filter(m => m.user_id !== userId)
+            .map(m => ({ value: m.user_id, label: m.username }))
           }
         />
       </Modal>
