@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   App as AntdApp,
+  AutoComplete,
   Avatar,
+  Badge,
   Button,
   Card,
   Empty,
@@ -12,7 +14,9 @@ import {
   Modal,
   Pagination,
   Popconfirm,
+  Radio,
   Select,
+  Segmented,
   Space,
   Spin,
   Tabs,
@@ -22,6 +26,8 @@ import {
   Upload,
 } from 'antd';
 import {
+  CheckOutlined,
+  CloseOutlined,
   DeleteOutlined,
   EditOutlined,
   FileOutlined,
@@ -30,13 +36,16 @@ import {
   PaperClipOutlined,
   PlusOutlined,
   PushpinOutlined,
+  SearchOutlined,
   ShareAltOutlined,
+  TeamOutlined,
   UploadOutlined,
+  UserAddOutlined,
   UserOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons';
 
-import { forumAPI } from '../api';
+import { forumAPI, friendsAPI } from '../api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -47,13 +56,16 @@ const TAG_CONFIG = {
   experience: { label: 'Experience', color: 'green', desc: 'Share your academic journey' },
   academic_culture: { label: 'Academic Culture', color: 'purple', desc: 'Cultural insights & norms' },
   public: { label: 'Public', color: 'orange', desc: 'Open discussion' },
+  friend: { label: 'Friend', color: 'cyan', desc: 'Friend zone posts' },
 };
+const getTagConfig = (tag) => TAG_CONFIG[tag] || { label: tag, color: 'default' };
 const STATUS_CONFIG = {
   approved: { label: 'Approved', color: 'green' },
   pending: { label: 'Pending Review', color: 'gold' },
   rejected: { label: 'Rejected', color: 'red' },
 };
-const TAGS = Object.keys(TAG_CONFIG);
+// Tags available for user selection (public/friend are auto-set by zone, not user-selectable)
+const USER_SELECTABLE_TAGS = ['skills', 'experience', 'academic_culture'];
 const POSTS_PAGE_SIZE = 10;
 const REVIEW_PAGE_SIZE = 8;
 const MY_POSTS_PAGE_SIZE = 10;
@@ -163,7 +175,7 @@ function AdminQueueCard({ post, onOpen, onReview }) {
           </Avatar>
           <Text strong>{post.username}</Text>
           <StatusTag status={post.status} />
-          <Tag color={TAG_CONFIG[post.tag]?.color}>{TAG_CONFIG[post.tag]?.label}</Tag>
+          <Tag color={getTagConfig(post.tag).color}>{getTagConfig(post.tag).label}</Tag>
         </Space>
         <div>
           <Title level={5} style={{ margin: 0 }}>{post.title}</Title>
@@ -188,11 +200,20 @@ export default function Forum({ user }) {
   const isAdmin = Boolean(user?.is_admin);
   const { message } = AntdApp.useApp();
 
+  const [activeZone, setActiveZone] = useState('public');
   const [activeTab, setActiveTab] = useState('all');
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+
+  // Friend management
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [friends, setFriends] = useState([]);
+  const [friendRequests, setFriendRequests] = useState({ received: [], sent: [] });
+  const [friendSearchEmail, setFriendSearchEmail] = useState('');
+  const [friendSearchResults, setFriendSearchResults] = useState([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -235,7 +256,7 @@ export default function Forum({ user }) {
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, per_page: POSTS_PAGE_SIZE };
+      const params = { page, per_page: POSTS_PAGE_SIZE, zone: activeZone, include_forwards: 'true' };
       if (activeTab !== 'all') params.tag = activeTab;
       const res = await forumAPI.getPosts(params);
       setPosts(res.data.posts);
@@ -245,7 +266,7 @@ export default function Forum({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, message, page]);
+  }, [activeTab, activeZone, message, page]);
 
   const fetchPendingPosts = useCallback(async (targetPage) => {
     if (!isAdmin) return;
@@ -284,6 +305,70 @@ export default function Forum({ user }) {
     }
   }, [isAdmin, message]);
 
+  const fetchFriends = useCallback(async () => {
+    try {
+      const [friendRes, reqRes] = await Promise.all([
+        friendsAPI.list(),
+        friendsAPI.getRequests(),
+      ]);
+      setFriends(friendRes.data.friends || []);
+      setFriendRequests(reqRes.data || { received: [], sent: [] });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const handleSearchFriends = async () => {
+    if (!friendSearchEmail.trim()) return;
+    try {
+      const res = await friendsAPI.search(friendSearchEmail.trim());
+      setFriendSearchResults(res.data.users || []);
+    } catch {
+      message.error('Search failed');
+    }
+  };
+
+  const handleSendFriendRequest = async (email) => {
+    try {
+      await friendsAPI.sendRequest(email);
+      message.success('Friend request sent');
+      handleSearchFriends();
+      fetchFriends();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to send request');
+    }
+  };
+
+  const handleAcceptFriend = async (requestId) => {
+    try {
+      await friendsAPI.accept(requestId);
+      message.success('Friend request accepted');
+      fetchFriends();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to accept request');
+    }
+  };
+
+  const handleRejectFriend = async (requestId) => {
+    try {
+      await friendsAPI.reject(requestId);
+      message.success('Friend request rejected');
+      fetchFriends();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to reject request');
+    }
+  };
+
+  const handleRemoveFriend = async (friendUserId) => {
+    try {
+      await friendsAPI.remove(friendUserId);
+      message.success('Friend removed');
+      fetchFriends();
+    } catch {
+      message.error('Failed to remove friend');
+    }
+  };
+
   useEffect(() => {
     fetchPosts();
   }, [fetchPosts]);
@@ -292,8 +377,10 @@ export default function Forum({ user }) {
     if (isAdmin) {
       fetchPendingPosts(reviewPage);
       fetchRejectReasons();
+    } else {
+      fetchFriends();
     }
-  }, [fetchPendingPosts, fetchRejectReasons, isAdmin, reviewPage]);
+  }, [fetchPendingPosts, fetchRejectReasons, fetchFriends, isAdmin, reviewPage]);
 
   const refreshDetail = useCallback(async (postId) => {
     try {
@@ -323,8 +410,12 @@ export default function Forum({ user }) {
     try {
       const values = await createForm.validateFields();
       setCreating(true);
+      const zone = values.zone || 'public';
+      // Auto-set tag: if user didn't specify, use zone name as tag
+      const tag = values.tag?.trim() || zone;
       const formData = new FormData();
-      formData.append('tag', values.tag);
+      formData.append('zone', zone);
+      formData.append('tag', tag);
       formData.append('title', values.title);
       formData.append('content', values.content);
       if (values.video_url) formData.append('video_url', values.video_url);
@@ -492,9 +583,9 @@ export default function Forum({ user }) {
 
   const tabItems = [
     { key: 'all', label: 'All Posts' },
-    ...TAGS.map((tag) => ({
+    ...USER_SELECTABLE_TAGS.map((tag) => ({
       key: tag,
-      label: <Tag color={TAG_CONFIG[tag].color}>{TAG_CONFIG[tag].label}</Tag>,
+      label: <Tag color={getTagConfig(tag).color}>{getTagConfig(tag).label}</Tag>,
     })),
   ];
 
@@ -516,76 +607,120 @@ export default function Forum({ user }) {
     );
   };
 
-  const renderPostCard = (post) => (
-    <Card
-      key={post.id}
-      hoverable
-      style={{ marginBottom: 12, borderRadius: 10 }}
-      styles={{ body: { padding: '16px 20px' } }}
-      onClick={() => openDetail(post.id)}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Space size={8} wrap style={{ marginBottom: 6 }}>
-            <Avatar size={28} style={{ backgroundColor: '#2563eb' }}>
-              {post.username?.charAt(0)?.toUpperCase() || 'U'}
-            </Avatar>
-            <Text strong>{post.username}</Text>
-            {post.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
-            <Tag color={TAG_CONFIG[post.tag]?.color}>{TAG_CONFIG[post.tag]?.label}</Tag>
-            <StatusTag status={post.status} />
+  const renderPostCard = (item) => {
+    if (item.type === 'forward') {
+      const origPost = item.original_post;
+      return (
+        <Card
+          key={`fw-${item.id}`}
+          hoverable
+          style={{ marginBottom: 12, borderRadius: 10, borderLeft: '3px solid #06b6d4' }}
+          styles={{ body: { padding: '16px 20px' } }}
+          onClick={() => origPost && openDetail(origPost.id)}
+        >
+          <Space size={8} style={{ marginBottom: 8 }}>
+            <ShareAltOutlined style={{ color: '#06b6d4' }} />
+            <Text type="secondary">
+              <Text strong>{item.username}</Text> forwarded this post
+            </Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{new Date(item.created_at).toLocaleDateString()}</Text>
           </Space>
-          <Title level={5} style={{ margin: '4px 0' }}>{post.title}</Title>
-          <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
-            {post.content}
-          </Paragraph>
-          <Space size={16} style={{ marginTop: 8, color: '#9ca3af' }}>
-            {post.file_url && <span><FileOutlined /> File</span>}
-            {post.video_url && <span><VideoCameraOutlined /> Video</span>}
-            <span><MessageOutlined /> {post.comment_count}</span>
-            <span><ShareAltOutlined /> {post.forward_count}</span>
-            <span>{new Date(post.created_at).toLocaleDateString()}</span>
+          {item.comment && (
+            <Paragraph style={{ margin: '0 0 8px', fontStyle: 'italic', color: '#6b7280' }}>
+              "{item.comment}"
+            </Paragraph>
+          )}
+          {origPost && (
+            <Card size="small" style={{ background: '#f9fafb', borderRadius: 8 }}>
+              <Space size={8} wrap style={{ marginBottom: 4 }}>
+                <Avatar size={24} style={{ backgroundColor: '#2563eb' }}>
+                  {origPost.username?.charAt(0)?.toUpperCase() || 'U'}
+                </Avatar>
+                <Text strong style={{ fontSize: 13 }}>{origPost.username}</Text>
+                <Tag color={getTagConfig(origPost.tag).color}>{getTagConfig(origPost.tag).label}</Tag>
+              </Space>
+              <Title level={5} style={{ margin: '4px 0' }}>{origPost.title}</Title>
+              <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
+                {origPost.content}
+              </Paragraph>
+            </Card>
+          )}
+        </Card>
+      );
+    }
+
+    const post = item;
+    return (
+      <Card
+        key={post.id}
+        hoverable
+        style={{ marginBottom: 12, borderRadius: 10 }}
+        styles={{ body: { padding: '16px 20px' } }}
+        onClick={() => openDetail(post.id)}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Space size={8} wrap style={{ marginBottom: 6 }}>
+              <Avatar size={28} style={{ backgroundColor: '#2563eb' }}>
+                {post.username?.charAt(0)?.toUpperCase() || 'U'}
+              </Avatar>
+              <Text strong>{post.username}</Text>
+              {post.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
+              <Tag color={getTagConfig(post.tag).color}>{getTagConfig(post.tag).label}</Tag>
+              <StatusTag status={post.status} />
+            </Space>
+            <Title level={5} style={{ margin: '4px 0' }}>{post.title}</Title>
+            <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
+              {post.content}
+            </Paragraph>
+            <Space size={16} style={{ marginTop: 8, color: '#9ca3af' }}>
+              {post.file_url && <span><FileOutlined /> File</span>}
+              {post.video_url && <span><VideoCameraOutlined /> Video</span>}
+              <span><MessageOutlined /> {post.comment_count}</span>
+              <span><ShareAltOutlined /> {post.forward_count}</span>
+              <span>{new Date(post.created_at).toLocaleDateString()}</span>
+            </Space>
+          </div>
+          <Space size={4} onClick={(e) => e.stopPropagation()}>
+            {post.can_forward && (
+              <Tooltip title="Forward">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ShareAltOutlined />}
+                  onClick={() => {
+                    setForwardPostId(post.id);
+                    setForwardComment('');
+                    setForwardOpen(true);
+                  }}
+                />
+              </Tooltip>
+            )}
+            {post.can_edit && (
+              <Tooltip title="Edit">
+                <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(post)} />
+              </Tooltip>
+            )}
+            {post.can_pin && (
+              <Tooltip title={post.is_pinned ? 'Unpin' : 'Pin'}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<PushpinOutlined />}
+                  onClick={() => handlePin(post)}
+                />
+              </Tooltip>
+            )}
+            {post.can_delete && (
+              <Popconfirm title="Delete this post?" onConfirm={() => handleDeletePost(post.id)}>
+                <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+              </Popconfirm>
+            )}
           </Space>
         </div>
-        <Space size={4} onClick={(e) => e.stopPropagation()}>
-          {post.can_forward && (
-            <Tooltip title="Forward">
-              <Button
-                type="text"
-                size="small"
-                icon={<ShareAltOutlined />}
-                onClick={() => {
-                  setForwardPostId(post.id);
-                  setForwardComment('');
-                  setForwardOpen(true);
-                }}
-              />
-            </Tooltip>
-          )}
-          {post.can_edit && (
-            <Tooltip title="Edit">
-              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(post)} />
-            </Tooltip>
-          )}
-          {post.can_pin && (
-            <Tooltip title={post.is_pinned ? 'Unpin' : 'Pin'}>
-              <Button
-                type="text"
-                size="small"
-                icon={<PushpinOutlined />}
-                onClick={() => handlePin(post)}
-              />
-            </Tooltip>
-          )}
-          {post.can_delete && (
-            <Popconfirm title="Delete this post?" onConfirm={() => handleDeletePost(post.id)}>
-              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
-          )}
-        </Space>
-      </div>
-    </Card>
-  );
+      </Card>
+    );
+  };
 
   return (
     <div className="page-container">
@@ -597,6 +732,13 @@ export default function Forum({ user }) {
           </Text>
         </div>
         <Space wrap>
+          {!isAdmin && (
+            <Badge count={friendRequests.received?.length || 0} size="small">
+              <Button icon={<TeamOutlined />} onClick={() => { setFriendsOpen(true); fetchFriends(); }}>
+                Friends
+              </Button>
+            </Badge>
+          )}
           <Button icon={<HistoryOutlined />} onClick={() => { setMyPostsOpen(true); setMyPage(1); fetchMyPosts(1); }}>
             My Posts
           </Button>
@@ -642,6 +784,18 @@ export default function Forum({ user }) {
         </Card>
       )}
 
+      {!isAdmin && (
+        <Segmented
+          value={activeZone}
+          onChange={(val) => { setActiveZone(val); setActiveTab('all'); setPage(1); }}
+          options={[
+            { label: 'Public Zone', value: 'public' },
+            { label: 'Friend Zone', value: 'friend' },
+          ]}
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       <Tabs
         activeKey={activeTab}
         onChange={(key) => {
@@ -679,15 +833,22 @@ export default function Forum({ user }) {
         okText="Post"
         width={620}
       >
-        <Form form={createForm} layout="vertical">
-          <Form.Item name="tag" label="Tag" rules={[{ required: true, message: 'Please select a tag' }]}>
-            <Select placeholder="Select a tag">
-              {TAGS.map((tag) => (
-                <Select.Option key={tag} value={tag}>
-                  {TAG_CONFIG[tag].label}
-                </Select.Option>
-              ))}
-            </Select>
+        <Form form={createForm} layout="vertical" initialValues={{ zone: 'public' }}>
+          {!isAdmin && (
+            <Form.Item name="zone" label="Zone">
+              <Radio.Group>
+                <Radio.Button value="public">Public Zone</Radio.Button>
+                <Radio.Button value="friend">Friend Zone</Radio.Button>
+              </Radio.Group>
+            </Form.Item>
+          )}
+          <Form.Item name="tag" label="Tag (optional, auto-set if empty)">
+            <AutoComplete
+              placeholder="Select or type a custom tag (optional)"
+              options={USER_SELECTABLE_TAGS.map(t => ({ value: t, label: getTagConfig(t).label }))}
+              filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
+              allowClear
+            />
           </Form.Item>
           <Form.Item name="title" label="Title" rules={[{ required: true, message: 'Please enter a title' }]}>
             <Input maxLength={200} placeholder="Post title" />
@@ -724,14 +885,13 @@ export default function Forum({ user }) {
         okText={editingPost?.status === 'rejected' && !isAdmin ? 'Resubmit' : 'Save'}
       >
         <Form form={editForm} layout="vertical">
-          <Form.Item name="tag" label="Tag" rules={[{ required: true, message: 'Please select a tag' }]}>
-            <Select>
-              {TAGS.map((tag) => (
-                <Select.Option key={tag} value={tag}>
-                  {TAG_CONFIG[tag].label}
-                </Select.Option>
-              ))}
-            </Select>
+          <Form.Item name="tag" label="Tag">
+            <AutoComplete
+              placeholder="Select or type a custom tag"
+              options={USER_SELECTABLE_TAGS.map(t => ({ value: t, label: getTagConfig(t).label }))}
+              filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
+              allowClear
+            />
           </Form.Item>
           <Form.Item name="title" label="Title" rules={[{ required: true, message: 'Please enter a title' }]}>
             <Input maxLength={200} />
@@ -815,7 +975,7 @@ export default function Forum({ user }) {
                   {new Date(detailPost.created_at).toLocaleString()}
                 </Text>
               </div>
-              <Tag color={TAG_CONFIG[detailPost.tag]?.color}>{TAG_CONFIG[detailPost.tag]?.label}</Tag>
+              <Tag color={getTagConfig(detailPost.tag).color}>{getTagConfig(detailPost.tag).label}</Tag>
               <StatusTag status={detailPost.status} />
               {detailPost.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
             </Space>
@@ -950,6 +1110,140 @@ export default function Forum({ user }) {
         />
       </Modal>
 
+      {/* Friends Management Modal */}
+      <Modal
+        title="Manage Friends"
+        open={friendsOpen}
+        onCancel={() => { setFriendsOpen(false); setFriendSearchEmail(''); setFriendSearchResults([]); }}
+        footer={null}
+        width={600}
+      >
+        <Tabs items={[
+          {
+            key: 'friends',
+            label: `My Friends (${friends.length})`,
+            children: friends.length === 0 ? (
+              <Empty description="No friends yet" />
+            ) : (
+              <List
+                dataSource={friends}
+                renderItem={(f) => (
+                  <List.Item
+                    actions={[
+                      <Popconfirm key="rm" title="Remove this friend?" onConfirm={() => handleRemoveFriend(f.friend_id)}>
+                        <Button size="small" danger icon={<DeleteOutlined />}>Remove</Button>
+                      </Popconfirm>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      avatar={<Avatar style={{ backgroundColor: '#2563eb' }}>{f.friend_username?.charAt(0)?.toUpperCase()}</Avatar>}
+                      title={f.friend_username}
+                      description={f.friend_email}
+                    />
+                  </List.Item>
+                )}
+              />
+            ),
+          },
+          {
+            key: 'search',
+            label: 'Find Friends',
+            children: (
+              <div>
+                <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+                  <Input
+                    placeholder="Search by email..."
+                    value={friendSearchEmail}
+                    onChange={(e) => setFriendSearchEmail(e.target.value)}
+                    onPressEnter={handleSearchFriends}
+                  />
+                  <Button type="primary" icon={<SearchOutlined />} onClick={handleSearchFriends}>Search</Button>
+                </Space.Compact>
+                {friendSearchResults.length > 0 ? (
+                  <List
+                    dataSource={friendSearchResults}
+                    renderItem={(u) => (
+                      <List.Item
+                        actions={[
+                          u.is_friend ? (
+                            <Tag key="f" color="green">Already Friends</Tag>
+                          ) : u.has_pending_request ? (
+                            <Tag key="p" color="gold">Request Pending</Tag>
+                          ) : (
+                            <Button key="add" size="small" type="primary" icon={<UserAddOutlined />}
+                              onClick={() => handleSendFriendRequest(u.email)}>
+                              Add Friend
+                            </Button>
+                          ),
+                        ]}
+                      >
+                        <List.Item.Meta
+                          avatar={<Avatar style={{ backgroundColor: '#7c3aed' }}>{u.username?.charAt(0)?.toUpperCase()}</Avatar>}
+                          title={u.username}
+                          description={u.email}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                ) : friendSearchEmail ? (
+                  <Empty description="No users found" />
+                ) : null}
+              </div>
+            ),
+          },
+          {
+            key: 'requests',
+            label: <Badge count={friendRequests.received?.length || 0} size="small" offset={[8, 0]}>Requests</Badge>,
+            children: (
+              <div>
+                {friendRequests.received?.length > 0 && (
+                  <>
+                    <Text strong style={{ display: 'block', marginBottom: 8 }}>Received</Text>
+                    <List
+                      dataSource={friendRequests.received}
+                      renderItem={(r) => (
+                        <List.Item
+                          actions={[
+                            <Button key="a" size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleAcceptFriend(r.id)}>Accept</Button>,
+                            <Button key="r" size="small" danger icon={<CloseOutlined />} onClick={() => handleRejectFriend(r.id)}>Reject</Button>,
+                          ]}
+                        >
+                          <List.Item.Meta
+                            avatar={<Avatar style={{ backgroundColor: '#059669' }}>{r.sender_username?.charAt(0)?.toUpperCase()}</Avatar>}
+                            title={r.sender_username}
+                            description={r.sender_email}
+                          />
+                        </List.Item>
+                      )}
+                    />
+                  </>
+                )}
+                {friendRequests.sent?.length > 0 && (
+                  <>
+                    <Text strong style={{ display: 'block', marginTop: 16, marginBottom: 8 }}>Sent</Text>
+                    <List
+                      dataSource={friendRequests.sent}
+                      renderItem={(r) => (
+                        <List.Item>
+                          <List.Item.Meta
+                            avatar={<Avatar>{r.receiver_username?.charAt(0)?.toUpperCase()}</Avatar>}
+                            title={r.receiver_username}
+                            description={<Tag color={r.status === 'pending' ? 'gold' : r.status === 'accepted' ? 'green' : 'red'}>{r.status}</Tag>}
+                          />
+                        </List.Item>
+                      )}
+                    />
+                  </>
+                )}
+                {(!friendRequests.received?.length && !friendRequests.sent?.length) && (
+                  <Empty description="No friend requests" />
+                )}
+              </div>
+            ),
+          },
+        ]} />
+      </Modal>
+
       <Modal
         title="My Posts & Forwards"
         open={myPostsOpen}
@@ -988,7 +1282,7 @@ export default function Forum({ user }) {
                   ) : (
                     <div style={{ width: '100%' }}>
                       <Space size={6} wrap>
-                        <Tag color={TAG_CONFIG[item.tag]?.color}>{TAG_CONFIG[item.tag]?.label}</Tag>
+                        <Tag color={getTagConfig(item.tag).color}>{getTagConfig(item.tag).label}</Tag>
                         <StatusTag status={item.status} />
                         {item.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
                         <Text strong>{item.title}</Text>

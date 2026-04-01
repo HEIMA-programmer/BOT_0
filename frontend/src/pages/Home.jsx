@@ -4,12 +4,12 @@ import {
   ReadOutlined,
   SoundOutlined,
   AudioOutlined,
-  RobotOutlined,
+  TeamOutlined,
   MessageOutlined,
   ArrowRightOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { dailyLearningAPI } from '../api';
+import { dailyLearningAPI, progressAPI } from '../api';
 
 const { Title, Text } = Typography;
 
@@ -47,10 +47,10 @@ const modules = [
     bg: 'linear-gradient(135deg, #ecfeff, #cffafe)',
   },
   {
-    title: 'AI Conversation',
-    icon: <RobotOutlined />,
-    path: '/ai-chat',
-    desc: 'Practice academic discussions with AI',
+    title: 'Room',
+    icon: <TeamOutlined />,
+    path: '/room',
+    desc: 'Join speaking rooms, watch together, or play vocabulary games',
     color: '#7c3aed',
     bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
   },
@@ -61,16 +61,22 @@ export default function Home() {
   const [stats, setStats] = useState({
     wordsLearned: 0,
     totalWords: 0,
+    listeningDone: 0,
+    speakingSessions: 0,
   });
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await dailyLearningAPI.getStats();
-        const data = res.data;
+        const [wordRes, progressRes] = await Promise.all([
+          dailyLearningAPI.getStats(),
+          progressAPI.getDashboard(),
+        ]);
         setStats({
-          wordsLearned: data.total_learned || 0,
-          totalWords: data.total_words || 0,
+          wordsLearned: wordRes.data.total_learned || 0,
+          totalWords: wordRes.data.total_words || 0,
+          listeningDone: progressRes.data.listening_done || 0,
+          speakingSessions: progressRes.data.speaking_sessions || 0,
         });
       } catch (error) {
         console.error('Failed to load stats:', error);
@@ -98,8 +104,8 @@ export default function Home() {
         <Row gutter={32} style={{ marginTop: 28 }}>
           {[
             { label: 'Words Learned', value: stats.wordsLearned, total: Math.max(stats.totalWords, 50) },
-            { label: 'Listening Hours', value: 0, total: 10 },
-            { label: 'Speaking Sessions', value: 0, total: 20 },
+            { label: 'Listening Done', value: stats.listeningDone, total: Math.max(stats.listeningDone, 10) },
+            { label: 'Speaking Sessions', value: stats.speakingSessions, total: Math.max(stats.speakingSessions, 20) },
           ].map((s) => (
             <Col span={8} key={s.label}>
               <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{s.label}</Text>

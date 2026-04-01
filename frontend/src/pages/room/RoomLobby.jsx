@@ -76,11 +76,32 @@ export default function RoomLobby({ user }) {
       fetchRooms();
     });
 
+    socket.on('room_invitation', (data) => {
+      Modal.confirm({
+        title: 'Room Invitation',
+        content: `${data.invited_by} invited you to join "${data.room_name}" (${data.room_type}). Join now?`,
+        okText: 'Join',
+        cancelText: 'Decline',
+        onOk: async () => {
+          try {
+            const res = await roomAPI.join(data.invite_code);
+            const joinedRoom = res.data.room;
+            const dest = joinedRoom.room_type === 'watch' ? 'watch'
+              : joinedRoom.room_type === 'speaking' ? 'speaking'
+              : 'waiting';
+            navigate(`/room/${joinedRoom.id}/${dest}`);
+          } catch (err) {
+            message.error(err.response?.data?.error || 'Failed to join room');
+          }
+        },
+      });
+    });
+
     return () => {
       socket.emit('leave_lobby');
       socket.disconnect();
     };
-  }, [fetchRooms]);
+  }, [fetchRooms, navigate, message]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -375,7 +396,7 @@ export default function RoomLobby({ user }) {
           <div style={{ marginBottom: 20 }}>
             <Text strong style={{ display: 'block', marginBottom: 8 }}>Max Players</Text>
             <Space>
-              <InputNumber min={2} max={8} value={maxPlayers} onChange={v => setMaxPlayers(v)} size="large" style={{ width: 100 }} />
+              <InputNumber min={1} max={8} value={maxPlayers} onChange={v => setMaxPlayers(v)} size="large" style={{ width: 100 }} />
               <Text type="secondary" style={{ fontSize: 13 }}>{maxPlayers} players max</Text>
             </Space>
           </div>

@@ -21,7 +21,7 @@ export default function SpeakingRoomInner({ user, roomId, initialRoom, initialMe
   const { elapsed, formatElapsed } = useRoomTimer();
 
   const {
-    room, members, topic, remoteMedia, isLeavingRef,
+    room, members, topic, remoteMedia, isLeavingRef, socketRef,
     changeTopic, emitMediaState, kickMember, markLeaving,
   } = useRoomSocket(roomId, userId, {
     initialRoom,
@@ -80,7 +80,7 @@ export default function SpeakingRoomInner({ user, roomId, initialRoom, initialMe
 
   return (
     <div style={{ height: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <TopBar room={room} elapsed={elapsed} formatElapsed={formatElapsed} memberCount={members.length} />
+      <TopBar room={room} elapsed={elapsed} formatElapsed={formatElapsed} memberCount={members.length} socketRef={socketRef} members={members} />
       <TopicBanner topic={topic} isHost={isHost} onChangeTopic={() => setShowTopicModal(true)} />
       <ErrorBanners joinError={joinError} permissionWarning={permissionWarning} />
 

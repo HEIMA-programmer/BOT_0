@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Typography, Tabs, List, Tag, Space, Empty, Button } from 'antd';
+import { Typography, Tabs, List, Tag, Space, Empty, Button, Modal, Avatar } from 'antd';
 import {
-  ClockCircleOutlined, ArrowLeftOutlined,
+  ClockCircleOutlined, ArrowLeftOutlined, EyeOutlined, TrophyOutlined,
 } from '@ant-design/icons';
 import { roomAPI } from '../../api/index';
 import { TYPE_CONFIG } from '../../utils/roomUtils';
@@ -21,6 +21,8 @@ export default function MyRecords() {
   const [activeTab, setActiveTab] = useState('all');
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [gameDetailOpen, setGameDetailOpen] = useState(false);
+  const [gameDetailData, setGameDetailData] = useState(null);
 
   useEffect(() => {
     roomAPI.getRecords()
@@ -119,19 +121,90 @@ export default function MyRecords() {
                   </div>
 
                   {/* Summary */}
-                  {record.summary && (
-                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                  <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {record.summary && (
                       <Text style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>
                         {record.summary}
                       </Text>
-                    </div>
-                  )}
+                    )}
+                    {record.room_type === 'game' && (
+                      <Button
+                        size="small"
+                        icon={<EyeOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Find the matching game_record by room_id, user_id, and approximate time
+                          roomAPI.getGameRecord(record.id).then(res => {
+                            setGameDetailData(res.data);
+                            setGameDetailOpen(true);
+                          }).catch(() => {
+                            // Fallback: just show summary
+                            setGameDetailData({ summary: record.summary, room_name: record.room_name });
+                            setGameDetailOpen(true);
+                          });
+                        }}
+                      >
+                        Details
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </List.Item>
             );
           }}
         />
       )}
+
+      {/* Game Detail Modal */}
+      <Modal
+        title={<><TrophyOutlined style={{ color: '#d97706' }} /> Game Details</>}
+        open={gameDetailOpen}
+        onCancel={() => { setGameDetailOpen(false); setGameDetailData(null); }}
+        footer={null}
+        width={600}
+      >
+        {gameDetailData && (
+          <div>
+            <Space style={{ marginBottom: 16 }}>
+              <Tag color="blue">{gameDetailData.game_type?.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Game'}</Tag>
+              <Text>Score: <Text strong>{gameDetailData.score}</Text> / {gameDetailData.total_rounds}</Text>
+              <Text>Placement: <Text strong>#{gameDetailData.placement}</Text></Text>
+            </Space>
+            {gameDetailData.rounds_data && (() => {
+              try {
+                const rounds = JSON.parse(gameDetailData.rounds_data);
+                return (
+                  <List
+                    dataSource={rounds}
+                    renderItem={(round, idx) => (
+                      <List.Item>
+                        <div style={{ width: '100%' }}>
+                          <Text strong>Round {idx + 1}</Text>
+                          <div style={{ marginTop: 4 }}>
+                            <Text type="secondary">Q: {round.question || round.sentence}</Text>
+                          </div>
+                          <div style={{ marginTop: 4 }}>
+                            <Text>Answer: <Text code>{round.correct_answer}</Text></Text>
+                            {round.winner_user_id ? (
+                              <Tag color="green" style={{ marginLeft: 8 }}>
+                                Won by user #{round.winner_user_id}
+                              </Tag>
+                            ) : (
+                              <Tag color="default" style={{ marginLeft: 8 }}>No winner</Tag>
+                            )}
+                          </div>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                );
+              } catch {
+                return <Text type="secondary">Round data unavailable</Text>;
+              }
+            })()}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

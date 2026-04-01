@@ -145,7 +145,7 @@ export default function App() {
                 <RequireAuth user={user} loading={loading}><Forum user={user} /></RequireAuth>
               } />
               <Route path="/profile" element={
-                <RequireAuth user={user} loading={loading}><Profile user={user} /></RequireAuth>
+                <RequireAuth user={user} loading={loading}><Profile user={user} onUserUpdate={setUser} /></RequireAuth>
               } />
 
               {/* Room module */}

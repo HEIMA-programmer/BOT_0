@@ -102,6 +102,7 @@ export default function useRoomSocket(roomId, userId, { initialRoom, initialMemb
     topic,
     remoteMedia,
     isLeavingRef,
+    socketRef,
     changeTopic,
     emitMediaState,
     kickMember,

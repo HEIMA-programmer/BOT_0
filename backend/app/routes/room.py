@@ -10,6 +10,8 @@ from sqlalchemy.orm import joinedload
 from app import db, socketio
 from app.models.room import Room, RoomMember
 from app.models.room_record import RoomRecord
+from app.models.game_record import GameRecord
+from app.models.word import Word
 
 room_bp = Blueprint('room', __name__, url_prefix='/api/rooms')
 
@@ -94,8 +96,8 @@ def create_room():
         return jsonify({'error': 'Room name must be 1–80 characters'}), 400
     if room_type not in VALID_TYPES:
         return jsonify({'error': f'room_type must be one of: {", ".join(VALID_TYPES)}'}), 400
-    if not isinstance(max_players, int) or not (2 <= max_players <= 8):
-        return jsonify({'error': 'max_players must be between 2 and 8'}), 400
+    if not isinstance(max_players, int) or not (1 <= max_players <= 8):
+        return jsonify({'error': 'max_players must be between 1 and 8'}), 400
     if visibility not in VALID_VISIBILITY:
         return jsonify({'error': 'visibility must be public or private'}), 400
 
@@ -302,5 +304,87 @@ def get_agora_token(room_id):
         'channel': channel_name,
         'uid': current_user.id,
     }), 200
+
+
+CONTEXT_TEMPLATES = [
+    'The professor emphasized the importance of _____ in the research methodology.',
+    'Students must demonstrate strong _____ skills in their final project.',
+    'The concept of _____ is fundamental to understanding this academic discipline.',
+    'The study found that _____ played a significant role in the outcome.',
+    'A thorough understanding of _____ is essential for success in this course.',
+    'The report highlighted the need for better _____ in the industry.',
+    'Recent developments in _____ have transformed the field dramatically.',
+    'The committee recommended further _____ to address the existing challenges.',
+    'Effective _____ requires both theoretical knowledge and practical experience.',
+    'The research paper discussed the relationship between _____ and innovation.',
+]
+
+
+def generate_game_questions(game_type, count=5):
+    """Generate game questions from the AWL word database."""
+    import random
+    words = Word.query.order_by(db.func.random()).limit(count).all()
+
+    if not words:
+        return []
+
+    questions = []
+    for i, word in enumerate(words):
+        if game_type == 'word_duel':
+            questions.append({
+                'id': i + 1,
+                'question': word.definition or f'Definition for: {word.text}',
+                'answer': word.text,
+            })
+        else:  # context_guesser
+            template = CONTEXT_TEMPLATES[i % len(CONTEXT_TEMPLATES)]
+            sentence = template.replace('_____', '_____')
+            questions.append({
+                'id': i + 1,
+                'sentence': sentence,
+                'answer': word.text,
+                'explanation': word.definition or f'{word.text} - an academic vocabulary word.',
+            })
+
+    return questions
+
+
+@room_bp.route('/game-questions', methods=['GET'])
+@login_required
+def get_game_questions():
+    """Generate random game questions from the word database."""
+    game_type = request.args.get('type', 'word_duel')
+    count = request.args.get('count', 5, type=int)
+    count = min(max(count, 3), 10)
+
+    if game_type not in ('word_duel', 'context_guesser'):
+        return jsonify({'error': 'type must be word_duel or context_guesser'}), 400
+
+    questions = generate_game_questions(game_type, count)
+    return jsonify({'questions': questions}), 200
+
+
+@room_bp.route('/game-records/<int:record_id>', methods=['GET'])
+@login_required
+def get_game_record(record_id):
+    """Get detailed game record. record_id can be a GameRecord ID or a RoomRecord ID."""
+    # First try GameRecord directly
+    record = db.session.get(GameRecord, record_id)
+    if not record:
+        # Try looking up via RoomRecord → find matching GameRecord
+        room_record = db.session.get(RoomRecord, record_id)
+        if room_record and room_record.room_type == 'game':
+            record = GameRecord.query.filter_by(
+                room_id=room_record.room_id,
+                user_id=room_record.user_id,
+            ).order_by(GameRecord.created_at.desc()).first()
+
+    if not record:
+        return jsonify({'error': 'Record not found'}), 404
+
+    if record.user_id != current_user.id and not getattr(current_user, 'is_admin', False):
+        return jsonify({'error': 'Not authorized'}), 403
+
+    return jsonify(record.to_dict()), 200
 
 

@@ -18,6 +18,7 @@ export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
+  updateUsername: (username) => api.patch('/auth/username', { username }),
 };
 
 // Daily Words APIs (legacy)
@@ -113,6 +114,19 @@ export const roomAPI = {
   leave:      (roomId, data) => api.delete(`/rooms/${roomId}/members/me`, { data }),
   getRecords: ()        => api.get('/rooms/records'),
   getAgoraToken: (roomId) => api.get(`/rooms/${roomId}/agora-token`),
+  getGameQuestions: (type, count) => api.get('/rooms/game-questions', { params: { type, count } }),
+  getGameRecord: (recordId) => api.get(`/rooms/game-records/${recordId}`),
+};
+
+// Friends APIs
+export const friendsAPI = {
+  list: () => api.get('/friends/'),
+  getRequests: () => api.get('/friends/requests'),
+  search: (email) => api.get('/friends/search', { params: { email } }),
+  sendRequest: (receiverEmail) => api.post('/friends/request', { receiver_email: receiverEmail }),
+  accept: (requestId) => api.post('/friends/accept', { request_id: requestId }),
+  reject: (requestId) => api.post('/friends/reject', { request_id: requestId }),
+  remove: (friendUserId) => api.delete(`/friends/${friendUserId}`),
 };
 
 export default api;
