@@ -62,7 +62,7 @@ def _deferred_cleanup(app, user_id, room_id):
 
         # Record the session for speaking/watch rooms
         if room.room_type in ('speaking', 'watch'):
-            duration_secs = int((datetime.now(timezone.utc) - member.joined_at).total_seconds())
+            duration_secs = int((datetime.utcnow() - member.joined_at).total_seconds())
             record = RoomRecord(
                 room_id=room.id,
                 user_id=user_id,
@@ -431,7 +431,7 @@ def handle_kick_member(data):
 
     # Record session for speaking/watch rooms
     if room.room_type in ('speaking', 'watch'):
-        duration_secs = int((datetime.now(timezone.utc) - target.joined_at).total_seconds())
+        duration_secs = int((datetime.utcnow() - target.joined_at).total_seconds())
         record = RoomRecord(
             room_id=room.id,
             user_id=target_user_id,

@@ -58,7 +58,7 @@ def _remove_member(room, member):
     )
     if not remaining:
         room.status = 'ended'
-        room.ended_at = datetime.now(timezone.utc)
+        room.ended_at = datetime.utcnow()
     elif was_host:
         remaining[0].role = 'host'
         room.host_id = remaining[0].user_id
@@ -222,7 +222,7 @@ def leave_room(room_id):
 
     # Record the session for speaking/watch rooms (game rooms record separately)
     if room.room_type in ('speaking', 'watch'):
-        duration_secs = int((datetime.now(timezone.utc) - member.joined_at).total_seconds())
+        duration_secs = int((datetime.utcnow() - member.joined_at).total_seconds())
         summary = request.get_json(silent=True) or {}
         record = RoomRecord(
             room_id=room.id,
@@ -268,8 +268,7 @@ def get_records():
 @login_required
 def get_agora_token(room_id):
     """Generate an Agora RTC token for the current user to join a speaking room."""
-    from agora_token_builder import RtcTokenBuilder
-    from agora_token_builder.RtcTokenBuilder import Role_Publisher
+    from app.agora_token.RtcTokenBuilder2 import RtcTokenBuilder, Role_Publisher
 
     room = db.session.get(Room, room_id)
     if not room:
@@ -288,13 +287,13 @@ def get_agora_token(room_id):
     channel_name = f'room_{room_id}'
     # Token valid for 24 hours
     expire_secs = 86400
-    privilege_ts = int(time.time()) + expire_secs
 
-    token = RtcTokenBuilder.buildTokenWithUid(
+    token = RtcTokenBuilder.build_token_with_uid(
         app_id, app_cert, channel_name,
         current_user.id,       # uid — use our DB user id
         Role_Publisher,        # can publish audio/video
-        privilege_ts,
+        token_expire=expire_secs,
+        privilege_expire=expire_secs,
     )
 
     return jsonify({
