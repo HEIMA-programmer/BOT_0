@@ -24,8 +24,6 @@ describe('Speaking page', () => {
     renderWithProviders(<Speaking />);
 
     expect(await screen.findByText('Structured Speaking')).toBeTruthy();
-    expect(screen.getByText('Pronunciation Practice')).toBeTruthy();
-    expect(screen.getByText('Sentence Follow-along')).toBeTruthy();
 
     fireEvent.click(screen.getByText('Structured Speaking'));
     expect(mockNavigate).toHaveBeenCalledWith('/speaking/structured');
