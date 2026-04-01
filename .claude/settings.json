@@ -1,8 +1,0 @@
-{
- "env": {
- "ANTHROPIC_AUTH_TOKEN": "sk-5adHlPrDuhD3sytatsIqvSxFBhHaBxmxySCVSTmLGWrRYEPk",
- "ANTHROPIC_BASE_URL": "https://main-new.codesuc.top"
- },
- "includeCoAuthoredBy": false,
- "model": "opus"
-}
