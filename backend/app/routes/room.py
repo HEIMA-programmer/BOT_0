@@ -222,7 +222,7 @@ def leave_room(room_id):
 
     # Record the session for speaking/watch rooms (game rooms record separately)
     if room.room_type in ('speaking', 'watch'):
-        duration_secs = int((datetime.utcnow() - member.joined_at).total_seconds())
+        duration_secs = int((datetime.now(timezone.utc) - member.joined_at).total_seconds())
         summary = request.get_json(silent=True) or {}
         record = RoomRecord(
             room_id=room.id,

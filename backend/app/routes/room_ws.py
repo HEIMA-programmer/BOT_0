@@ -62,7 +62,7 @@ def _deferred_cleanup(app, user_id, room_id):
 
         # Record the session for speaking/watch rooms
         if room.room_type in ('speaking', 'watch'):
-            duration_secs = int((datetime.utcnow() - member.joined_at).total_seconds())
+            duration_secs = int((datetime.now(timezone.utc) - member.joined_at).total_seconds())
             record = RoomRecord(
                 room_id=room.id,
                 user_id=user_id,
@@ -385,6 +385,29 @@ def handle_set_topic(data):
     socketio.emit('topic_changed', {'topic': topic}, namespace='/room', room=str(room_id))
 
 
+@socketio.on('toggle_media', namespace='/room')
+def handle_toggle_media(data):
+    """Broadcast mic/camera state changes to other members in the speaking room."""
+    if not current_user.is_authenticated:
+        return
+    data = data or {}
+    room_id = data.get('room_id')
+    _, member = _get_room_and_member(room_id)
+    if not member:
+        return
+    socketio.emit(
+        'media_state_changed',
+        {
+            'user_id': current_user.id,
+            'mic_on': bool(data.get('mic_on', True)),
+            'camera_on': bool(data.get('camera_on', True)),
+        },
+        namespace='/room',
+        room=str(room_id),
+        skip_sid=request.sid,
+    )
+
+
 @socketio.on('kick_member', namespace='/room')
 def handle_kick_member(data):
     if not current_user.is_authenticated:
@@ -408,7 +431,7 @@ def handle_kick_member(data):
 
     # Record session for speaking/watch rooms
     if room.room_type in ('speaking', 'watch'):
-        duration_secs = int((datetime.utcnow() - target.joined_at).total_seconds())
+        duration_secs = int((datetime.now(timezone.utc) - target.joined_at).total_seconds())
         record = RoomRecord(
             room_id=room.id,
             user_id=target_user_id,

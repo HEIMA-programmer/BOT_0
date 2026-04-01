@@ -98,6 +98,9 @@ function SpeakingRoom({ user, roomId, initialRoom, initialMembers, agoraAppId, a
   const [showInvite, setShowInvite]         = useState(false);
   const [codeCopied, setCodeCopied]         = useState(false);
 
+  // Remote media states received via WebSocket (supplements Agora's hasAudio/hasVideo)
+  const [remoteMedia, setRemoteMedia] = useState({});
+
   const socketRef    = useRef(null);
   const isLeavingRef = useRef(false);
 
@@ -159,6 +162,10 @@ function SpeakingRoom({ user, roomId, initialRoom, initialMembers, agoraAppId, a
       }
     });
 
+    socket.on('media_state_changed', ({ user_id: uid, mic_on, camera_on }) => {
+      setRemoteMedia(prev => ({ ...prev, [uid]: { mic_on, camera_on } }));
+    });
+
     return () => socket.disconnect();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, userId]);
@@ -176,8 +183,8 @@ function SpeakingRoom({ user, roomId, initialRoom, initialMembers, agoraAppId, a
   }, [roomId]);
 
   // ── Agora Integration ────────────────────────────────────────────────────
-  // Join the channel
-  useJoin({
+  // Join the channel — destructure isConnected so we can gate publishing
+  const { isConnected, error: joinError } = useJoin({
     appid: agoraAppId,
     channel: channel,
     token: agoraToken,
@@ -187,11 +194,13 @@ function SpeakingRoom({ user, roomId, initialRoom, initialMembers, agoraAppId, a
   // Always create local tracks (ready=true) so they stay alive across mute toggles.
   // Passing micEnabled/cameraEnabled as `ready` would destroy the track on mute,
   // preventing it from being published and causing remote users to never receive it.
-  const { localMicrophoneTrack } = useLocalMicrophoneTrack(true);
-  const { localCameraTrack } = useLocalCameraTrack(true);
+  const { localMicrophoneTrack, ready: micReady } = useLocalMicrophoneTrack(true);
+  const { localCameraTrack, ready: camReady } = useLocalCameraTrack(true);
 
-  // Publish local tracks — they must exist before publishing
-  usePublish([localMicrophoneTrack, localCameraTrack]);
+  // Only publish after the channel is joined AND tracks are created.
+  // Without this guard, usePublish may attempt to publish null tracks or publish
+  // before join completes, causing remote users to never receive our streams.
+  usePublish([localMicrophoneTrack, localCameraTrack], isConnected && micReady && camReady);
 
   // Get remote users
   const remoteUsers = useRemoteUsers();
@@ -203,13 +212,16 @@ function SpeakingRoom({ user, roomId, initialRoom, initialMembers, agoraAppId, a
     if (localMicrophoneTrack) {
       localMicrophoneTrack.setEnabled(micEnabled);
     }
-  }, [micEnabled, localMicrophoneTrack]);
+    // Broadcast media state change to other members via WebSocket
+    socketRef.current?.emit('toggle_media', { room_id: roomId, mic_on: micEnabled, camera_on: cameraEnabled });
+  }, [micEnabled, localMicrophoneTrack, roomId, cameraEnabled]);
 
   useEffect(() => {
     if (localCameraTrack) {
       localCameraTrack.setEnabled(cameraEnabled);
     }
-  }, [cameraEnabled, localCameraTrack]);
+    socketRef.current?.emit('toggle_media', { room_id: roomId, mic_on: micEnabled, camera_on: cameraEnabled });
+  }, [cameraEnabled, localCameraTrack, roomId, micEnabled]);
 
   // ── Handlers ───────────────────────────────────────────────────────────
   const handleChangeTopic = useCallback((newTopic) => {
@@ -346,6 +358,19 @@ function SpeakingRoom({ user, roomId, initialRoom, initialMembers, agoraAppId, a
         </div>
       )}
 
+      {/* Agora connection error banner */}
+      {joinError && (
+        <div style={{
+          background: '#7f1d1d', padding: '8px 24px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          borderBottom: '1px solid #991b1b', flexShrink: 0,
+        }}>
+          <Text style={{ color: '#fca5a5', fontSize: 13 }}>
+            Media connection failed — video/audio will not work. Try refreshing the page.
+          </Text>
+        </div>
+      )}
+
       {/* Video Grid */}
       <div style={{
         flex: 1,
@@ -362,8 +387,10 @@ function SpeakingRoom({ user, roomId, initialRoom, initialMembers, agoraAppId, a
 
           // Find the corresponding Agora remote user
           const rtcUser = isMe ? null : remoteUsers.find(u => Number(u.uid) === member.user_id);
-          const hasVideo = isMe ? cameraEnabled : !!rtcUser?.hasVideo;
-          const hasAudio = isMe ? micEnabled : !!rtcUser?.hasAudio;
+          // Use WebSocket media state as primary source, fall back to Agora SDK state
+          const wsMedia = remoteMedia[member.user_id];
+          const hasVideo = isMe ? cameraEnabled : (wsMedia ? wsMedia.camera_on : !!rtcUser?.hasVideo);
+          const hasAudio = isMe ? micEnabled : (wsMedia ? wsMedia.mic_on : !!rtcUser?.hasAudio);
 
           return (
             <div
