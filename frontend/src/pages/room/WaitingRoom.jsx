@@ -5,21 +5,14 @@ import {
   Popover, Select, Row, Col, Tooltip,
 } from 'antd';
 import {
-  PlayCircleOutlined,
   CrownOutlined, TeamOutlined, LinkOutlined, CheckOutlined,
   ArrowLeftOutlined,
 } from '@ant-design/icons';
 import { io } from 'socket.io-client';
 import { roomAPI } from '../../api/index';
-import { TYPE_CONFIG, getAvatarColor } from '../../utils/roomUtils';
+import { TYPE_CONFIG, getAvatarColor, copyInviteCode } from '../../utils/roomUtils';
 
 const { Text } = Typography;
-
-const MOCK_TOPICS = [
-  'Free Talk', 'Daily Campus Life', 'Academic Writing',
-  'Job Interviews', 'Current Events', 'Technology & AI',
-  'Study Abroad', 'Climate Change',
-];
 
 const GAMES = [
   {
@@ -50,13 +43,11 @@ export default function WaitingRoom({ user }) {
   const [codeCopied, setCodeCopied] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [transferTarget, setTransferTarget] = useState(null);
-  const [showTopicModal, setShowTopicModal] = useState(false);
-  const [topic, setTopic] = useState('Free Talk');
   const [selectedGame, setSelectedGame] = useState(null);
   const [gameStep, setGameStep] = useState(1);
 
   const socketRef = useRef(null);
-  const isStartingRef = useRef(false);   // true when navigating to game or clicking Leave
+  const isLeavingRef = useRef(false);   // true when navigating to game or clicking Leave
   const leaveTimerRef = useRef(null);    // delayed leave — cancelled on StrictMode remount
   const userId = user?.id || 0;
 
@@ -78,9 +69,18 @@ export default function WaitingRoom({ user }) {
     const load = async () => {
       try {
         const res = await roomAPI.getRoom(roomId);
-        setRoom(res.data.room);
+        const loadedRoom = res.data.room;
+        // Type guard from API data (e.g. direct URL access)
+        if (loadedRoom.room_type === 'speaking') {
+          navigate(`/room/${roomId}/speaking`, { state: { room: loadedRoom }, replace: true });
+          return;
+        }
+        if (loadedRoom.room_type === 'watch') {
+          navigate(`/room/${roomId}/watch`, { state: { room: loadedRoom }, replace: true });
+          return;
+        }
+        setRoom(loadedRoom);
         setMembers(res.data.members || []);
-        if (res.data.room.topic) setTopic(res.data.room.topic);
       } catch {
         message.error('Failed to load room');
         navigate('/room');
@@ -92,17 +92,28 @@ export default function WaitingRoom({ user }) {
       setRoom(location.state.room);
     }
     load();
+
+    // Type guard: speaking/watch rooms skip WaitingRoom entirely
+    const stateRoom = location.state?.room;
+    if (stateRoom?.room_type === 'speaking') {
+      navigate(`/room/${roomId}/speaking`, { state: { room: stateRoom }, replace: true });
+      return;
+    }
+    if (stateRoom?.room_type === 'watch') {
+      navigate(`/room/${roomId}/watch`, { state: { room: stateRoom }, replace: true });
+      return;
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
   // ── Navigate when game starts (uses latest state, avoids stale socket closure) ──
   useEffect(() => {
     if (!gameLaunching || !room) return;
-    const path = room.room_type === 'watch' ? 'watch'
-      : room.room_type === 'speaking' ? 'speaking'
-      : 'game';
-    navigate(`/room/${roomId}/${path}`, {
-      state: { room: { ...room, topic, gameType: selectedGame }, members },
+    // replace: WaitingRoom is no longer meaningful once the game starts,
+    // so back-button should go to Lobby, not back here.
+    navigate(`/room/${roomId}/game`, {
+      state: { room: { ...room, gameType: selectedGame }, members },
+      replace: true,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameLaunching]);
@@ -152,7 +163,7 @@ export default function WaitingRoom({ user }) {
     });
 
     socket.on('game_started', () => {
-      isStartingRef.current = true;
+      isLeavingRef.current = true;
       setGameLaunching(true);  // triggers the navigation useEffect above with fresh state
     });
 
@@ -165,7 +176,7 @@ export default function WaitingRoom({ user }) {
       // Delay the REST leave so React StrictMode's intentional unmount→remount cycle
       // can cancel it (remount clears leaveTimerRef above). Real navigation will not
       // remount, so the timer fires and cleans up the DB record.
-      if (!isStartingRef.current) {
+      if (!isLeavingRef.current) {
         leaveTimerRef.current = setTimeout(() => {
           roomAPI.leave(roomId).catch(() => {});
         }, 300);
@@ -174,6 +185,18 @@ export default function WaitingRoom({ user }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, userId]);
 
+  // ── Browser back-button: call REST leave so DB is cleaned up immediately ──
+  useEffect(() => {
+    if (!roomId) return;
+    const onPop = () => {
+      if (!isLeavingRef.current) {
+        roomAPI.leave(roomId).catch(() => {});
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [roomId]);
+
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleToggleReady = useCallback(() => {
     const newReady = !myMember?.is_ready;
@@ -181,7 +204,7 @@ export default function WaitingRoom({ user }) {
   }, [myMember, roomId]);
 
   const handleCopyCode = useCallback(() => {
-    navigator.clipboard.writeText(room?.invite_code || '').then(() => {
+    copyInviteCode(room?.invite_code).then(() => {
       setCodeCopied(true);
       setTimeout(() => setCodeCopied(false), 2000);
     });
@@ -196,7 +219,7 @@ export default function WaitingRoom({ user }) {
     if (isHost && members.length > 1) {
       setShowLeaveModal(true);
     } else {
-      isStartingRef.current = true;  // prevent double-leave in cleanup
+      isLeavingRef.current = true;  // prevent double-leave in cleanup
       try {
         await roomAPI.leave(roomId);
       } finally {
@@ -208,7 +231,7 @@ export default function WaitingRoom({ user }) {
   const confirmLeave = useCallback(async () => {
     if (transferTarget) handleTransferHost(transferTarget);
     setShowLeaveModal(false);
-    isStartingRef.current = true;  // prevent double-leave in cleanup
+    isLeavingRef.current = true;  // prevent double-leave in cleanup
     try {
       await roomAPI.leave(roomId);
     } finally {
@@ -352,50 +375,8 @@ export default function WaitingRoom({ user }) {
           </Row>
         </div>
 
-        {/* Type-specific Config */}
+        {/* Type-specific Config — only game rooms use WaitingRoom */}
         <div style={{ background: '#fff', borderRadius: 12, padding: '20px 24px', border: '1px solid #e5e7eb' }}>
-          {room.room_type === 'watch' && (
-            <div>
-              <Text strong style={{ display: 'block', marginBottom: 12 }}>Content</Text>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 80, height: 56, background: '#f0f2f5', borderRadius: 8,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <PlayCircleOutlined style={{ fontSize: 24, color: '#9ca3af' }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Text strong>{room.contentTitle || 'No content selected'}</Text>
-                  <br />
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {room.contentTitle ? 'Listening Clip' : 'Select content to watch together'}
-                  </Text>
-                </div>
-                {isHost && (
-                  <Button size="small">
-                    {room.contentTitle ? 'Change' : 'Select'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {room.room_type === 'speaking' && (
-            <div>
-              <Text strong style={{ display: 'block', marginBottom: 12 }}>Conversation Topic</Text>
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                background: '#f0f9ff', borderRadius: 8, padding: '10px 14px',
-              }}>
-                <Tag color="blue" style={{ flexShrink: 0 }}>Topic</Tag>
-                <Text style={{ flex: 1, fontSize: 15, fontWeight: 500, marginLeft: 4 }}>{topic}</Text>
-                {isHost && (
-                  <Button size="small" onClick={() => setShowTopicModal(true)}>Change</Button>
-                )}
-              </div>
-            </div>
-          )}
-
           {room.room_type === 'game' && (
             <div>
               <Text strong style={{ display: 'block', marginBottom: 12 }}>
@@ -520,28 +501,6 @@ export default function WaitingRoom({ user }) {
           )}
         </Space>
       </div>
-
-      {/* Topic Selection Modal */}
-      <Modal
-        title="Select Topic"
-        open={showTopicModal}
-        onCancel={() => setShowTopicModal(false)}
-        onOk={() => setShowTopicModal(false)}
-        width={400}
-      >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '8px 0' }}>
-          {MOCK_TOPICS.map(t => (
-            <Tag
-              key={t}
-              color={topic === t ? 'blue' : 'default'}
-              style={{ cursor: 'pointer', padding: '4px 10px', fontSize: 13, borderRadius: 6 }}
-              onClick={() => { setTopic(t); setShowTopicModal(false); }}
-            >
-              {t}
-            </Tag>
-          ))}
-        </div>
-      </Modal>
 
       {/* Leave Confirmation Modal (host with other members) */}
       <Modal

@@ -23,13 +23,6 @@ const TYPE_CARDS = [
   { key: 'game', label: 'Game Room', Icon: TrophyOutlined, color: '#ea580c', desc: 'Vocabulary games' },
 ];
 
-// TODO: replace with real API when /rooms/records endpoint is implemented
-const MOCK_RECENT = [
-  { id: 'rec1', type: 'game', name: 'Word Battle', date: '2026-03-29', summary: 'Won · 5 rounds' },
-  { id: 'rec2', type: 'speaking', name: 'English Practice', date: '2026-03-28', summary: 'Talked 23 min' },
-  { id: 'rec3', type: 'watch', name: 'Study Session', date: '2026-03-27', summary: 'Watched 20 min' },
-];
-
 export default function RoomLobby({ user }) {
   const navigate = useNavigate();
   const { message } = AntdApp.useApp();
@@ -41,11 +34,18 @@ export default function RoomLobby({ user }) {
   const [isPublic, setIsPublic] = useState(true);
   const [roomName, setRoomName] = useState('');
   const [rooms, setRooms] = useState([]);
+  const [recentRecords, setRecentRecords] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [joining, setJoining] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  const roomPath = (room) => {
+    if (room.room_type === 'speaking') return `/room/${room.id}/speaking`;
+    if (room.room_type === 'watch')    return `/room/${room.id}/watch`;
+    return `/room/${room.id}/waiting`;
+  };
 
   const fetchRooms = useCallback(async () => {
     try {
@@ -59,6 +59,9 @@ export default function RoomLobby({ user }) {
   // Initial load
   useEffect(() => {
     fetchRooms();
+    roomAPI.getRecords()
+      .then(res => setRecentRecords((res.data.records || []).slice(0, 3)))
+      .catch(() => {});
   }, [fetchRooms]);
 
   // Real-time lobby updates via WebSocket
@@ -106,7 +109,7 @@ export default function RoomLobby({ user }) {
       const { room } = res.data;
       setShowCreate(false);
       setRoomName('');
-      navigate(`/room/${room.id}/waiting`, { state: { room } });
+      navigate(roomPath(room), { state: { room } });
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to create room';
       message.error(msg);
@@ -124,7 +127,7 @@ export default function RoomLobby({ user }) {
       const { room } = res.data;
       setShowJoin(false);
       setJoinCode('');
-      navigate(`/room/${room.id}/waiting`, { state: { room } });
+      navigate(roomPath(room), { state: { room } });
     } catch (err) {
       const msg = err.response?.data?.error || 'Invalid code or room not found';
       setJoinError(msg);
@@ -139,7 +142,7 @@ export default function RoomLobby({ user }) {
     try {
       const res = await roomAPI.join(room.invite_code);
       const { room: joinedRoom } = res.data;
-      navigate(`/room/${joinedRoom.id}/waiting`, { state: { room: joinedRoom } });
+      navigate(roomPath(joinedRoom), { state: { room: joinedRoom } });
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to join room';
       message.error(msg);
@@ -201,7 +204,8 @@ export default function RoomLobby({ user }) {
               if (!tc) return null;
               const isFull = room.player_count >= room.max_players;
               const inProgress = room.status === 'active';
-              const canJoin = !isFull && !inProgress;
+              // Game rooms lock out mid-session; speaking/watch allow joining anytime
+              const canJoin = !isFull && (!inProgress || room.room_type !== 'game');
               return (
                 <Col xs={24} sm={12} lg={8} key={room.id}>
                   <Card
@@ -227,10 +231,12 @@ export default function RoomLobby({ user }) {
                         </div>
                       </Space>
                       <Badge
-                        status={inProgress ? 'warning' : 'success'}
+                        status={inProgress ? (room.room_type === 'game' ? 'warning' : 'processing') : 'success'}
                         text={
-                          <Text style={{ fontSize: 12, color: inProgress ? '#d97706' : '#16a34a' }}>
-                            {inProgress ? 'In Game' : 'Waiting'}
+                          <Text style={{ fontSize: 12, color: inProgress ? (room.room_type === 'game' ? '#d97706' : '#2563eb') : '#16a34a' }}>
+                            {inProgress
+                              ? (room.room_type === 'game' ? 'In Game' : 'Active')
+                              : 'Waiting'}
                           </Text>
                         }
                       />
@@ -257,7 +263,7 @@ export default function RoomLobby({ user }) {
                       onClick={() => handleJoinOpen(room)}
                       style={{ borderRadius: 8 }}
                     >
-                      {isFull ? 'Full' : inProgress ? 'In Progress' : 'Join'}
+                      {isFull ? 'Full' : (inProgress && room.room_type === 'game') ? 'In Progress' : 'Join'}
                     </Button>
                   </Card>
                 </Col>
@@ -267,8 +273,8 @@ export default function RoomLobby({ user }) {
         )}
       </div>
 
-      {/* Recent — TODO: replace MOCK_RECENT with roomAPI.getRecords() */}
-      {MOCK_RECENT.length > 0 && (
+      {/* Recent */}
+      {recentRecords.length > 0 && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <Title level={4} style={{ margin: 0 }}>Recent</Title>
@@ -277,8 +283,11 @@ export default function RoomLobby({ user }) {
             </Button>
           </div>
           <Row gutter={[12, 12]}>
-            {MOCK_RECENT.map(rec => {
-              const tc = TYPE_CONFIG[rec.type];
+            {recentRecords.map(rec => {
+              const tc = TYPE_CONFIG[rec.room_type];
+              if (!tc) return null;
+              const mins = rec.duration_secs ? Math.round(rec.duration_secs / 60) : 0;
+              const dateStr = rec.created_at ? new Date(rec.created_at).toLocaleDateString() : '';
               return (
                 <Col xs={24} sm={8} key={rec.id}>
                   <Card
@@ -297,10 +306,10 @@ export default function RoomLobby({ user }) {
                         <tc.Icon style={{ fontSize: 16, color: tc.color }} />
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <Text strong style={{ fontSize: 13, display: 'block' }}>{rec.name}</Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>{rec.summary}</Text>
+                        <Text strong style={{ fontSize: 13, display: 'block' }}>{rec.room_name}</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{rec.summary || `${mins} min`}</Text>
                         <br />
-                        <Text type="secondary" style={{ fontSize: 11 }}>{rec.date}</Text>
+                        <Text type="secondary" style={{ fontSize: 11 }}>{dateStr}</Text>
                       </div>
                     </Space>
                   </Card>

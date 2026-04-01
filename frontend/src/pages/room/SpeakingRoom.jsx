@@ -1,54 +1,250 @@
-import { useState, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Typography, Button, Tag, Modal, Space, Avatar, Tooltip } from 'antd';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import { Typography, Button, Tag, Modal, Space, Avatar, Tooltip, Popover, Spin } from 'antd';
 import {
   AudioOutlined, AudioMutedOutlined, VideoCameraOutlined,
   VideoCameraAddOutlined, ArrowLeftOutlined,
-  CrownOutlined,
+  CrownOutlined, LinkOutlined, CheckOutlined, TeamOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
+import { io } from 'socket.io-client';
+import AgoraRTC, {
+  AgoraRTCProvider,
+  useRTCClient,
+  useLocalMicrophoneTrack,
+  useLocalCameraTrack,
+  usePublish,
+  useJoin,
+  useRemoteUsers,
+  RemoteUser,
+  LocalUser,
+} from 'agora-rtc-react';
+
+import { roomAPI } from '../../api/index';
+import { getAvatarColor, TOPICS, copyInviteCode } from '../../utils/roomUtils';
 
 const { Text } = Typography;
 
-import { getAvatarColor } from '../../utils/roomUtils';
-
-const MOCK_TOPICS = [
-  'Free Talk', 'Daily Campus Life', 'Academic Writing',
-  'Job Interviews', 'Current Events', 'Technology & AI',
-  'Study Abroad', 'Climate Change',
-];
-
-const MOCK_ROOM = { id: 'demo', name: "Alice's Speaking Room", type: 'speaking', hostId: 1, topic: 'Daily Campus Life' };
-const MOCK_MEMBERS = [
-  { id: 1, username: 'Alice', role: 'host' },
-  { id: 2, username: 'Bob', role: 'member' },
-  { id: 3, username: 'Carol', role: 'member' },
-  { id: 0, username: 'You', role: 'member' },
-];
-
-export default function SpeakingRoom({ user }) {
-  const navigate = useNavigate();
+export default function SpeakingRoomWrapper({ user }) {
+  // Create a fresh client per mount so StrictMode's unmount→remount gets a clean state.
+  // A module-level client would still be in the "leaving" state when useJoin
+  // tries to rejoin after StrictMode's cleanup, causing both sides to appear offline.
+  const [client] = useState(() => AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' }));
   const location = useLocation();
-  const { room: r, members: m } = location.state || {};
-  const room = r || MOCK_ROOM;
-  const members = m || MOCK_MEMBERS;
+  const { id: roomIdParam } = useParams();
+  const roomId = location.state?.room?.id ? Number(location.state.room.id) : Number(roomIdParam);
+
+  const [agoraToken, setAgoraToken] = useState(null);
+  const [agoraAppId, setAgoraAppId] = useState(null);
+  const [channel, setChannel] = useState(null);
+  const [fetchError, setFetchError] = useState('');
+
+  useEffect(() => {
+    if (!roomId) return;
+    roomAPI.getAgoraToken(roomId)
+      .then(res => {
+        setAgoraToken(res.data.token);
+        setAgoraAppId(res.data.app_id);
+        setChannel(res.data.channel);
+      })
+      .catch(err => setFetchError(err.response?.data?.error || 'Failed to connect to media server'));
+  }, [roomId]);
+
+  if (fetchError) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a' }}>
+        <Text style={{ color: '#ef4444' }}>{fetchError}</Text>
+      </div>
+    );
+  }
+
+  if (!agoraToken) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return (
+    <AgoraRTCProvider client={client}>
+      <SpeakingRoom
+        user={user}
+        roomId={roomId}
+        initialRoom={location.state?.room}
+        initialMembers={location.state?.members}
+        agoraAppId={agoraAppId}
+        agoraToken={agoraToken}
+        channel={channel}
+      />
+    </AgoraRTCProvider>
+  );
+}
+
+function SpeakingRoom({ user, roomId, initialRoom, initialMembers, agoraAppId, agoraToken, channel }) {
+  const navigate = useNavigate();
+
+  const [room]    = useState(initialRoom || null);
+  const [members, setMembers] = useState(initialMembers || []);
 
   const userId = user?.id || 0;
-  const isHost = room.hostId === userId;
+  const isHost = members.find(m => m.user_id === userId)?.role === 'host';
 
-  const [micEnabled, setMicEnabled] = useState(true);
-  const [cameraEnabled, setCameraEnabled] = useState(true);
-  const [showLeave, setShowLeave] = useState(false);
+  const [micEnabled, setMicEnabled]         = useState(true);
+  const [cameraEnabled, setCameraEnabled]   = useState(true);
+  const [showLeave, setShowLeave]           = useState(false);
   const [showTopicModal, setShowTopicModal] = useState(false);
-  const [topic, setTopic] = useState(room.topic || 'Free Talk');
+  const [topic, setTopic]       = useState(initialRoom?.topic || 'Free Talk');
+  const [showInvite, setShowInvite]         = useState(false);
+  const [codeCopied, setCodeCopied]         = useState(false);
 
+  const socketRef    = useRef(null);
+  const isLeavingRef = useRef(false);
 
-  const handleLeave = useCallback(() => {
+  // ── Room timer ─────────────────────────────────────────────────────────
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const formatElapsed = (s) => {
+    const m = Math.floor(s / 60);
+    const h = Math.floor(m / 60);
+    if (h > 0) return `${h}:${String(m % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    return `${m}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  // ── Load real members on mount ──────────────────────────────────────────
+  useEffect(() => {
+    if (!roomId) return;
+    roomAPI.getRoom(roomId)
+      .then(res => setMembers(res.data.members || []))
+      .catch(() => navigate('/room'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+
+  // ── Socket connection ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!roomId || !userId) return;
+    const socket = io('/room', { withCredentials: true });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('join_waiting_room', { room_id: roomId });
+    });
+
+    socket.on('member_joined', ({ member }) => {
+      setMembers(prev => prev.find(m => m.user_id === member.user_id) ? prev : [...prev, member]);
+    });
+
+    socket.on('member_left', ({ user_id }) => {
+      setMembers(prev => prev.filter(m => m.user_id !== user_id));
+    });
+
+    socket.on('host_changed', ({ new_host_user_id }) => {
+      setMembers(prev =>
+        prev.map(m => ({
+          ...m,
+          role: m.user_id === new_host_user_id ? 'host' : m.role === 'host' ? 'member' : m.role,
+        }))
+      );
+    });
+
+    socket.on('topic_changed', ({ topic: newTopic }) => setTopic(newTopic));
+
+    socket.on('member_kicked', ({ user_id: kickedId }) => {
+      if (kickedId === user?.id) {
+        isLeavingRef.current = true;
+        navigate('/room');
+      }
+    });
+
+    return () => socket.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, userId]);
+
+  // ── Browser back-button: call REST leave ──────────────────────────────────
+  useEffect(() => {
+    if (!roomId) return;
+    const onPop = () => {
+      if (!isLeavingRef.current) {
+        roomAPI.leave(roomId).catch(() => {});
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [roomId]);
+
+  // ── Agora Integration ────────────────────────────────────────────────────
+  // Join the channel
+  useJoin({
+    appid: agoraAppId,
+    channel: channel,
+    token: agoraToken,
+    uid: userId, // Match our DB user_id
+  }, true);
+
+  // Always create local tracks (ready=true) so they stay alive across mute toggles.
+  // Passing micEnabled/cameraEnabled as `ready` would destroy the track on mute,
+  // preventing it from being published and causing remote users to never receive it.
+  const { localMicrophoneTrack } = useLocalMicrophoneTrack(true);
+  const { localCameraTrack } = useLocalCameraTrack(true);
+
+  // Publish local tracks — they must exist before publishing
+  usePublish([localMicrophoneTrack, localCameraTrack]);
+
+  // Get remote users
+  const remoteUsers = useRemoteUsers();
+
+  // Mute/unmute local tracks via setEnabled so the track stays published
+  // but stops sending media data. setMuted only silences locally;
+  // setEnabled actually stops the media stream to the remote side.
+  useEffect(() => {
+    if (localMicrophoneTrack) {
+      localMicrophoneTrack.setEnabled(micEnabled);
+    }
+  }, [micEnabled, localMicrophoneTrack]);
+
+  useEffect(() => {
+    if (localCameraTrack) {
+      localCameraTrack.setEnabled(cameraEnabled);
+    }
+  }, [cameraEnabled, localCameraTrack]);
+
+  // ── Handlers ───────────────────────────────────────────────────────────
+  const handleChangeTopic = useCallback((newTopic) => {
+    setTopic(newTopic);
+    setShowTopicModal(false);
+    socketRef.current?.emit('set_topic', { room_id: roomId, topic: newTopic });
+  }, [roomId]);
+
+  const handleLeave = useCallback(async () => {
     if (isHost && members.length > 1) {
       setShowLeave(true);
     } else {
+      isLeavingRef.current = true;
+      try { await roomAPI.leave(roomId, { summary: `Topic: ${topic}` }); } catch {}
       navigate('/room');
     }
-  }, [isHost, members.length, navigate]);
+  }, [isHost, members.length, roomId, navigate, topic]);
+
+  const confirmLeave = useCallback(async () => {
+    isLeavingRef.current = true;
+    setShowLeave(false);
+    try { await roomAPI.leave(roomId, { summary: `Topic: ${topic}` }); } catch {}
+    navigate('/room');
+  }, [roomId, navigate, topic]);
+
+  const handleCopyCode = useCallback(() => {
+    copyInviteCode(room?.invite_code).then(() => {
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    });
+  }, [room?.invite_code]);
+
+  const handleKick = useCallback((targetUserId) => {
+    socketRef.current?.emit('kick_member', { room_id: roomId, target_user_id: targetUserId });
+  }, [roomId]);
 
   // Grid layout: 1 → 1 col, 2 → 2 cols, 3-4 → 2×2 grid
   const gridCols = members.length <= 1 ? 1 : 2;
@@ -56,6 +252,60 @@ export default function SpeakingRoom({ user }) {
 
   return (
     <div style={{ height: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Top Bar */}
+      <div style={{
+        background: '#1a1a2e', padding: '0 24px', height: 52,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+      }}>
+        <Space size={10}>
+          <Text strong style={{ color: '#f1f5f9', fontSize: 15 }}>{room?.name}</Text>
+          <Tag color="#16a34a" style={{ borderRadius: 6 }}>Speaking Room</Tag>
+        </Space>
+        <Space size={8}>
+          <Text style={{ color: '#94a3b8', fontSize: 12, fontFamily: 'monospace' }}>
+            <ClockCircleOutlined style={{ marginRight: 4 }} />{formatElapsed(elapsed)}
+          </Text>
+          <Text style={{ color: '#64748b', fontSize: 12 }}>
+            <TeamOutlined style={{ marginRight: 4 }} />{members.length} members
+          </Text>
+          <Popover
+            open={showInvite}
+            onOpenChange={setShowInvite}
+            trigger="click"
+            placement="bottomRight"
+            content={
+              <div style={{ width: 220 }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Invite Code</Text>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    flex: 1, fontFamily: 'monospace', fontSize: 22, fontWeight: 700,
+                    letterSpacing: 4, textAlign: 'center',
+                    background: '#f0f2f5', borderRadius: 8, padding: '8px 0',
+                  }}>
+                    {room?.invite_code || '------'}
+                  </div>
+                  <Button
+                    icon={codeCopied ? <CheckOutlined /> : <LinkOutlined />}
+                    onClick={handleCopyCode}
+                    type={codeCopied ? 'primary' : 'default'}
+                  >
+                    {codeCopied ? 'Copied' : 'Copy'}
+                  </Button>
+                </div>
+              </div>
+            }
+          >
+            <Button
+              size="small"
+              icon={<LinkOutlined />}
+              style={{ background: 'transparent', borderColor: '#334155', color: '#94a3b8' }}
+            >
+              Invite
+            </Button>
+          </Popover>
+        </Space>
+      </div>
+
       {/* Topic Banner */}
       {topic && topic !== 'Free Talk' && (
         <div style={{
@@ -108,10 +358,16 @@ export default function SpeakingRoom({ user }) {
         overflow: 'hidden',
       }}>
         {members.map(member => {
-          const isMe = member.id === userId || (userId === 0 && member.username === 'You');
+          const isMe = member.user_id === userId;
+
+          // Find the corresponding Agora remote user
+          const rtcUser = isMe ? null : remoteUsers.find(u => Number(u.uid) === member.user_id);
+          const hasVideo = isMe ? cameraEnabled : !!rtcUser?.hasVideo;
+          const hasAudio = isMe ? micEnabled : !!rtcUser?.hasAudio;
+
           return (
             <div
-              key={member.id}
+              key={member.user_id}
               style={{
                 background: '#1e293b',
                 borderRadius: 12,
@@ -125,23 +381,36 @@ export default function SpeakingRoom({ user }) {
                 overflow: 'hidden',
               }}
             >
-              {/* Camera off state — shows avatar */}
-              {(!cameraEnabled && isMe) || (!isMe) ? (
-                <div style={{ textAlign: 'center' }}>
-                  <Avatar
-                    size={72}
-                    style={{ background: getAvatarColor(member.username), fontSize: 28, fontWeight: 700 }}
-                  >
-                    {member.username.charAt(0).toUpperCase()}
-                  </Avatar>
+              {/* Local user: always render so own preview is visible */}
+              {isMe && (
+                <div style={{ position: 'absolute', inset: 0 }}>
+                  <LocalUser
+                    audioTrack={localMicrophoneTrack}
+                    videoTrack={localCameraTrack}
+                    cameraOn={cameraEnabled}
+                    micOn={micEnabled}
+                    playAudio={false} // Don't play own audio
+                    playVideo={cameraEnabled}
+                  />
                 </div>
-              ) : (
-                // Camera on state — teal gradient placeholder
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  background: `linear-gradient(135deg, ${getAvatarColor(member.username)}40, #0f172a)`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
+              )}
+
+              {/* Remote user: ALWAYS render <RemoteUser> so Agora subscribes to
+                  their audio/video tracks. Hiding it behind hasVideo would prevent
+                  subscription entirely, causing black screens and no audio. */}
+              {!isMe && rtcUser && (
+                <div style={{ position: 'absolute', inset: 0 }}>
+                  <RemoteUser
+                    user={rtcUser}
+                    playVideo={hasVideo}
+                    playAudio={true}
+                  />
+                </div>
+              )}
+
+              {/* Avatar fallback when camera is off (local or remote) */}
+              {!hasVideo && (
+                <div style={{ textAlign: 'center', zIndex: 1 }}>
                   <Avatar
                     size={72}
                     style={{ background: getAvatarColor(member.username), fontSize: 28, fontWeight: 700 }}
@@ -155,6 +424,7 @@ export default function SpeakingRoom({ user }) {
               <div style={{
                 position: 'absolute', bottom: 10, left: 10,
                 display: 'flex', alignItems: 'center', gap: 6,
+                zIndex: 2,
               }}>
                 <div style={{
                   background: 'rgba(0,0,0,0.65)', borderRadius: 6, padding: '3px 8px',
@@ -168,14 +438,41 @@ export default function SpeakingRoom({ user }) {
               </div>
 
               {/* Muted indicator */}
-              {isMe && !micEnabled && (
+              {!hasAudio && (
                 <div style={{
                   position: 'absolute', top: 10, right: 10,
                   background: 'rgba(239,68,68,0.85)', borderRadius: '50%',
                   width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  zIndex: 2,
                 }}>
                   <AudioMutedOutlined style={{ color: '#fff', fontSize: 11 }} />
                 </div>
+              )}
+
+              {/* Host kick button */}
+              {isHost && !isMe && member.role !== 'host' && (
+                <Tooltip title="Remove from room">
+                  <Button
+                    size="small"
+                    type="text"
+                    onClick={() => Modal.confirm({
+                      title: `Remove ${member.username}?`,
+                      content: 'They will be removed from the room.',
+                      okText: 'Remove',
+                      okButtonProps: { danger: true },
+                      onOk: () => handleKick(member.user_id),
+                    })}
+                    style={{
+                      position: 'absolute', top: 8, right: 8,
+                      color: '#94a3b8', fontSize: 11,
+                      background: 'rgba(0,0,0,0.4)', borderRadius: 6,
+                      padding: '2px 6px', lineHeight: 1, height: 'auto',
+                      zIndex: 3,
+                    }}
+                  >
+                    ✕
+                  </Button>
+                </Tooltip>
               )}
             </div>
           );
@@ -243,16 +540,16 @@ export default function SpeakingRoom({ user }) {
         title="Select Topic"
         open={showTopicModal}
         onCancel={() => setShowTopicModal(false)}
-        onOk={() => setShowTopicModal(false)}
+        footer={null}
         width={400}
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '8px 0' }}>
-          {MOCK_TOPICS.map(t => (
+          {TOPICS.map(t => (
             <Tag
               key={t}
               color={topic === t ? 'blue' : 'default'}
               style={{ cursor: 'pointer', padding: '4px 10px', fontSize: 13, borderRadius: 6 }}
-              onClick={() => { setTopic(t); setShowTopicModal(false); }}
+              onClick={() => handleChangeTopic(t)}
             >
               {t}
             </Tag>
@@ -265,7 +562,7 @@ export default function SpeakingRoom({ user }) {
         title="Leave Room?"
         open={showLeave}
         onCancel={() => setShowLeave(false)}
-        onOk={() => navigate('/room')}
+        onOk={confirmLeave}
         okText="Leave"
         okButtonProps={{ danger: true }}
         width={360}

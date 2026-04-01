@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "agora-rtc-react": "^2.5.1",
+    "agora-rtc-sdk-ng": "^4.24.3",
     "antd": "^6.3.3",
     "axios": "^1.13.6",
     "dayjs": "^1.11.20",

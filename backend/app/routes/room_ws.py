@@ -18,6 +18,8 @@ from flask_login import current_user
 
 from app import socketio, db
 from app.models.room import Room, RoomMember
+from app.models.room_record import RoomRecord
+from app.routes.room import _remove_member
 
 # Lock protecting all three dicts below — acquire before reading or mutating.
 _state_lock = threading.Lock()
@@ -27,6 +29,12 @@ active_rooms: dict = {}
 sid_room: dict = {}
 # user_id → pending threading.Timer for deferred DB cleanup on disconnect
 pending_cleanups: dict = {}
+# room_id → {title, audio_url, source_slug}  (WatchTogether content)
+room_content: dict = {}
+# room_id → {is_playing: bool, position: float}
+room_playback: dict = {}
+# room_id → topic string  (SpeakingRoom)
+room_topics: dict = {}
 
 
 def _deferred_cleanup(app, user_id, room_id):
@@ -43,29 +51,32 @@ def _deferred_cleanup(app, user_id, room_id):
         if not member:
             return  # already cleaned up via REST leave — nothing to do
 
-        # Re-check room status: if the room became active (game started) during
+        # Re-check room status: if a game room became active (game started) during
         # the grace period, do NOT remove the member — they are in-game.
+        # Speaking/watch rooms are always 'active', so we do clean them up.
         room = db.session.get(Room, room_id)
-        if not room or room.status != 'waiting':
+        if not room:
+            return
+        if room.room_type == 'game' and room.status == 'active':
             return
 
-        was_host = member.role == 'host'
-        db.session.delete(member)
-        db.session.flush()
+        # Record the session for speaking/watch rooms
+        if room.room_type in ('speaking', 'watch'):
+            duration_secs = int((datetime.utcnow() - member.joined_at).total_seconds())
+            record = RoomRecord(
+                room_id=room.id,
+                user_id=user_id,
+                room_name=room.name,
+                room_type=room.room_type,
+                summary='',
+                duration_secs=max(duration_secs, 0),
+            )
+            db.session.add(record)
 
-        remaining = (
-            RoomMember.query
-            .filter_by(room_id=room_id)
-            .order_by(RoomMember.joined_at.asc())
-            .all()
-        )
+        remaining, was_host = _remove_member(room, member)
+        db.session.commit()
 
-        if not remaining:
-            room.status = 'ended'
-            room.ended_at = datetime.now(timezone.utc)
-        elif was_host:
-            remaining[0].role = 'host'
-            room.host_id = remaining[0].user_id
+        if was_host and remaining:
             socketio.emit(
                 'host_changed',
                 {'new_host_user_id': remaining[0].user_id},
@@ -73,8 +84,12 @@ def _deferred_cleanup(app, user_id, room_id):
                 room=str(room_id),
             )
 
-        db.session.commit()
         socketio.emit('rooms_updated', {}, namespace='/room', room='lobby')
+
+        if not remaining:
+            room_content.pop(room_id, None)
+            room_playback.pop(room_id, None)
+            room_topics.pop(room_id, None)
 
 
 def _get_room_and_member(room_id):
@@ -120,11 +135,13 @@ def handle_disconnect():
         )
         socketio.emit('rooms_updated', {}, namespace='/room', room='lobby')
 
-        # Schedule DB cleanup only for waiting rooms.
-        # Active rooms (game in progress) handle leave themselves.
-        # 1-second grace period allows React StrictMode's remount to cancel it.
+        # Schedule DB cleanup with a 1-second grace period.
+        # This allows React StrictMode's intentional unmount→remount to cancel it.
+        # - waiting rooms: always clean up (user left the lobby)
+        # - active speaking/watch rooms: clean up (these are drop-in sessions)
+        # - active game rooms: do NOT clean up (game in progress, player may reconnect)
         room = db.session.get(Room, room_id)
-        if room and room.status == 'waiting':
+        if room and not (room.room_type == 'game' and room.status == 'active'):
             app = current_app._get_current_object()
             user_id = current_user.id
             timer = threading.Timer(1.0, _deferred_cleanup, args=[app, user_id, room_id])
@@ -187,6 +204,15 @@ def handle_join_waiting_room(data):
         room=str(room_id),
     )
     socketio.emit('rooms_updated', {}, namespace='/room', room='lobby')
+
+    # Sync current session state to the joining client
+    if room.room_type == 'watch':
+        if room_id in room_content:
+            emit('content_selected', room_content[room_id])
+        if room_id in room_playback:
+            emit('playback_synced', room_playback[room_id])
+    elif room.room_type == 'speaking' and room_id in room_topics:
+        emit('topic_changed', {'topic': room_topics[room_id]})
 
 
 
@@ -281,4 +307,121 @@ def handle_start_game(data):
         namespace='/room',
         room=str(room_id),
     )
+    socketio.emit('rooms_updated', {}, namespace='/room', room='lobby')
+
+
+# ── WatchTogether events ──────────────────────────────────────────────────────
+
+@socketio.on('select_content', namespace='/room')
+def handle_select_content(data):
+    if not current_user.is_authenticated:
+        return
+    data = data or {}
+    room_id = data.get('room_id')
+    _, member = _get_room_and_member(room_id)
+    if not member or member.role != 'host':
+        emit('room_error', {'message': 'Only the host can select content'})
+        return
+    content = {
+        'title':       (data.get('title') or '').strip(),
+        'audio_url':   (data.get('audio_url') or '').strip(),
+        'source_slug': (data.get('source_slug') or '').strip(),
+    }
+    room_content[room_id] = content
+    room_playback[room_id] = {'is_playing': False, 'position': 0.0}
+    socketio.emit('content_selected', content, namespace='/room', room=str(room_id))
+
+
+@socketio.on('sync_playback', namespace='/room')
+def handle_sync_playback(data):
+    if not current_user.is_authenticated:
+        return
+    data = data or {}
+    room_id = data.get('room_id')
+    _, member = _get_room_and_member(room_id)
+    if not member or member.role != 'host':
+        return
+    state = {
+        'is_playing': bool(data.get('is_playing', False)),
+        'position':   float(data.get('position', 0)),
+    }
+    room_playback[room_id] = state
+    socketio.emit('playback_synced', state, namespace='/room',
+                  room=str(room_id), skip_sid=request.sid)
+
+
+@socketio.on('send_comment', namespace='/room')
+def handle_send_comment(data):
+    if not current_user.is_authenticated:
+        return
+    data = data or {}
+    room_id = data.get('room_id')
+    text = (data.get('text') or '').strip()[:500]
+    _, member = _get_room_and_member(room_id)
+    if not member or not text:
+        return
+    comment = {
+        'user_id':  current_user.id,
+        'username': current_user.username,
+        'text':     text,
+        'time':     datetime.now(timezone.utc).strftime('%H:%M'),
+    }
+    socketio.emit('comment_received', comment, namespace='/room', room=str(room_id))
+
+
+# ── SpeakingRoom events ───────────────────────────────────────────────────────
+
+@socketio.on('set_topic', namespace='/room')
+def handle_set_topic(data):
+    if not current_user.is_authenticated:
+        return
+    data = data or {}
+    room_id = data.get('room_id')
+    topic = (data.get('topic') or '').strip()
+    _, member = _get_room_and_member(room_id)
+    if not member or member.role != 'host':
+        return
+    room_topics[room_id] = topic
+    socketio.emit('topic_changed', {'topic': topic}, namespace='/room', room=str(room_id))
+
+
+@socketio.on('kick_member', namespace='/room')
+def handle_kick_member(data):
+    if not current_user.is_authenticated:
+        return
+    data = data or {}
+    room_id = data.get('room_id')
+    target_user_id = data.get('target_user_id')
+
+    room, caller = _get_room_and_member(room_id)
+    if not caller or caller.role != 'host':
+        emit('room_error', {'message': 'Only the host can kick members'})
+        return
+
+    target = RoomMember.query.filter_by(room_id=room_id, user_id=target_user_id).first()
+    if not target:
+        emit('room_error', {'message': 'Target user is not in this room'})
+        return
+    if target.role == 'host':
+        emit('room_error', {'message': 'Cannot kick the host'})
+        return
+
+    # Record session for speaking/watch rooms
+    if room.room_type in ('speaking', 'watch'):
+        duration_secs = int((datetime.utcnow() - target.joined_at).total_seconds())
+        record = RoomRecord(
+            room_id=room.id,
+            user_id=target_user_id,
+            room_name=room.name,
+            room_type=room.room_type,
+            summary='Removed by host',
+            duration_secs=max(duration_secs, 0),
+        )
+        db.session.add(record)
+
+    db.session.delete(target)
+    db.session.commit()
+
+    socketio.emit('member_kicked', {'user_id': target_user_id}, namespace='/room', room=str(room_id))
+    socketio.emit('member_left', {'user_id': target_user_id}, namespace='/room', room=str(room_id))
     socketio.emit('rooms_updated', {}, namespace='/room', room='lobby')

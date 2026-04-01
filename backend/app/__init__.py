@@ -8,7 +8,7 @@ from sqlalchemy import inspect, text
 
 db = SQLAlchemy()
 login_manager = LoginManager()
-socketio = SocketIO()
+socketio = SocketIO(cors_allowed_origins="*")
 
 
 def create_app(config_name=None):
@@ -29,7 +29,7 @@ def create_app(config_name=None):
     login_manager.session_protection = 'strong'
     cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
     CORS(app, supports_credentials=True, origins=cors_origins)
-    socketio.init_app(app, cors_allowed_origins=cors_origins)
+    socketio.init_app(app, cors_allowed_origins="*")
 
     @login_manager.unauthorized_handler
     def unauthorized():

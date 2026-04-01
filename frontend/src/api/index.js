@@ -110,7 +110,9 @@ export const roomAPI = {
   create:     (data)    => api.post('/rooms', data),
   join:       (code)    => api.post('/rooms/join', { invite_code: code }),
   getRoom:    (roomId)  => api.get(`/rooms/${roomId}`),
-  leave:      (roomId)  => api.delete(`/rooms/${roomId}/members/me`),
+  leave:      (roomId, data) => api.delete(`/rooms/${roomId}/members/me`, { data }),
+  getRecords: ()        => api.get('/rooms/records'),
+  getAgoraToken: (roomId) => api.get(`/rooms/${roomId}/agora-token`),
 };
 
 export default api;

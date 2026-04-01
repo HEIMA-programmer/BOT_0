@@ -1,51 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Typography, Tabs, List, Avatar, Tag, Space, Empty, Button } from 'antd';
+import { Typography, Tabs, List, Tag, Space, Empty, Button } from 'antd';
 import {
-  PlayCircleOutlined, VideoCameraOutlined, TrophyOutlined,
   ClockCircleOutlined, ArrowLeftOutlined,
 } from '@ant-design/icons';
+import { roomAPI } from '../../api/index';
+import { TYPE_CONFIG } from '../../utils/roomUtils';
 
 const { Title, Text } = Typography;
-
-const TYPE_CONFIG = {
-  watch: { label: 'Watch Together', color: '#2563eb', bg: '#dbeafe', Icon: PlayCircleOutlined },
-  speaking: { label: 'Speaking Room', color: '#16a34a', bg: '#dcfce7', Icon: VideoCameraOutlined },
-  game: { label: 'Game Room', color: '#ea580c', bg: '#ffedd5', Icon: TrophyOutlined },
-};
-
-const MOCK_RECORDS = [
-  {
-    id: 'r1', type: 'game', name: 'Word Duel Battle', date: '2026-03-29 18:42',
-    duration: '12 min', participants: ['Alice', 'Bob', 'You'],
-    summary: 'Won · 5 rounds · 1st place',
-  },
-  {
-    id: 'r2', type: 'speaking', name: "Alice's Speaking Room", date: '2026-03-28 20:15',
-    duration: '23 min', participants: ['Alice', 'You'],
-    summary: 'Topic: Daily Campus Life',
-  },
-  {
-    id: 'r3', type: 'watch', name: 'Study Together', date: '2026-03-27 16:30',
-    duration: '20 min', participants: ['Carol', 'David', 'You'],
-    summary: 'Academic Vocabulary Basics',
-  },
-  {
-    id: 'r4', type: 'game', name: 'Vocab Challenge', date: '2026-03-26 14:00',
-    duration: '18 min', participants: ['Eve', 'You'],
-    summary: 'Context Guesser · 2nd place · 6/8 correct',
-  },
-  {
-    id: 'r5', type: 'speaking', name: 'English Practice', date: '2026-03-25 19:10',
-    duration: '34 min', participants: ['Frank', 'Grace', 'You'],
-    summary: 'Topic: Academic Writing',
-  },
-  {
-    id: 'r6', type: 'watch', name: 'Listening Club', date: '2026-03-24 21:00',
-    duration: '45 min', participants: ['Alice', 'You'],
-    summary: 'IELTS Listening Practice Set 3',
-  },
-];
 
 const TABS = [
   { key: 'all', label: 'All' },
@@ -54,15 +16,30 @@ const TABS = [
   { key: 'game', label: 'Game' },
 ];
 
-import { getAvatarColor } from '../../utils/roomUtils';
-
-export default function MyRecords({ user }) {
+export default function MyRecords() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    roomAPI.getRecords()
+      .then(res => setRecords(res.data.records || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = activeTab === 'all'
-    ? MOCK_RECORDS
-    : MOCK_RECORDS.filter(r => r.type === activeTab);
+    ? records
+    : records.filter(r => r.room_type === activeTab);
+
+  const formatDuration = (secs) => {
+    if (!secs) return '0 min';
+    const m = Math.round(secs / 60);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}min`;
+  };
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '32px 24px' }}>
@@ -90,12 +67,19 @@ export default function MyRecords({ user }) {
 
       {/* Record List */}
       {filtered.length === 0 ? (
-        <Empty description="No records found" style={{ marginTop: 60 }} />
+        <Empty
+          description={loading ? 'Loading...' : 'No records found'}
+          style={{ marginTop: 60 }}
+        />
       ) : (
         <List
           dataSource={filtered}
           renderItem={record => {
-            const tc = TYPE_CONFIG[record.type];
+            const tc = TYPE_CONFIG[record.room_type];
+            if (!tc) return null;
+            const dateStr = record.created_at
+              ? new Date(record.created_at).toLocaleString()
+              : '';
             return (
               <List.Item
                 style={{
@@ -115,7 +99,7 @@ export default function MyRecords({ user }) {
                   {/* Main Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                      <Text strong style={{ fontSize: 15 }}>{record.name}</Text>
+                      <Text strong style={{ fontSize: 15 }}>{record.room_name}</Text>
                       <Tag
                         color={tc.color}
                         style={{ borderRadius: 4, fontSize: 11, lineHeight: '18px' }}
@@ -124,43 +108,24 @@ export default function MyRecords({ user }) {
                       </Tag>
                     </div>
                     <Space size={12} wrap>
-                      <Text type="secondary" style={{ fontSize: 12 }}>{record.date}</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{dateStr}</Text>
                       <Space size={4}>
                         <ClockCircleOutlined style={{ fontSize: 11, color: '#9ca3af' }} />
-                        <Text type="secondary" style={{ fontSize: 12 }}>{record.duration}</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {formatDuration(record.duration_secs)}
+                        </Text>
                       </Space>
-                      <div style={{ display: 'flex' }}>
-                        {record.participants.slice(0, 4).map((p, i) => (
-                          <Avatar
-                            key={p}
-                            size={18}
-                            style={{
-                              background: getAvatarColor(p), fontSize: 9, fontWeight: 700,
-                              marginLeft: i > 0 ? -5 : 0,
-                              border: '1.5px solid #fff',
-                            }}
-                          >
-                            {p.charAt(0).toUpperCase()}
-                          </Avatar>
-                        ))}
-                        {record.participants.length > 4 && (
-                          <Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>
-                            +{record.participants.length - 4}
-                          </Text>
-                        )}
-                      </div>
                     </Space>
                   </div>
 
                   {/* Summary */}
-                  <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                    <Text style={{
-                      fontSize: 13, fontWeight: 500,
-                      color: record.summary.startsWith('Won') ? '#16a34a' : '#374151',
-                    }}>
-                      {record.summary}
-                    </Text>
-                  </div>
+                  {record.summary && (
+                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                      <Text style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>
+                        {record.summary}
+                      </Text>
+                    </div>
+                  )}
                 </div>
               </List.Item>
             );

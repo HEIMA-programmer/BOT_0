@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Typography, Button, Input, Avatar, Progress, Modal, Space, Tag } from 'antd';
+import { roomAPI } from '../../api/index';
 import { TrophyOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
@@ -54,12 +55,15 @@ const ROUND_TIME = 20;
 export default function GameRoom({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id: roomIdParam } = useParams();
   const { room: r, members: m } = location.state || {};
   const room = r || MOCK_ROOM;
   const members = m || MOCK_MEMBERS;
 
   const userId = user?.id || 0;
-  const isHost = room.hostId === userId;
+  const roomId = room?.id ? Number(room.id) : Number(roomIdParam);
+  const isHost = members.find(mb => mb.user_id === userId)?.role === 'host';
+  const isLeavingRef = useRef(false);
   const gameType = room.gameType || 'word_duel';
   const questions = gameType === 'word_duel' ? WORD_DUEL_QUESTIONS : CONTEXT_QUESTIONS;
   const totalRounds = gameType === 'word_duel' ? 5 : questions.length;
@@ -153,6 +157,13 @@ export default function GameRoom({ user }) {
       }, 600);
     }
   }, [answer, answerState, currentQuestion, userId, isWordDuel, endRound]);
+
+  const handleLeave = useCallback(async () => {
+    if (isLeavingRef.current) return;
+    isLeavingRef.current = true;
+    try { await roomAPI.leave(roomId); } catch {}
+    navigate('/room');
+  }, [roomId, navigate]);
 
   // Sort scores
   const sortedScores = members
@@ -432,7 +443,7 @@ export default function GameRoom({ user }) {
                 <Button
                   type="primary"
                   size="large"
-                  onClick={() => navigate('/room')}
+                  onClick={handleLeave}
                   style={{ borderRadius: 8 }}
                 >
                   Back to Lobby
@@ -447,7 +458,7 @@ export default function GameRoom({ user }) {
           title="Leave Game?"
           open={showLeave}
           onCancel={() => setShowLeave(false)}
-          onOk={() => navigate('/room')}
+          onOk={handleLeave}
           okText="Leave"
           okButtonProps={{ danger: true }}
           width={340}
