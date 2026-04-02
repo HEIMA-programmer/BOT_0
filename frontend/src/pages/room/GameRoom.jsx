@@ -341,7 +341,7 @@ export default function GameRoom({ user }) {
   const handleReturnToRoom = useCallback(() => {
     isLeavingRef.current = true;
     window.speechSynthesis?.cancel?.();
-    navigate(`/room/${roomId}`, { state: { room } });
+    navigate(`/room/${roomId}/waiting`, { state: { room } });
   }, [navigate, roomId, room]);
 
   const sortedScores = members
