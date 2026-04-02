@@ -74,6 +74,7 @@ export default function GameRoom({ user }) {
   const [gamePhase, setGamePhase] = useState('waiting'); // waiting | playing | roundResult | gameOver
   const [roundResult, setRoundResult] = useState(null);
   const [finalResults, setFinalResults] = useState(null);
+  const [roundsLog, setRoundsLog] = useState([]);
   const [showLeave, setShowLeave] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -204,6 +205,7 @@ export default function GameRoom({ user }) {
       setSubmittedPlayers({});
       setRoundResult(null);
       setFinalResults(data.results || []);
+      setRoundsLog(data.rounds_log || []);
       setGamePhase('gameOver');
     });
 
@@ -294,17 +296,72 @@ export default function GameRoom({ user }) {
   const handleShareToForum = useCallback(async () => {
     setShareLoading(true);
     try {
-      const gameLabel = gameTypeRef.current === 'word_duel' ? 'Word Duel' : 'Context Guesser';
+      const isWordDuelType = gameTypeRef.current === 'word_duel';
+      const gameLabel = isWordDuelType ? 'Word Duel' : 'Context Guesser';
       const winner = finalResults?.[0]?.username || 'Unknown';
       const title = `Game Record: ${gameLabel} — ${winner} wins!`;
 
+      // Build player name lookup
+      const playerNames = {};
+      for (const r of (finalResults || [])) {
+        playerNames[r.user_id] = r.username;
+      }
+
+      // Final standings
       const lines = (finalResults || []).map((r, i) => {
         const medals = ['🥇', '🥈', '🥉'];
         const prefix = medals[i] || `${i + 1}.`;
         const time = formatCompletionTime(r.completion_secs);
-        return `${prefix} ${r.username}: ${r.score} pts${time ? ` (${time})` : ''}`;
+        return `${prefix} **${r.username}**: ${r.score} pts${time ? ` (${time})` : ''}`;
       });
-      const content = `🎮 ${gameLabel} — Final Results\n\n${lines.join('\n')}`;
+
+      let content = `🎮 **${gameLabel}** — Final Results\n\n${lines.join('\n')}`;
+
+      // Round-by-round details
+      if (roundsLog && roundsLog.length > 0) {
+        content += '\n\n---\n\n📝 **Round-by-Round Details**\n';
+
+        roundsLog.forEach((round, idx) => {
+          content += `\n**Round ${idx + 1}**\n`;
+
+          // Question
+          const question = round.question || round.sentence || '';
+          if (question) {
+            content += `Q: ${question}\n`;
+          }
+          if (round.revealed_sentence) {
+            content += `Sentence: ${round.revealed_sentence}\n`;
+          }
+
+          // Correct answer
+          const correctAnswer = Array.isArray(round.correct_answers)
+            ? round.correct_answers.join(', ')
+            : round.correct_answer || '';
+          if (correctAnswer) {
+            content += `✅ Correct answer: \`${correctAnswer}\`\n`;
+          }
+
+          // Each player's answer
+          if (round.answers) {
+            for (const [uid, submission] of Object.entries(round.answers)) {
+              const name = playerNames[uid] || playerNames[Number(uid)] || `Player ${uid}`;
+              if (!isWordDuelType && Array.isArray(submission?.answers)) {
+                // Context Guesser: multiple blanks
+                const parts = submission.answers.map((ans, i) => {
+                  const ok = submission.correct_mask?.[i];
+                  return ok ? `${ans} ✅` : `${ans} ❌`;
+                });
+                content += `- ${name}: ${parts.join(', ')}\n`;
+              } else {
+                // Word Duel: single answer
+                const ans = submission?.answer ?? submission;
+                const isCorrect = submission?.correct ?? (round.winner_user_id === Number(uid));
+                content += `- ${name}: ${ans || '(no answer)'} ${isCorrect ? '✅' : '❌'}\n`;
+              }
+            }
+          }
+        });
+      }
 
       const formData = new FormData();
       formData.append('title', title);
@@ -322,7 +379,7 @@ export default function GameRoom({ user }) {
     } finally {
       setShareLoading(false);
     }
-  }, [finalResults, shareZone, message, roomId]);
+  }, [finalResults, roundsLog, shareZone, message, roomId]);
 
   const handleLeave = useCallback(async () => {
     if (isLeavingRef.current) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Layout, Button, Space, Avatar, Dropdown } from 'antd';
+import { Menu, Layout, Button, Space, Avatar, Dropdown, Badge } from 'antd';
 import {
   HomeOutlined,
   ReadOutlined,
@@ -10,6 +10,7 @@ import {
   LogoutOutlined,
   AppstoreOutlined,
   CalendarOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -24,7 +25,7 @@ const menuItems = [
   { key: '/room', icon: <AppstoreOutlined />, label: 'Room' },
 ];
 
-export default function NavBar({ user, onLogout, onScheduleClick }) {
+export default function NavBar({ user, onLogout, onScheduleClick, onFriendsClick, friendRequestCount = 0 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const selectedKey = (
@@ -103,6 +104,24 @@ export default function NavBar({ user, onLogout, onScheduleClick }) {
       >
         Schedule
       </Button>
+      <Badge count={friendRequestCount} size="small">
+        <Button
+          type="text"
+          icon={<TeamOutlined />}
+          onClick={onFriendsClick}
+          style={{
+            color: '#e5e7eb',
+            fontSize: 14,
+            fontWeight: 500,
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          Friends
+        </Button>
+      </Badge>
       <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
         <Space style={{ cursor: 'pointer' }}>
           <Avatar

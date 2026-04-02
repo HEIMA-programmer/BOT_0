@@ -23,6 +23,7 @@ import WatchTogether from './pages/room/WatchTogether';
 import SpeakingRoom from './pages/room/SpeakingRoom';
 import GameRoom from './pages/room/GameRoom';
 import MyRecords from './pages/room/MyRecords';
+import FriendsModal from './components/FriendsModal';
 import { authAPI } from './api';
 import './App.css';
 
@@ -47,6 +48,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [friendsModalVisible, setFriendsModalVisible] = useState(false);
 
   useEffect(() => {
     authAPI.me()
@@ -91,7 +93,7 @@ export default function App() {
     <ConfigProvider theme={theme}>
       <AntdApp>
         <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-          {user && !hideNav && <NavBar user={user} onLogout={handleLogout} onScheduleClick={() => setScheduleModalVisible(true)} />}
+          {user && !hideNav && <NavBar user={user} onLogout={handleLogout} onScheduleClick={() => setScheduleModalVisible(true)} onFriendsClick={() => setFriendsModalVisible(true)} />}
           <Content style={{ background: '#f0f2f5' }}>
             <Routes>
               {/* Public routes */}
@@ -194,6 +196,8 @@ export default function App() {
         >
           <Schedule onClose={() => setScheduleModalVisible(false)} />
         </Modal>
+
+        <FriendsModal open={friendsModalVisible} onClose={() => setFriendsModalVisible(false)} />
       </AntdApp>
     </ConfigProvider>
   );
