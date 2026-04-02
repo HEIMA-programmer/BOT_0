@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import {
-  Typography, Button, Input, Avatar, Progress, Modal, Space, Tag, App as AntdApp,
+  Typography, Button, Input, Avatar, Progress, Modal, Space, Tag, App as AntdApp, Radio,
 } from 'antd';
 import {
   TrophyOutlined, ArrowLeftOutlined, SoundOutlined,
 } from '@ant-design/icons';
 import { io } from 'socket.io-client';
 
-import { roomAPI } from '../../api/index';
+import { roomAPI, forumAPI } from '../../api/index';
 import { getAvatarColor } from '../../utils/roomUtils';
 import useWordPronunciation from '../../hooks/useWordPronunciation';
 
@@ -76,6 +76,10 @@ export default function GameRoom({ user }) {
   const [finalResults, setFinalResults] = useState(null);
   const [showLeave, setShowLeave] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareZone, setShareZone] = useState('public');
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shared, setShared] = useState(false);
 
   useEffect(() => {
     speakRef.current = speak;
@@ -287,6 +291,39 @@ export default function GameRoom({ user }) {
     });
   }, [answer, answerState, blankAnswers, gamePhase, isWordDuel, roomId]);
 
+  const handleShareToForum = useCallback(async () => {
+    setShareLoading(true);
+    try {
+      const gameLabel = gameTypeRef.current === 'word_duel' ? 'Word Duel' : 'Context Guesser';
+      const winner = finalResults?.[0]?.username || 'Unknown';
+      const title = `Game Record: ${gameLabel} — ${winner} wins!`;
+
+      const lines = (finalResults || []).map((r, i) => {
+        const medals = ['🥇', '🥈', '🥉'];
+        const prefix = medals[i] || `${i + 1}.`;
+        const time = formatCompletionTime(r.completion_secs);
+        return `${prefix} ${r.username}: ${r.score} pts${time ? ` (${time})` : ''}`;
+      });
+      const content = `🎮 ${gameLabel} — Final Results\n\n${lines.join('\n')}`;
+
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('content', content);
+      formData.append('zone', shareZone);
+      formData.append('tag', 'game');
+      formData.append('room_id', roomId);
+
+      await forumAPI.createPost(formData);
+      message.success('Game record shared to forum!');
+      setShared(true);
+      setShowShareModal(false);
+    } catch {
+      message.error('Failed to share game record');
+    } finally {
+      setShareLoading(false);
+    }
+  }, [finalResults, shareZone, message, roomId]);
+
   const handleLeave = useCallback(async () => {
     if (isLeavingRef.current) {
       return;
@@ -303,6 +340,12 @@ export default function GameRoom({ user }) {
 
     navigate('/room');
   }, [navigate, roomId]);
+
+  const handleReturnToRoom = useCallback(() => {
+    isLeavingRef.current = true;
+    window.speechSynthesis?.cancel?.();
+    navigate(`/room/${roomId}/waiting`, { state: { room } });
+  }, [navigate, roomId, room]);
 
   const sortedScores = members
     .map((member) => ({ ...member, score: scores[member.user_id] || 0 }))
@@ -738,6 +781,21 @@ export default function GameRoom({ user }) {
 
               <Space size={12}>
                 <Button
+                  size="large"
+                  disabled={shared}
+                  onClick={() => setShowShareModal(true)}
+                  style={{ borderRadius: 8, borderColor: '#3b82f6', color: '#3b82f6' }}
+                >
+                  {shared ? 'Shared' : 'Share to Forum'}
+                </Button>
+                <Button
+                  size="large"
+                  onClick={handleReturnToRoom}
+                  style={{ borderRadius: 8 }}
+                >
+                  Back to Room
+                </Button>
+                <Button
                   type="primary"
                   size="large"
                   onClick={handleLeave}
@@ -760,6 +818,29 @@ export default function GameRoom({ user }) {
           width={340}
         >
           <Text>Are you sure you want to leave the game?</Text>
+        </Modal>
+
+        <Modal
+          title="Share Game Record to Forum"
+          open={showShareModal}
+          onCancel={() => setShowShareModal(false)}
+          onOk={handleShareToForum}
+          okText="Share"
+          okButtonProps={{ loading: shareLoading }}
+          width={380}
+        >
+          <div style={{ marginBottom: 16 }}>
+            <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
+              Post will be tagged with <Tag color="blue">game</Tag> automatically.
+            </Text>
+          </div>
+          <div>
+            <Text style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Visibility</Text>
+            <Radio.Group value={shareZone} onChange={e => setShareZone(e.target.value)}>
+              <Radio value="public">Public</Radio>
+              <Radio value="friend">Friends Only</Radio>
+            </Radio.Group>
+          </div>
         </Modal>
       </div>
     </>

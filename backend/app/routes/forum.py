@@ -12,6 +12,7 @@ from app.models.forum_forward import ForumForward
 from app.models.forum_post import ForumPost
 from app.models.forum_post_pin import ForumPostPin
 from app.models.friendship import Friendship
+from app.models.room import Room, RoomMember
 
 forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
 
@@ -333,6 +334,27 @@ def create_post():
             file_url = f'/api/forum/uploads/{unique_name}'
             file_name = original_name
 
+    # Game record posts are auto-approved, but only if the user actually
+    # participated in the referenced game room (prevents tag abuse).
+    game_verified = False
+    if tag == 'game':
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            room_id = request.form.get('room_id')
+        else:
+            room_id = (request.get_json() or {}).get('room_id')
+        if room_id:
+            member = RoomMember.query.filter_by(
+                room_id=room_id, user_id=current_user.id
+            ).first()
+            room = Room.query.filter_by(
+                id=room_id, room_type='game'
+            ).first()
+            game_verified = member is not None and room is not None
+        if not game_verified:
+            tag = 'public'  # downgrade to normal tag
+
+    auto_approve = _is_admin() or game_verified
+
     post = ForumPost(
         user_id=current_user.id,
         zone=zone,
@@ -342,9 +364,9 @@ def create_post():
         file_url=file_url,
         file_name=file_name,
         video_url=video_url,
-        status=ForumPost.STATUS_APPROVED if _is_admin() else ForumPost.STATUS_PENDING,
-        reviewed_by=current_user.id if _is_admin() else None,
-        reviewed_at=datetime.now(timezone.utc) if _is_admin() else None,
+        status=ForumPost.STATUS_APPROVED if auto_approve else ForumPost.STATUS_PENDING,
+        reviewed_by=current_user.id if auto_approve else None,
+        reviewed_at=datetime.now(timezone.utc) if auto_approve else None,
     )
     _touch_post(post)
     db.session.add(post)
@@ -352,7 +374,7 @@ def create_post():
 
     return jsonify({
         'post': _serialise_post(post),
-        'message': 'Post published' if _is_admin() else 'Post submitted for review',
+        'message': 'Post published' if auto_approve else 'Post submitted for review',
     }), 201
 
 
