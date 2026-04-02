@@ -25,7 +25,7 @@ const GAMES = [
   {
     key: 'context_guesser',
     label: 'Context Guesser',
-    desc: 'Fill in the blank word from context. Semantic matches earn partial points.',
+    desc: 'Listen to the sentence, fill multiple blanks, and earn 1 point for each correct word.',
     players: '1–8',
     icon: '🔍',
   },
@@ -62,7 +62,7 @@ export default function WaitingRoom({ user }) {
   const tc = TYPE_CONFIG[room?.room_type] || TYPE_CONFIG.speaking;
 
   // Used by game_started to navigate with latest state (avoids stale socket closure)
-  const [gameLaunching, setGameLaunching] = useState(false);
+  const [gameLaunching, setGameLaunching] = useState(null);
 
   // ── Load room data ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -114,7 +114,7 @@ export default function WaitingRoom({ user }) {
     // replace: WaitingRoom is no longer meaningful once the game starts,
     // so back-button should go to Lobby, not back here.
     navigate(`/room/${roomId}/game`, {
-      state: { room: { ...room, gameType: selectedGame }, members },
+      state: { room: { ...room, gameType: gameLaunching.game_type || selectedGame }, members },
       replace: true,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,9 +164,12 @@ export default function WaitingRoom({ user }) {
       );
     });
 
-    socket.on('game_started', () => {
+    socket.on('game_started', (payload) => {
       isLeavingRef.current = true;
-      setGameLaunching(true);  // triggers the navigation useEffect above with fresh state
+      if (payload?.game_type) {
+        setSelectedGame(payload.game_type);
+      }
+      setGameLaunching(payload || { game_type: selectedGame });  // triggers navigation with fresh state
     });
 
     socket.on('room_error', ({ message: errMsg }) => {
@@ -244,7 +247,7 @@ export default function WaitingRoom({ user }) {
   const handleStart = useCallback(() => {
     if (!canStart) return;
     socketRef.current?.emit('start_game', { room_id: roomId, game_type: selectedGame });
-  }, [canStart, roomId]);
+  }, [canStart, roomId, selectedGame]);
 
   if (!room) return null;
 
@@ -475,17 +478,24 @@ export default function WaitingRoom({ user }) {
 
               {gameStep === 2 && selectedGame === 'context_guesser' && (
                 <div>
-                  <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>Question Category</Text>
-                  <Select
-                    defaultValue="academic"
-                    style={{ width: 200 }}
-                    disabled={!isHost}
-                    options={[
-                      { value: 'academic', label: 'Academic English' },
-                      { value: 'general', label: 'General Vocabulary' },
-                      { value: 'science', label: 'Science & Tech' },
-                    ]}
-                  />
+                  <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>
+                    Match Rules
+                  </Text>
+                  <div style={{
+                    borderRadius: 10,
+                    border: '1px solid #fed7aa',
+                    background: '#fff7ed',
+                    padding: '14px 16px',
+                    display: 'grid',
+                    gap: 8,
+                    maxWidth: 420,
+                  }}
+                  >
+                    <Text style={{ fontSize: 13, color: '#9a3412' }}>10 shared rounds for everyone in the room</Text>
+                    <Text style={{ fontSize: 13, color: '#9a3412' }}>20 seconds per round with the timer shown in-game</Text>
+                    <Text style={{ fontSize: 13, color: '#9a3412' }}>Early rounds blank 1-2 words, later rounds blank more</Text>
+                    <Text style={{ fontSize: 13, color: '#9a3412' }}>Each correct blank is worth 1 point</Text>
+                  </div>
                 </div>
               )}
 

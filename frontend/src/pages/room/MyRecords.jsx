@@ -167,8 +167,12 @@ export default function MyRecords() {
           <div>
             <Space style={{ marginBottom: 16 }}>
               <Tag color="blue">{gameDetailData.game_type?.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Game'}</Tag>
-              <Text>Score: <Text strong>{gameDetailData.score}</Text> / {gameDetailData.total_rounds}</Text>
+              <Text>Score: <Text strong>{gameDetailData.score}</Text> pts</Text>
+              <Text>Rounds: <Text strong>{gameDetailData.total_rounds}</Text></Text>
               <Text>Placement: <Text strong>#{gameDetailData.placement}</Text></Text>
+              {gameDetailData.duration_secs ? (
+                <Text>Time: <Text strong>{Math.max(gameDetailData.duration_secs, 0)}s</Text></Text>
+              ) : null}
             </Space>
             {gameDetailData.rounds_data && (() => {
               try {
@@ -183,8 +187,20 @@ export default function MyRecords() {
                           <div style={{ marginTop: 4 }}>
                             <Text type="secondary">Q: {round.question || round.sentence}</Text>
                           </div>
+                          {round.revealed_sentence ? (
+                            <div style={{ marginTop: 4 }}>
+                              <Text type="secondary">Sentence: {round.revealed_sentence}</Text>
+                            </div>
+                          ) : null}
                           <div style={{ marginTop: 4 }}>
-                            <Text>Answer: <Text code>{round.correct_answer}</Text></Text>
+                            <Text>
+                              Answer:{' '}
+                              <Text code>
+                                {Array.isArray(round.correct_answers)
+                                  ? round.correct_answers.join(', ')
+                                  : round.correct_answer}
+                              </Text>
+                            </Text>
                             {round.winner_user_id ? (
                               <Tag color="green" style={{ marginLeft: 8 }}>
                                 Won by user #{round.winner_user_id}
