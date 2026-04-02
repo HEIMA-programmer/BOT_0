@@ -5,6 +5,8 @@ import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import DailyWords from './pages/DailyWords';
 import Listening from './pages/Listening';
+import VideoListing from './pages/VideoListing';
+import VideoPlayer from './pages/VideoPlayer';
 import Speaking from './pages/Speaking';
 import StructuredSpeaking from './pages/StructuredSpeaking';
 import FreeConversation from './pages/FreeConversation';
@@ -119,6 +121,12 @@ export default function App() {
               } />
               <Route path="/listening/:type/:item" element={
                 <RequireAuth user={user} loading={loading}><Listening user={user} /></RequireAuth>
+              } />
+              <Route path="/listening/video" element={
+                <RequireAuth user={user} loading={loading}><VideoListing /></RequireAuth>
+              } />
+              <Route path="/listening/video/:categoryId/:videoId" element={
+                <RequireAuth user={user} loading={loading}><VideoPlayer /></RequireAuth>
               } />
               <Route path="/speaking" element={
                 <RequireAuth user={user} loading={loading}><Speaking /></RequireAuth>

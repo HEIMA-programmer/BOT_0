@@ -473,6 +473,11 @@ function renderListening(initialEntry = '/listening') {
   );
 }
 
+async function selectAudioPractice() {
+  const audioCard = await screen.findByText('Audio Practice');
+  fireEvent.click(audioCard);
+}
+
 describe('Listening page', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -508,6 +513,7 @@ describe('Listening page', () => {
 
   it('loads the landing page and navigates into the beginner level detail view', async () => {
     renderListening('/listening');
+    await selectAudioPractice();
 
     expect(await screen.findByText('Choose your listening level')).toBeTruthy();
     fireEvent.click(screen.getByText('Beginner'));
@@ -525,7 +531,7 @@ describe('Listening page', () => {
   });
 
   it('switches to the group discussion scenario and loads its practice questions', async () => {
-    renderListening('/listening/beginner');
+    renderListening('/listening/beginner?type=audio');
 
     expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
 
@@ -545,7 +551,7 @@ describe('Listening page', () => {
   });
 
   it('switches to the office hour scenario and loads its practice questions', async () => {
-    renderListening('/listening/beginner');
+    renderListening('/listening/beginner?type=audio');
 
     expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
 
@@ -565,7 +571,7 @@ describe('Listening page', () => {
   });
 
   it('submits beginner multiple-choice answers and shows results with the transcript', async () => {
-    renderListening('/listening/beginner');
+    renderListening('/listening/beginner?type=audio');
 
     expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
 
@@ -596,7 +602,7 @@ describe('Listening page', () => {
   });
 
   it('handles intermediate fill-in-the-blank and short-answer submission', async () => {
-    renderListening('/listening/intermediate');
+    renderListening('/listening/intermediate?type=audio');
 
     expect(await screen.findByText('The professor says research begins with a clear ____.')).toBeTruthy();
 
@@ -630,7 +636,7 @@ describe('Listening page', () => {
   });
 
   it('preserves answers when switching between clips and restores prior submission results', async () => {
-    renderListening('/listening/beginner');
+    renderListening('/listening/beginner?type=audio');
 
     expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
 
@@ -652,7 +658,7 @@ describe('Listening page', () => {
   });
 
   it('restores saved answers and results after leaving the page and coming back', async () => {
-    const firstRender = renderListening('/listening/beginner');
+    const firstRender = renderListening('/listening/beginner?type=audio');
 
     expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
 
@@ -664,7 +670,7 @@ describe('Listening page', () => {
 
     firstRender.unmount();
 
-    renderListening('/listening/beginner');
+    renderListening('/listening/beginner?type=audio');
 
     expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
     expect(await screen.findByText((_, node) => node?.textContent === '50%')).toBeTruthy();
@@ -691,7 +697,7 @@ describe('Listening page', () => {
       },
     });
 
-    renderListening('/listening/beginner');
+    renderListening('/listening/beginner?type=audio');
 
     expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
     expect(await screen.findByText((_, node) => node?.textContent === '50%')).toBeTruthy();

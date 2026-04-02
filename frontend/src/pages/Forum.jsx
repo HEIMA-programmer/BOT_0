@@ -43,15 +43,21 @@ import {
   UserAddOutlined,
   UserOutlined,
   VideoCameraOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { forumAPI, friendsAPI } from '../api';
+import { getVideoInfo } from './VideoPlayer';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 const VIDEO_EXTS = /\.(mp4|webm|mov|ogg)(\?|$)/i;
 const TAG_CONFIG = {
+  note: { label: 'Note', color: 'cyan', desc: 'Video notes shared from the player' },
   skills: { label: 'Skills', color: 'blue', desc: 'Turnitin, Teams, plagiarism tips & more' },
   experience: { label: 'Experience', color: 'green', desc: 'Share your academic journey' },
   academic_culture: { label: 'Academic Culture', color: 'purple', desc: 'Cultural insights & norms' },
@@ -179,9 +185,11 @@ function AdminQueueCard({ post, onOpen, onReview }) {
         </Space>
         <div>
           <Title level={5} style={{ margin: 0 }}>{post.title}</Title>
-          <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '8px 0 0', color: '#6b7280' }}>
-            {post.content}
-          </Paragraph>
+          <div style={{ margin: '8px 0 0', color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+              {post.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+            </ReactMarkdown>
+          </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
           <Text type="secondary">{new Date(post.created_at).toLocaleString()}</Text>
@@ -199,6 +207,7 @@ function AdminQueueCard({ post, onOpen, onReview }) {
 export default function Forum({ user }) {
   const isAdmin = Boolean(user?.is_admin);
   const { message } = AntdApp.useApp();
+  const navigate = useNavigate();
 
   const [activeZone, setActiveZone] = useState('public');
   const [activeTab, setActiveTab] = useState('all');
@@ -304,6 +313,23 @@ export default function Forum({ user }) {
       message.error('Failed to load rejection reasons');
     }
   }, [isAdmin, message]);
+
+  const parseVideoReference = (content) => {
+    if (!content) return null;
+    const match = content.match(/\[Video Reference\]\((\{.*?\})\)/);
+    if (!match) return null;
+    try {
+      return JSON.parse(match[1]);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleGoToVideo = (videoRef) => {
+    if (!videoRef?.categoryId || !videoRef?.videoId) return;
+    setDetailOpen(false);
+    navigate(`/listening/video/${videoRef.categoryId}/${videoRef.videoId}?fromForum=true`);
+  };
 
   const fetchFriends = useCallback(async () => {
     try {
@@ -640,9 +666,11 @@ export default function Forum({ user }) {
                 <Tag color={getTagConfig(origPost.tag).color}>{getTagConfig(origPost.tag).label}</Tag>
               </Space>
               <Title level={5} style={{ margin: '4px 0' }}>{origPost.title}</Title>
-              <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
-                {origPost.content}
-              </Paragraph>
+              <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                  {origPost.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                </ReactMarkdown>
+              </div>
             </Card>
           )}
         </Card>
@@ -670,9 +698,11 @@ export default function Forum({ user }) {
               <StatusTag status={post.status} />
             </Space>
             <Title level={5} style={{ margin: '4px 0' }}>{post.title}</Title>
-            <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
-              {post.content}
-            </Paragraph>
+            <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                {post.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+              </ReactMarkdown>
+            </div>
             <Space size={16} style={{ marginTop: 8, color: '#9ca3af' }}>
               {post.file_url && <span><FileOutlined /> File</span>}
               {post.video_url && <span><VideoCameraOutlined /> Video</span>}
@@ -1002,6 +1032,15 @@ export default function Forum({ user }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
               <Title level={4} style={{ margin: '12px 0 8px' }}>{detailPost.title}</Title>
               <Space wrap>
+                {parseVideoReference(detailPost.content) && (
+                  <Button
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => handleGoToVideo(parseVideoReference(detailPost.content))}
+                  >
+                    View in Video Player
+                  </Button>
+                )}
                 {detailPost.can_edit && (
                   <Button icon={<EditOutlined />} onClick={() => openEdit(detailPost)}>
                     {detailPost.status === 'rejected' && !isAdmin ? 'Edit & Resubmit' : 'Edit'}
@@ -1020,9 +1059,41 @@ export default function Forum({ user }) {
               </Space>
             </div>
 
-            <Paragraph style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.7 }}>
-              {detailPost.content}
-            </Paragraph>
+            <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                  ),
+                }}
+              >
+                {detailPost.content.replace(/\[Video Reference\]\([^)]*\)/g, '')}
+              </ReactMarkdown>
+            </div>
+
+            {/* Inline video preview for posts with video reference */}
+            {(() => {
+              const ref = parseVideoReference(detailPost.content);
+              if (!ref) return null;
+              const v = getVideoInfo(ref.categoryId, ref.videoId);
+              const ytMatch = v?.url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+              if (!ytMatch) return null;
+              return (
+                <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
+                    <iframe
+                      src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+                      title="Video Preview"
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {renderAttachment(detailPost)}
             {detailPost.video_url && (
@@ -1274,9 +1345,11 @@ export default function Forum({ user }) {
                       {item.comment && <Paragraph style={{ margin: '8px 0 6px' }}>{item.comment}</Paragraph>}
                       <Card size="small" style={{ background: '#fafafa', borderRadius: 8 }}>
                         <Text strong>{item.original_post?.title}</Text>
-                        <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '4px 0 0', color: '#6b7280' }}>
-                          {item.original_post?.content}
-                        </Paragraph>
+                        <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                            {(item.original_post?.content || '').replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                          </ReactMarkdown>
+                        </div>
                       </Card>
                     </div>
                   ) : (
@@ -1287,9 +1360,11 @@ export default function Forum({ user }) {
                         {item.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
                         <Text strong>{item.title}</Text>
                       </Space>
-                      <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '6px 0 0', color: '#6b7280' }}>
-                        {item.content}
-                      </Paragraph>
+                      <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                          {item.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                        </ReactMarkdown>
+                      </div>
                       {item.status === 'rejected' && (
                         <Text type="danger">
                           Rejected: {item.rejection_reason}

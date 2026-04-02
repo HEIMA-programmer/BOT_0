@@ -6,7 +6,7 @@ export default function VideoGrid({
   isHost, onKick,
 }) {
   const gridCols = members.length <= 1 ? 1 : 2;
-  const tileSize = members.length <= 2 ? 280 : 200;
+  const tileSize = members.length <= 2 ? 360 : 280;
 
   return (
     <div style={{

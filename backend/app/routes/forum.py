@@ -14,7 +14,7 @@ from app.models.friendship import Friendship
 
 forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
 
-SUGGESTED_TAGS = ('skills', 'experience', 'academic_culture', 'public')
+SUGGESTED_TAGS = ('skills', 'experience', 'academic_culture', 'public', 'note')
 VALID_ZONES = ('public', 'friend')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'mp4', 'webm', 'mov'}
 REJECTION_REASONS = (

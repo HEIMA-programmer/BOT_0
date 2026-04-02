@@ -2,20 +2,26 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import {
   Typography, Button, Input, Avatar, Modal, Tooltip, Space, Tag,
-  App as AntdApp, Spin, Popover,
+  App as AntdApp, Popover, Row, Col,
 } from 'antd';
 import {
-  PlayCircleOutlined, PauseOutlined, SoundOutlined,
+  PlayCircleOutlined, PauseOutlined,
   TeamOutlined, SendOutlined, ArrowLeftOutlined,
-  FolderOpenOutlined, LoadingOutlined, LinkOutlined, CheckOutlined,
-  CrownOutlined,
+  FolderOpenOutlined, LinkOutlined, CheckOutlined,
+  CrownOutlined, ClockCircleOutlined,
 } from '@ant-design/icons';
 import { io } from 'socket.io-client';
-import { roomAPI, listeningAPI } from '../../api/index';
+import { roomAPI } from '../../api/index';
 import { getAvatarColor, copyInviteCode } from '../../utils/roomUtils';
 import { friendsAPI } from '../../api/index';
+import { videoCategories } from '../../data/videos';
 
 const { Text } = Typography;
+
+const getYouTubeId = (url) => {
+  const m = url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+  return m?.[1];
+};
 
 export default function WatchTogether({ user }) {
   const navigate = useNavigate();
@@ -23,7 +29,7 @@ export default function WatchTogether({ user }) {
   const { id: roomIdParam } = useParams();
   const { message } = AntdApp.useApp();
 
-  const { room: initialRoom, members: initialMembers } = location.state || {};
+  const { room: initialRoom, members: initialMembers, autoSelectVideo } = location.state || {};
   const [room, setRoom]   = useState(initialRoom || null);
   const [members, setMembers] = useState(initialMembers || []);
   const membersRef = useRef(initialMembers || []);
@@ -32,20 +38,25 @@ export default function WatchTogether({ user }) {
   const userId = user?.id || 0;
   const roomId = room?.id ? Number(room.id) : Number(roomIdParam);
   const isHost = members.find(m => m.user_id === userId)?.role === 'host';
+  const isHostRef = useRef(isHost);
+  const roomIdRef = useRef(roomId);
+  useEffect(() => { isHostRef.current = isHost; }, [isHost]);
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
   // Content + playback
   const [content, setContent]       = useState(null);
   const [isPlaying, setIsPlaying]   = useState(false);
   const [position, setPosition]     = useState(0);
   const [duration, setDuration]     = useState(0);
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
-  const audioRef     = useRef(null);
-  const isSyncingRef = useRef(false);
+  const playerContainerRef = useRef(null);
+  const playerRef     = useRef(null);
+  const playerReady   = useRef(false);
+  const timeIntervalRef = useRef(null);
+  const isSyncingRef  = useRef(false);
+  const pendingSyncRef = useRef(null);
 
   // Content selection modal
-  const [showContent, setShowContent]   = useState(false);
-  const [catalog, setCatalog]           = useState([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [showContent, setShowContent] = useState(false);
 
   // Comments
   const [comments, setComments]         = useState([]);
@@ -62,8 +73,133 @@ export default function WatchTogether({ user }) {
 
   const socketRef    = useRef(null);
   const isLeavingRef = useRef(false);
+  const autoSelectDone = useRef(false);
 
-  // ── Load room data on mount (handles refresh + mid-session join) ─────────
+  // ── YouTube player helpers ────────────────────────────────────────────────
+  const isPlayerPlaying = () => {
+    try { return playerRef.current?.getPlayerState?.() === 1; } catch { return false; }
+  };
+
+  const applySync = useCallback((data) => {
+    if (!playerRef.current || !playerReady.current) {
+      pendingSyncRef.current = data;
+      return;
+    }
+    isSyncingRef.current = true;
+    try {
+      const curTime = playerRef.current.getCurrentTime?.() || 0;
+      if (Math.abs(curTime - data.position) > 2) {
+        playerRef.current.seekTo(data.position, true);
+      }
+      if (data.is_playing) {
+        playerRef.current.playVideo();
+        setIsPlaying(true);
+      } else {
+        playerRef.current.pauseVideo();
+        setIsPlaying(false);
+      }
+    } catch { /* player not ready */ }
+    setTimeout(() => { isSyncingRef.current = false; }, 200);
+  }, []);
+
+  const createPlayer = useCallback((videoId) => {
+    if (!playerContainerRef.current) return;
+    // Destroy previous
+    if (playerRef.current) {
+      try { playerRef.current.destroy(); } catch {}
+      playerRef.current = null;
+      playerReady.current = false;
+    }
+    if (timeIntervalRef.current) {
+      clearInterval(timeIntervalRef.current);
+      timeIntervalRef.current = null;
+    }
+    // Reset container — YT.Player replaces the target element
+    playerContainerRef.current.innerHTML = '<div id="wt-yt-player"></div>';
+
+    playerRef.current = new window.YT.Player('wt-yt-player', {
+      videoId,
+      width: '100%',
+      height: '100%',
+      playerVars: { enablejsapi: 1, rel: 0 },
+      events: {
+        onReady: () => {
+          playerReady.current = true;
+          // Start time tracking
+          timeIntervalRef.current = setInterval(() => {
+            if (!playerRef.current?.getCurrentTime) return;
+            try {
+              setPosition(playerRef.current.getCurrentTime());
+              const d = playerRef.current.getDuration?.();
+              if (d) setDuration(d);
+            } catch {}
+          }, 500);
+          // Apply any queued sync
+          if (pendingSyncRef.current) {
+            applySync(pendingSyncRef.current);
+            pendingSyncRef.current = null;
+          }
+        },
+        onStateChange: (event) => {
+          if (!playerRef.current?.getCurrentTime) return;
+          try { setPosition(playerRef.current.getCurrentTime()); } catch {}
+          // Host: sync YouTube native play/pause to other members
+          const state = event.data; // 1=playing, 2=paused
+          if (isHostRef.current && !isSyncingRef.current && (state === 1 || state === 2)) {
+            const playing = state === 1;
+            setIsPlaying(playing);
+            socketRef.current?.emit('sync_playback', {
+              room_id:    roomIdRef.current,
+              is_playing: playing,
+              position:   playerRef.current.getCurrentTime?.() || 0,
+            });
+          }
+        },
+      },
+    });
+  }, [applySync]);
+
+  // Load YT API once
+  useEffect(() => {
+    if (window.YT?.Player) return;
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+  }, []);
+
+  // (Re-)init player whenever content changes
+  useEffect(() => {
+    if (!content?.video_url) return;
+    const ytId = getYouTubeId(content.video_url);
+    if (!ytId) return;
+
+    const tryCreate = () => {
+      if (window.YT?.Player) {
+        createPlayer(ytId);
+      } else {
+        const prev = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => { prev?.(); createPlayer(ytId); };
+      }
+    };
+    // Small delay to let container render
+    const timer = setTimeout(tryCreate, 100);
+    return () => clearTimeout(timer);
+  }, [content?.video_url, createPlayer]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+      if (playerRef.current) {
+        try { playerRef.current.destroy(); } catch {}
+        playerRef.current = null;
+      }
+    };
+  }, []);
+
+  // ── Load room data on mount ───────────────────────────────────────────────
   useEffect(() => {
     if (!roomId) return;
     roomAPI.getRoom(roomId)
@@ -127,27 +263,7 @@ export default function WatchTogether({ user }) {
     });
 
     socket.on('playback_synced', (data) => {
-      if (!audioRef.current) return;
-      isSyncingRef.current = true;
-      if (Math.abs(audioRef.current.currentTime - data.position) > 1.5) {
-        audioRef.current.currentTime = data.position;
-      }
-      if (data.is_playing && audioRef.current.paused) {
-        // Only call play() if the user has already unlocked audio via a gesture.
-        // If not yet unlocked, just update state — the unlock overlay's onClick
-        // will call play() when the user taps it.
-        audioRef.current.play().then(() => {
-          setAudioUnlocked(true);
-          setIsPlaying(true);
-        }).catch(() => {
-          // Autoplay blocked — show unlock overlay
-          setIsPlaying(true); // track intended state
-        });
-      } else if (!data.is_playing && !audioRef.current.paused) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-      }
-      setTimeout(() => { isSyncingRef.current = false; }, 150);
+      applySync(data);
     });
 
     socket.on('comment_received', (comment) => {
@@ -158,11 +274,25 @@ export default function WatchTogether({ user }) {
       message.error(errMsg);
     });
 
-    return () => {
-      socket.disconnect();
-    };
+    return () => { socket.disconnect(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, userId]);
+
+  // ── Auto-select video if created from VideoPlayer ────────────────────────
+  useEffect(() => {
+    if (!autoSelectVideo || !socketRef.current || autoSelectDone.current) return;
+    autoSelectDone.current = true;
+    // Small delay for socket to connect
+    setTimeout(() => {
+      socketRef.current?.emit('select_content', {
+        room_id:    roomId,
+        title:      autoSelectVideo.title,
+        video_url:  autoSelectVideo.url,
+        categoryId: autoSelectVideo.categoryId,
+        videoId:    autoSelectVideo.videoId,
+      });
+    }, 500);
+  }, [autoSelectVideo, roomId]);
 
   // ── Browser back-button: call REST leave ──────────────────────────────────
   useEffect(() => {
@@ -182,66 +312,49 @@ export default function WatchTogether({ user }) {
   }, [comments]);
 
   // ── Content selection ────────────────────────────────────────────────────
-  const openContentModal = useCallback(() => {
-    setShowContent(true);
-    if (catalog.length === 0) {
-      setCatalogLoading(true);
-      listeningAPI.getCatalog()
-        .then(res => {
-          // Flatten: levels → scenarios → clips
-          const clips = [];
-          (res.data.levels || []).forEach(level => {
-            (level.scenarios || []).forEach(scenario => {
-              (scenario.clips || []).forEach(clip => {
-                clips.push({ ...clip, level_label: level.label, scenario_label: scenario.label });
-              });
-            });
-          });
-          setCatalog(clips);
-        })
-        .catch(() => message.error('Failed to load content'))
-        .finally(() => setCatalogLoading(false));
-    }
-  }, [catalog.length, message]);
-
-  const handleSelectContent = useCallback((clip) => {
+  const handleSelectContent = useCallback((video, categoryId) => {
     socketRef.current?.emit('select_content', {
-      room_id:     roomId,
-      title:       clip.title,
-      audio_url:   clip.audio_url,
-      source_slug: clip.source_slug,
+      room_id:    roomId,
+      title:      video.title,
+      video_url:  video.url,
+      categoryId,
+      videoId:    video.id,
     });
     setShowContent(false);
   }, [roomId]);
 
   // ── Playback controls (host only) ────────────────────────────────────────
   const handlePlayPause = useCallback(() => {
-    if (!isHost || !content || !audioRef.current) return;
-    const willPlay = audioRef.current.paused;
-    if (willPlay) {
-      audioRef.current.play().catch(() => {});
-    } else {
-      audioRef.current.pause();
-    }
-    setIsPlaying(willPlay);
-    socketRef.current?.emit('sync_playback', {
-      room_id:    roomId,
-      is_playing: willPlay,
-      position:   audioRef.current.currentTime,
-    });
+    if (!isHost || !content || !playerRef.current) return;
+    try {
+      const willPlay = !isPlayerPlaying();
+      if (willPlay) {
+        playerRef.current.playVideo();
+      } else {
+        playerRef.current.pauseVideo();
+      }
+      setIsPlaying(willPlay);
+      socketRef.current?.emit('sync_playback', {
+        room_id:    roomId,
+        is_playing: willPlay,
+        position:   playerRef.current.getCurrentTime?.() || 0,
+      });
+    } catch { /* player not ready */ }
   }, [isHost, content, roomId]);
 
   const handleSeek = useCallback((e) => {
-    if (!isHost || !duration || !audioRef.current) return;
+    if (!isHost || !duration || !playerRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const newPos = ((e.clientX - rect.left) / rect.width) * duration;
-    audioRef.current.currentTime = newPos;
-    setPosition(newPos);
-    socketRef.current?.emit('sync_playback', {
-      room_id:    roomId,
-      is_playing: isPlaying,
-      position:   newPos,
-    });
+    try {
+      playerRef.current.seekTo(newPos, true);
+      setPosition(newPos);
+      socketRef.current?.emit('sync_playback', {
+        room_id:    roomId,
+        is_playing: isPlaying,
+        position:   newPos,
+      });
+    } catch { /* player not ready */ }
   }, [isHost, duration, isPlaying, roomId]);
 
   // ── Comments ─────────────────────────────────────────────────────────────
@@ -274,23 +387,10 @@ export default function WatchTogether({ user }) {
 
   if (!room) return null;
 
+  const ytId = content?.video_url ? getYouTubeId(content.video_url) : null;
+
   return (
     <div style={{ height: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-      {/* Hidden audio element */}
-      {content?.audio_url && (
-        <audio
-          ref={audioRef}
-          src={content.audio_url}
-          onTimeUpdate={() => {
-            if (!isSyncingRef.current && audioRef.current) {
-              setPosition(audioRef.current.currentTime);
-            }
-          }}
-          onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration)}
-          onEnded={() => setIsPlaying(false)}
-        />
-      )}
 
       {/* Top Bar */}
       <div style={{
@@ -405,58 +505,47 @@ export default function WatchTogether({ user }) {
       {/* Main Area */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
 
-        {/* Audio Player Area */}
+        {/* Video Player Area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
 
-          {/* Content display */}
+          {/* Video display */}
           <div style={{
             flex: 1, background: '#000', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', padding: 32,
+            justifyContent: 'center',
           }}>
-            {content ? (
-              <div style={{ textAlign: 'center', maxWidth: 480 }}>
-                <div style={{
-                  width: 96, height: 96, background: '#1e293b', borderRadius: 16,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 20px',
-                  border: isPlaying ? '2px solid #2563eb' : '2px solid #334155',
-                }}>
-                  <SoundOutlined style={{ fontSize: 40, color: isPlaying ? '#60a5fa' : '#475569' }} />
+            {content && ytId ? (
+              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                <div
+                  ref={playerContainerRef}
+                  style={{ width: '100%', height: '100%' }}
+                >
+                  <div id="wt-yt-player" />
                 </div>
-                <Text style={{ color: '#f1f5f9', fontSize: 17, fontWeight: 600, display: 'block', marginBottom: 8 }}>
-                  {content.title}
-                </Text>
-                {!isHost && !audioUnlocked && isPlaying && (
-                  <Button
-                    type="primary"
-                    icon={<SoundOutlined />}
-                    onClick={() => {
-                      audioRef.current?.play().catch(() => {});
-                      setAudioUnlocked(true);
-                    }}
-                    style={{ marginTop: 8 }}
-                  >
-                    Tap to hear audio
-                  </Button>
-                )}
-                {!isHost && audioUnlocked && (
-                  <Text style={{ color: '#64748b', fontSize: 12 }}>Controlled by host</Text>
+                {/* Overlay for non-host to prevent direct interaction */}
+                {!isHost && (
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: 60,
+                    background: 'linear-gradient(transparent, rgba(0,0,0,0.6))',
+                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 8,
+                  }}>
+                    <Text style={{ color: '#94a3b8', fontSize: 12 }}>Controlled by host</Text>
+                  </div>
                 )}
               </div>
             ) : (
               <div style={{ textAlign: 'center' }}>
                 <PlayCircleOutlined style={{ fontSize: 56, color: '#334155' }} />
                 <Text style={{ display: 'block', color: '#475569', marginTop: 12, fontSize: 14 }}>
-                  {isHost ? 'Select content to start watching together' : 'Waiting for host to select content...'}
+                  {isHost ? 'Select a video to start watching together' : 'Waiting for host to select a video...'}
                 </Text>
                 {isHost && (
                   <Button
                     type="primary"
                     icon={<FolderOpenOutlined />}
-                    onClick={openContentModal}
+                    onClick={() => setShowContent(true)}
                     style={{ marginTop: 16 }}
                   >
-                    Select Content
+                    Select Video
                   </Button>
                 )}
               </div>
@@ -492,11 +581,16 @@ export default function WatchTogether({ user }) {
                 {formatTime(position)} / {formatTime(duration)}
               </Text>
               <div style={{ flex: 1 }} />
+              {content && (
+                <Text ellipsis style={{ color: '#94a3b8', fontSize: 12, maxWidth: 200 }}>
+                  {content.title}
+                </Text>
+              )}
               {isHost && content && (
                 <Button
                   size="small"
                   icon={<FolderOpenOutlined />}
-                  onClick={openContentModal}
+                  onClick={() => setShowContent(true)}
                   style={{ background: 'transparent', borderColor: '#475569', color: '#94a3b8' }}
                 >
                   Change
@@ -506,7 +600,7 @@ export default function WatchTogether({ user }) {
           </div>
         </div>
 
-        {/* Members Panel — overlay, does not push content */}
+        {/* Members Panel — overlay */}
         {showMembers && (
           <div style={{
             position: 'absolute', top: 0, left: 0, bottom: 0,
@@ -586,44 +680,59 @@ export default function WatchTogether({ user }) {
         </div>
       </div>
 
-      {/* Content Selection Modal */}
+      {/* Video Selection Modal */}
       <Modal
-        title="Select Content"
+        title="Select a Video"
         open={showContent}
         onCancel={() => setShowContent(false)}
         footer={null}
-        width={560}
+        width={680}
       >
-        {catalogLoading ? (
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin indicator={<LoadingOutlined style={{ fontSize: 28 }} spin />} />
-          </div>
-        ) : (
-          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-            {catalog.map(clip => (
-              <div
-                key={clip.id}
-                onClick={() => handleSelectContent(clip)}
-                style={{
-                  padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
-                  border: '1px solid #e5e7eb', marginBottom: 8,
-                  transition: 'background 0.15s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f0f9ff'}
-                onMouseLeave={e => e.currentTarget.style.background = ''}
-              >
-                <Text strong style={{ display: 'block', fontSize: 13 }}>{clip.title}</Text>
-                <Space size={6} style={{ marginTop: 4 }}>
-                  <Tag color="blue" style={{ fontSize: 11 }}>{clip.level_label}</Tag>
-                  <Tag style={{ fontSize: 11 }}>{clip.scenario_label}</Tag>
-                </Space>
-              </div>
-            ))}
-            {catalog.length === 0 && !catalogLoading && (
-              <Text type="secondary">No content available.</Text>
-            )}
-          </div>
-        )}
+        <div style={{ maxHeight: 480, overflowY: 'auto' }}>
+          {videoCategories.map(category => (
+            <div key={category.id}>
+              <Text strong style={{ display: 'block', marginBottom: 12, fontSize: 15 }}>
+                {category.title}
+              </Text>
+              <Row gutter={[12, 12]}>
+                {category.videos.map(video => (
+                  <Col xs={24} sm={12} key={video.id}>
+                    <div
+                      onClick={() => handleSelectContent(video, category.id)}
+                      style={{
+                        display: 'flex', gap: 10, padding: 10, borderRadius: 10,
+                        border: '1px solid #e5e7eb', cursor: 'pointer',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f0f9ff'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}
+                    >
+                      <div style={{
+                        width: 100, height: 56, borderRadius: 8, overflow: 'hidden',
+                        background: '#f3f4f6', flexShrink: 0, position: 'relative',
+                      }}>
+                        <img
+                          src={video.thumbnail}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={e => e.target.style.display = 'none'}
+                        />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text strong style={{ fontSize: 13, display: 'block' }} ellipsis>
+                          {video.title}
+                        </Text>
+                        <Tag icon={<ClockCircleOutlined />} style={{ fontSize: 11, marginTop: 4 }}>
+                          {video.duration}
+                        </Tag>
+                      </div>
+                    </div>
+                  </Col>
+                ))}
+              </Row>
+            </div>
+          ))}
+        </div>
       </Modal>
 
       {/* Leave Modal */}

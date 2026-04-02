@@ -33,7 +33,7 @@ active_rooms: dict = {}
 sid_room: dict = {}
 # user_id → pending threading.Timer for deferred DB cleanup on disconnect
 pending_cleanups: dict = {}
-# room_id → {title, audio_url, source_slug}  (WatchTogether content)
+# room_id → {title, video_url, categoryId, videoId}  (WatchTogether content)
 room_content: dict = {}
 # room_id → {is_playing: bool, position: float}
 room_playback: dict = {}
@@ -693,8 +693,9 @@ def handle_select_content(data):
         return
     content = {
         'title':       (data.get('title') or '').strip(),
-        'audio_url':   (data.get('audio_url') or '').strip(),
-        'source_slug': (data.get('source_slug') or '').strip(),
+        'video_url':   (data.get('video_url') or '').strip(),
+        'categoryId':  (data.get('categoryId') or '').strip(),
+        'videoId':     data.get('videoId'),
     }
     room_content[room_id] = content
     room_playback[room_id] = {'is_playing': False, 'position': 0.0}
