@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   CrownOutlined, TeamOutlined, LinkOutlined, CheckOutlined,
-  ArrowLeftOutlined,
+  ArrowLeftOutlined, StopOutlined,
 } from '@ant-design/icons';
 import { io } from 'socket.io-client';
 import { roomAPI, friendsAPI } from '../../api/index';
@@ -164,6 +164,14 @@ export default function WaitingRoom({ user }) {
       );
     });
 
+    socket.on('member_kicked', ({ user_id }) => {
+      if (user_id === userId) {
+        isLeavingRef.current = true;
+        message.warning('You have been removed from the room by the host');
+        navigate('/room');
+      }
+    });
+
     socket.on('game_started', (payload) => {
       isLeavingRef.current = true;
       if (payload?.game_type) {
@@ -219,6 +227,10 @@ export default function WaitingRoom({ user }) {
     socketRef.current?.emit('transfer_host', { room_id: roomId, new_host_user_id: targetUserId });
     message.success('Host transfer requested');
   }, [roomId, message]);
+
+  const handleKickMember = useCallback((targetUserId) => {
+    socketRef.current?.emit('kick_member', { room_id: roomId, target_user_id: targetUserId });
+  }, [roomId]);
 
   const handleLeave = useCallback(async () => {
     if (isHost && members.length > 1) {
@@ -365,7 +377,7 @@ export default function WaitingRoom({ user }) {
             {members.map(member => {
               const isMe = member.user_id === userId;
               const memberMenu = isHost && !isMe ? (
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <Button
                     type="text"
                     size="small"
@@ -374,6 +386,16 @@ export default function WaitingRoom({ user }) {
                     style={{ width: '100%', textAlign: 'left' }}
                   >
                     Transfer Host
+                  </Button>
+                  <Button
+                    type="text"
+                    size="small"
+                    danger
+                    icon={<StopOutlined />}
+                    onClick={() => handleKickMember(member.user_id)}
+                    style={{ width: '100%', textAlign: 'left' }}
+                  >
+                    Kick
                   </Button>
                 </div>
               ) : null;
