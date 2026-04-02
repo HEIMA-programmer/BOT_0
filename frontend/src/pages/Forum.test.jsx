@@ -156,40 +156,42 @@ describe('Forum page', () => {
   });
 
   it('keeps pagination visible on an empty later page', async () => {
-    mockForumAPI.getPosts
-      .mockResolvedValueOnce({
-        data: {
-          posts: Array.from({ length: 10 }, (_, index) => ({
-            id: index + 1,
-            user_id: 3,
-            username: 'alice',
-            zone: 'public',
-            tag: 'skills',
-            title: `Post ${index + 1}`,
-            content: 'Content',
-            status: 'approved',
-            is_pinned: false,
-            comment_count: 0,
-            forward_count: 0,
-            created_at: '2026-03-20T10:00:00Z',
-            can_delete: false,
-            can_edit: false,
-            can_forward: true,
-            can_pin: false,
-            can_review: false,
-          })),
-          total: 11,
-          page: 1,
-          pages: 2,
-        },
-      })
-      .mockResolvedValueOnce({
-        data: { posts: [], total: 0, page: 2, pages: 0 },
-      });
+    // Use persistent mock so extra effect re-fires still return the same data
+    mockForumAPI.getPosts.mockResolvedValue({
+      data: {
+        posts: Array.from({ length: 10 }, (_, index) => ({
+          id: index + 1,
+          user_id: 3,
+          username: 'alice',
+          zone: 'public',
+          tag: 'skills',
+          title: `Post ${index + 1}`,
+          content: 'Content',
+          status: 'approved',
+          is_pinned: false,
+          comment_count: 0,
+          forward_count: 0,
+          created_at: '2026-03-20T10:00:00Z',
+          can_delete: false,
+          can_edit: false,
+          can_forward: true,
+          can_pin: false,
+          can_review: false,
+        })),
+        total: 11,
+        page: 1,
+        pages: 2,
+      },
+    });
 
     renderWithProviders(<Forum user={regularUser} />);
 
     await screen.findByText('Post 1');
+
+    // Switch mock to empty page before clicking page 2
+    mockForumAPI.getPosts.mockResolvedValue({
+      data: { posts: [], total: 0, page: 2, pages: 0 },
+    });
     fireEvent.click(screen.getByTitle('2'));
     await waitFor(() =>
       expect(mockForumAPI.getPosts).toHaveBeenLastCalledWith(
