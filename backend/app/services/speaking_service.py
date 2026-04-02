@@ -2,7 +2,7 @@ import os
 import json
 import tempfile
 import azure.cognitiveservices.speech as speechsdk
-import anthropic
+import httpx
 from flask import current_app
 from pydub import AudioSegment
 
@@ -11,10 +11,11 @@ class SpeakingService:
     def __init__(self):
         self.azure_key = current_app.config.get('AZURE_SPEECH_KEY')
         self.azure_region = current_app.config.get('AZURE_SPEECH_REGION')
-        self.anthropic_key = current_app.config.get('ANTHROPIC_API_KEY')
+        self.deepseek_key = current_app.config.get('DEEPSEEK_API_KEY')
+        self.deepseek_url = current_app.config.get('DEEPSEEK_API_URL', 'https://api.deepseek.com')
 
-        if not self.azure_key or not self.anthropic_key:
-            raise RuntimeError('Azure Speech or Anthropic API key not configured')
+        if not self.azure_key or not self.deepseek_key:
+            raise RuntimeError('Azure Speech or DeepSeek API key not configured')
 
     def _convert_to_wav(self, audio_data, mime_type='audio/webm'):
         """
@@ -229,7 +230,7 @@ class SpeakingService:
 
     def get_content_scores(self, transcript, topic):
         """
-        Get content scores from Claude API.
+        Get content scores from DeepSeek API (OpenAI-compatible).
 
         Args:
             transcript: str - The recognized text
@@ -238,9 +239,6 @@ class SpeakingService:
         Returns:
             dict with content scores and feedback
         """
-        # Initialize Anthropic client (same as original implementation)
-        client = anthropic.Anthropic(api_key=self.anthropic_key)
-
         prompt = f"""
 You are an academic English speaking assessor. Evaluate the CONTENT of this spoken response.
 
@@ -277,50 +275,44 @@ SCORING GUIDELINES:
 - 60-70 is acceptable for simple but correct responses
 - Don't over-penalize for speech recognition errors
 - Focus on communication effectiveness, not perfection
-- When quoting words or phrases from the transcript, use single quotes (') instead of double quotes
 
-Return ONLY a JSON object. No thinking, no explanation, no markdown. All feedback in ENGLISH.
-IMPORTANT: Do NOT use double quotes inside string values. Use single quotes (') to quote words or phrases.
-
+Return ONLY a JSON object with this exact structure:
 {{
   "vocabulary": <integer>,
   "grammar": <integer>,
   "topic": <integer>,
   "feedback": {{
-    "vocabulary": "<one specific English sentence about word choices, quote examples with single quotes>",
-    "grammar": "<one specific English sentence about grammar, quote examples with single quotes>",
+    "vocabulary": "<one specific English sentence about word choices>",
+    "grammar": "<one specific English sentence about grammar>",
     "topic": "<one specific English sentence about content>"
   }}
 }}
 """
 
         try:
-            response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=512,
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    f"{self.deepseek_url}/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.deepseek_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "deepseek-chat",
+                        "messages": [
+                            {"role": "system", "content": "You are an expert English language assessor. Always respond with valid JSON only."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0,
+                        "response_format": {"type": "json_object"},
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
 
-            # Find text block (skip thinking blocks)
-            text_content = None
-            for block in response.content:
-                # Check if it's a text block with actual content
-                if hasattr(block, 'type') and block.type == 'text' and hasattr(block, 'text') and block.text:
-                    text_content = block.text
-                    break
-
-            if not text_content:
-                current_app.logger.error(f'No text in response. Content: {response.content}')
-                raise Exception("No text content in Claude response")
-
-            # Parse JSON
-            raw = text_content.strip()
+            raw = data["choices"][0]["message"]["content"].strip()
             raw = raw.replace("```json", "").replace("```", "").strip()
 
-            # Fix invalid escape sequences that Claude may produce
-            # JSON only allows: \" \\ \/ \b \f \n \r \t \uXXXX
-            # Claude may output: \' \` \_ \- \. \( \) etc.
             import re
             raw = re.sub(r'\\(?!["\\/bfnrtu])', '', raw)
 
@@ -329,7 +321,7 @@ IMPORTANT: Do NOT use double quotes inside string values. Use single quotes (') 
             except json.JSONDecodeError as e:
                 current_app.logger.error(f'JSON parse error: {e}')
                 current_app.logger.error(f'Full response: {raw}')
-                raise Exception(f"Invalid JSON from Claude: {e}")
+                raise Exception(f"Invalid JSON from DeepSeek: {e}")
 
             # Calculate overall score (average)
             overall = round((
@@ -347,5 +339,5 @@ IMPORTANT: Do NOT use double quotes inside string values. Use single quotes (') 
             }
 
         except Exception as e:
-            current_app.logger.error(f"Claude API error: {e}")
+            current_app.logger.error(f"DeepSeek API error: {e}")
             raise

@@ -8,7 +8,7 @@ from sqlalchemy import inspect, text
 
 db = SQLAlchemy()
 login_manager = LoginManager()
-socketio = SocketIO()
+socketio = SocketIO(cors_allowed_origins="*")
 
 
 def create_app(config_name=None):
@@ -29,7 +29,7 @@ def create_app(config_name=None):
     login_manager.session_protection = 'strong'
     cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
     CORS(app, supports_credentials=True, origins=cors_origins)
-    socketio.init_app(app, cors_allowed_origins=cors_origins)
+    socketio.init_app(app, cors_allowed_origins="*")
 
     @login_manager.unauthorized_handler
     def unauthorized():
@@ -51,6 +51,7 @@ def create_app(config_name=None):
     from app.routes.forum import forum_bp
     from app.routes.chat_history import chat_history_bp
     from app.routes.room import room_bp
+    from app.routes.friends import friends_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(daily_words_bp)
@@ -61,6 +62,7 @@ def create_app(config_name=None):
     app.register_blueprint(forum_bp)
     app.register_blueprint(chat_history_bp)
     app.register_blueprint(room_bp)
+    app.register_blueprint(friends_bp)
 
     # Register SocketIO handlers
     from app.routes import speaking_ws  # noqa: F401
@@ -86,6 +88,9 @@ def create_app(config_name=None):
             forum_forward,
             room,
             room_record,
+            friend_request,
+            friendship,
+            game_record,
         )
         db.create_all()
         _ensure_runtime_schema()
@@ -93,6 +98,7 @@ def create_app(config_name=None):
         if app.config.get('DEBUG'):
             _ensure_dev_test_user(app)
             _ensure_dev_admin_user(app)
+        _seed_guidance_posts(app)
 
     return app
 
@@ -118,6 +124,9 @@ def _ensure_runtime_schema():
     for column, ddl in forum_post_alters.items():
         if column not in forum_post_columns:
             db.session.execute(text(ddl))
+
+    if 'zone' not in forum_post_columns:
+        db.session.execute(text("ALTER TABLE forum_posts ADD COLUMN zone VARCHAR(10) NOT NULL DEFAULT 'public'"))
 
     db.session.execute(text(
         "UPDATE forum_posts SET status = 'approved' WHERE status IS NULL"
@@ -206,3 +215,192 @@ def _ensure_dev_admin_user(app):
     db.session.add(admin)
     db.session.commit()
     app.logger.info('Created dev admin user: admin@example.com / admin12345')
+
+
+def _seed_guidance_posts(app):
+    """Create pinned guidance posts for DIICSU majors if they don't exist."""
+    from app.models.user import User
+    from app.models.forum_post import ForumPost
+    from datetime import datetime, timezone
+
+    admin = User.query.filter_by(email='admin@example.com').first()
+    if not admin:
+        return
+
+    guidance_posts = [
+        {
+            'title': '[Guide] Computer Science & Technology - Getting Started',
+            'content': (
+                "Welcome to the Computer Science & Technology program at DIICSU! "
+                "Here are essential resources and tips for incoming students:\n\n"
+                "**1. Learn Git & GitHub**\n"
+                "Version control is fundamental. Start with GitHub's official guide:\n"
+                "https://docs.github.com/en/get-started/quickstart\n\n"
+                "**2. Programming Foundations**\n"
+                "If you're new to programming, Python is a great starting language. "
+                "Try the free CS50 course from Harvard:\n"
+                "https://cs50.harvard.edu/x/\n\n"
+                "**3. Development Environment**\n"
+                "Set up VS Code as your code editor:\n"
+                "https://code.visualstudio.com/\n"
+                "Learn to use the terminal/command line effectively.\n\n"
+                "**4. Academic Writing in CS**\n"
+                "Learn LaTeX for writing papers and reports:\n"
+                "https://www.overleaf.com/learn\n\n"
+                "**5. Key English Terms**\n"
+                "Familiarize yourself with CS terminology in English: algorithm, data structure, "
+                "compiler, operating system, database, network protocol, API, debugging, etc.\n\n"
+                "**6. Online Learning Platforms**\n"
+                "- Coursera: https://www.coursera.org/\n"
+                "- LeetCode for coding practice: https://leetcode.com/\n"
+                "- Stack Overflow for Q&A: https://stackoverflow.com/\n\n"
+                "Feel free to ask questions in the forum. Good luck with your studies!"
+            ),
+            'video_url': 'https://www.youtube.com/watch?v=RGOj5yH7evk',
+        },
+        {
+            'title': '[Guide] Civil Engineering - Getting Started',
+            'content': (
+                "Welcome to the Civil Engineering program at DIICSU! "
+                "Here are essential resources for incoming students:\n\n"
+                "**1. CAD Software**\n"
+                "AutoCAD is essential for civil engineers. Get the free student version:\n"
+                "https://www.autodesk.com/education/edu-software\n\n"
+                "**2. Understanding Structures**\n"
+                "Start learning structural analysis concepts. "
+                "MIT OpenCourseWare offers excellent free materials:\n"
+                "https://ocw.mit.edu/courses/civil-and-environmental-engineering/\n\n"
+                "**3. Building Codes & Standards**\n"
+                "Familiarize yourself with international building codes and Chinese standards (GB codes). "
+                "Understanding these is crucial for your career.\n\n"
+                "**4. Key English Terms**\n"
+                "Learn essential CE vocabulary: reinforced concrete, structural analysis, "
+                "load-bearing, foundation, beam, column, stress, strain, geotechnical, etc.\n\n"
+                "**5. Field Work Preparation**\n"
+                "Civil engineering involves site visits. Learn about safety protocols "
+                "and how to read construction drawings.\n\n"
+                "**6. Useful Resources**\n"
+                "- ASCE (American Society of Civil Engineers): https://www.asce.org/\n"
+                "- Engineering Toolbox: https://www.engineeringtoolbox.com/\n\n"
+                "Welcome aboard and enjoy your engineering journey!"
+            ),
+            'video_url': 'https://www.youtube.com/watch?v=a4NICa8RCk0',
+        },
+        {
+            'title': '[Guide] Mechanical Design, Manufacturing & Automation - Getting Started',
+            'content': (
+                "Welcome to the Mechanical Design, Manufacturing & Automation program at DIICSU! "
+                "Here are key resources for incoming students:\n\n"
+                "**1. CAD/CAM Software**\n"
+                "Learn SolidWorks or CATIA for 3D modeling. Free student licenses available:\n"
+                "https://www.solidworks.com/product/students\n\n"
+                "**2. Manufacturing Processes**\n"
+                "Understand fundamental manufacturing methods: CNC machining, 3D printing, "
+                "casting, welding, and injection molding.\n\n"
+                "**3. MATLAB & Simulation**\n"
+                "MATLAB is widely used for engineering calculations:\n"
+                "https://www.mathworks.com/academia/students.html\n\n"
+                "**4. Key English Terms**\n"
+                "Essential ME vocabulary: tolerance, gear, bearing, hydraulic, pneumatic, "
+                "CNC (Computer Numerical Control), thermodynamics, kinematics, mechanism, etc.\n\n"
+                "**5. Hands-on Skills**\n"
+                "Take advantage of lab sessions. Learn to use measuring tools (calipers, micrometers) "
+                "and understand technical drawing standards.\n\n"
+                "**6. Useful Resources**\n"
+                "- ASME (American Society of Mechanical Engineers): https://www.asme.org/\n"
+                "- GrabCAD for 3D models: https://grabcad.com/\n"
+                "- MIT OCW Mechanical Engineering: https://ocw.mit.edu/courses/mechanical-engineering/\n\n"
+                "Best of luck in your mechanical engineering journey!"
+            ),
+            'video_url': 'https://www.youtube.com/watch?v=5SDVuBRiHbk',
+        },
+        {
+            'title': '[Guide] Transportation Engineering - Getting Started',
+            'content': (
+                "Welcome to the Transportation Engineering program at DIICSU! "
+                "Here are essential resources for incoming students:\n\n"
+                "**1. Transportation Planning Basics**\n"
+                "Learn about urban planning, traffic flow theory, and transportation network design. "
+                "Start with fundamentals of traffic engineering.\n\n"
+                "**2. Software Tools**\n"
+                "- VISSIM for traffic simulation\n"
+                "- TransCAD for transportation planning\n"
+                "- AutoCAD for road design\n"
+                "- Python/R for data analysis in transportation\n\n"
+                "**3. Key English Terms**\n"
+                "Essential TE vocabulary: intersection, signal timing, level of service (LOS), "
+                "traffic flow, capacity, roundabout, highway, pavement, logistics, etc.\n\n"
+                "**4. Industry Knowledge**\n"
+                "Stay updated on intelligent transportation systems (ITS), autonomous vehicles, "
+                "and smart city initiatives - these are the future of the field.\n\n"
+                "**5. Research & Journals**\n"
+                "- Transportation Research Board (TRB): https://www.trb.org/\n"
+                "- Journal of Transport Geography\n"
+                "- IEEE Transactions on Intelligent Transportation Systems\n\n"
+                "**6. Useful Resources**\n"
+                "- Google Maps traffic data for real-world analysis\n"
+                "- OpenStreetMap for geographic data: https://www.openstreetmap.org/\n\n"
+                "Welcome to the world of transportation engineering!"
+            ),
+            'video_url': 'https://www.youtube.com/watch?v=uxykI30fS54',
+        },
+        {
+            'title': '[Guide] Applied Mathematics - Getting Started',
+            'content': (
+                "Welcome to the Applied Mathematics program at DIICSU! "
+                "Here are essential resources for incoming students:\n\n"
+                "**1. Mathematical Software**\n"
+                "- MATLAB: https://www.mathworks.com/academia/students.html\n"
+                "- Python with NumPy/SciPy for scientific computing\n"
+                "- LaTeX for mathematical typesetting: https://www.overleaf.com/\n\n"
+                "**2. Core Subjects Preview**\n"
+                "Brush up on calculus, linear algebra, and probability theory before classes start. "
+                "Khan Academy offers excellent free resources:\n"
+                "https://www.khanacademy.org/math\n\n"
+                "**3. Key English Terms**\n"
+                "Essential math vocabulary: theorem, proof, differential equation, matrix, "
+                "eigenvalue, convergence, optimization, stochastic, topology, etc.\n\n"
+                "**4. Programming for Mathematicians**\n"
+                "Python is essential for applied math. Learn NumPy, SciPy, and matplotlib:\n"
+                "https://numpy.org/learn/\n\n"
+                "**5. Academic Resources**\n"
+                "- arXiv for preprints: https://arxiv.org/\n"
+                "- MIT OCW Mathematics: https://ocw.mit.edu/courses/mathematics/\n"
+                "- 3Blue1Brown for visual math: https://www.3blue1brown.com/\n\n"
+                "**6. Career Paths**\n"
+                "Applied math opens doors to data science, quantitative finance, "
+                "operations research, and academic research. Start exploring these areas early.\n\n"
+                "Enjoy your mathematical journey!"
+            ),
+            'video_url': 'https://www.youtube.com/watch?v=gENVB6tjq_M',
+        },
+    ]
+
+    now = datetime.now(timezone.utc)
+    created_count = 0
+
+    for post_data in guidance_posts:
+        existing = ForumPost.query.filter_by(title=post_data['title']).first()
+        if existing:
+            continue
+
+        post = ForumPost(
+            user_id=admin.id,
+            zone='public',
+            tag='public',
+            title=post_data['title'],
+            content=post_data['content'],
+            video_url=post_data.get('video_url'),
+            status=ForumPost.STATUS_APPROVED,
+            is_pinned=True,
+            reviewed_by=admin.id,
+            reviewed_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        db.session.add(post)
+        created_count += 1
+
+    if created_count > 0:
+        db.session.commit()
+        app.logger.info('Seeded %d guidance posts for DIICSU majors', created_count)

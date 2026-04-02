@@ -92,3 +92,37 @@ def logout():
 @login_required
 def me():
     return jsonify(current_user.to_dict()), 200
+
+
+SYSTEM_EMAILS = ('test@example.com', 'admin@example.com')
+
+
+@auth_bp.route('/username', methods=['PATCH'])
+@login_required
+def update_username():
+    if current_user.email in SYSTEM_EMAILS:
+        return jsonify({'error': 'System accounts cannot change username'}), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    new_username = data.get('username', '').strip()
+    if not new_username or len(new_username) < 3 or len(new_username) > 80:
+        return jsonify({'error': 'Username must be between 3 and 80 characters'}), 400
+
+    if new_username == current_user.username:
+        return jsonify(current_user.to_dict()), 200
+
+    existing = User.query.filter_by(username=new_username).first()
+    if existing:
+        return jsonify({'error': 'Username already exists'}), 409
+
+    current_user.username = new_username
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Username already exists'}), 409
+
+    return jsonify(current_user.to_dict()), 200

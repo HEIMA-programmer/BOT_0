@@ -9,6 +9,12 @@ export const TYPE_CONFIG = {
   game:     { label: 'Game Room',      color: '#ea580c', bg: '#ffedd5', Icon: TrophyOutlined },
 };
 
+export const TOPICS = [
+  'Free Talk', 'Daily Campus Life', 'Academic Writing',
+  'Job Interviews', 'Current Events', 'Technology & AI',
+  'Study Abroad', 'Climate Change',
+];
+
 export const AVATAR_COLORS = [
   '#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#db2777', '#0891b2', '#d97706',
 ];
@@ -20,4 +26,12 @@ export function getAvatarColor(username = '') {
   let hash = 0;
   for (let i = 0; i < username.length; i++) hash += username.charCodeAt(i);
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+/**
+ * Copy invite code to clipboard, returning a Promise.
+ * Usage: copyInviteCode(code).then(() => { setCopied(true); ... })
+ */
+export function copyInviteCode(code) {
+  return navigator.clipboard.writeText(code || '');
 }

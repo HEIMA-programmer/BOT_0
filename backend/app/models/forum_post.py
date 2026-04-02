@@ -13,7 +13,8 @@ class ForumPost(db.Model):
     user_id = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False
     )
-    tag = db.Column(db.String(20), nullable=False)  # skills, experience, academic_culture, public
+    zone = db.Column(db.String(10), nullable=False, default='public', server_default=db.text("'public'"))  # public, friend
+    tag = db.Column(db.String(30), nullable=False)  # user-defined tags
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
     file_url = db.Column(db.String(500), nullable=True)
@@ -64,6 +65,7 @@ class ForumPost(db.Model):
             'id': self.id,
             'user_id': self.user_id,
             'username': self.user.username if self.user else None,
+            'zone': self.zone,
             'tag': self.tag,
             'title': self.title,
             'content': self.content,

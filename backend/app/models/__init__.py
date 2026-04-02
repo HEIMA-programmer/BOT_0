@@ -16,6 +16,9 @@ from app.models.review_history import ReviewHistory
 from app.models.user_word_progress import UserWordProgress
 from app.models.room import Room, RoomMember
 from app.models.room_record import RoomRecord
+from app.models.friend_request import FriendRequest
+from app.models.friendship import Friendship
+from app.models.game_record import GameRecord
 
 
 @event.listens_for(Engine, 'connect')
@@ -40,4 +43,7 @@ __all__ = [
     'Room',
     'RoomMember',
     'RoomRecord',
+    'FriendRequest',
+    'Friendship',
+    'GameRecord',
 ]
