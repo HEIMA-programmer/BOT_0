@@ -436,10 +436,10 @@ def _context_round_leader(round_answers):
     best_signature = None
 
     for uid, submission in round_answers.items():
+        # Higher correct_count is better; lower response_ms (faster) is better.
         signature = (
             submission.get('correct_count', 0),
             -submission.get('response_ms', ROUND_DURATION_SECS * 1000),
-            -uid,
         )
         if best_signature is None or signature > best_signature:
             best_signature = signature
@@ -452,10 +452,11 @@ def _round_timer(app, room_id, round_idx):
     """Background task: waits 20 seconds then ends the round if not already ended."""
     socketio.sleep(ROUND_DURATION_SECS)
     with app.app_context():
-        state = game_states.get(room_id)
-        if not state or state['current_round'] != round_idx:
-            return  # Round already ended
-        _end_round(app, room_id, winner_id=None)
+        with _state_lock:
+            state = game_states.get(room_id)
+            if not state or state['current_round'] != round_idx:
+                return  # Round already ended
+            _end_round(app, room_id, winner_id=None)
 
 
 def _end_round(app, room_id, winner_id=None):
@@ -778,9 +779,10 @@ def handle_submit_answer(data):
 def _end_round_wrapper(app, room_id, winner_id, expected_round):
     """Wrapper to call _end_round only if the round hasn't been ended yet."""
     with app.app_context():
-        state = game_states.get(room_id)
-        if state and state['current_round'] == expected_round:
-            _end_round(app, room_id, winner_id)
+        with _state_lock:
+            state = game_states.get(room_id)
+            if state and state['current_round'] == expected_round:
+                _end_round(app, room_id, winner_id)
 
 
 @socketio.on('invite_friend', namespace='/room')

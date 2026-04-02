@@ -5,7 +5,6 @@ import secrets
 import string
 import time
 from datetime import datetime, timezone
-from functools import lru_cache
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request, current_app
@@ -39,7 +38,7 @@ CONTEXT_STOPWORDS = {
     'short', 'simple', 'something', 'stronger', 'study', 'students', 'supported',
     'survey', 'teacher', 'than', 'their', 'there', 'these', 'those', 'through',
     'trends', 'understand', 'website', 'which', 'while', 'with', 'without',
-    'writing', 'rather',
+    'writing',
 }
 
 
@@ -342,9 +341,20 @@ CONTEXT_TEMPLATES = [
 ]
 
 
-@lru_cache(maxsize=1)
+_awl_context_bank_cache = None
+
+
 def _load_awl_context_bank():
-    """Load AWL words and example sentences from the frontend public assets."""
+    """Load AWL words and example sentences from the frontend public assets.
+
+    Results are cached after the first successful load.  An empty/missing file
+    is **not** cached so the next call will retry (e.g. after deployment fixes
+    the path).
+    """
+    global _awl_context_bank_cache
+    if _awl_context_bank_cache is not None:
+        return _awl_context_bank_cache
+
     if not AWL_CSV_PATH.is_file() or not AWL_SENTENCE_PATH.is_file():
         return ()
 
@@ -367,7 +377,10 @@ def _load_awl_context_bank():
                 'sentence': sentence,
             })
 
-    return tuple(entries)
+    result = tuple(entries)
+    if result:
+        _awl_context_bank_cache = result
+    return result
 
 
 def _build_context_blank_progress(count):
