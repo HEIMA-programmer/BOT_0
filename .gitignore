@@ -39,3 +39,5 @@ htmlcov/
 # Logs
 *.log
 npm-debug.log*
+
+.claude/
