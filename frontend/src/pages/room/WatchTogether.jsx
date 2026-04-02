@@ -18,6 +18,11 @@ import { videoCategories } from '../../data/videos';
 
 const { Text } = Typography;
 
+const getYouTubeId = (url) => {
+  const m = url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+  return m?.[1];
+};
+
 export default function WatchTogether({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,16 +38,22 @@ export default function WatchTogether({ user }) {
   const userId = user?.id || 0;
   const roomId = room?.id ? Number(room.id) : Number(roomIdParam);
   const isHost = members.find(m => m.user_id === userId)?.role === 'host';
+  const isHostRef = useRef(isHost);
+  const roomIdRef = useRef(roomId);
+  useEffect(() => { isHostRef.current = isHost; }, [isHost]);
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
   // Content + playback
   const [content, setContent]       = useState(null);
   const [isPlaying, setIsPlaying]   = useState(false);
   const [position, setPosition]     = useState(0);
   const [duration, setDuration]     = useState(0);
-  const iframeRef     = useRef(null);
+  const playerContainerRef = useRef(null);
   const playerRef     = useRef(null);
+  const playerReady   = useRef(false);
   const timeIntervalRef = useRef(null);
   const isSyncingRef  = useRef(false);
+  const pendingSyncRef = useRef(null);
 
   // Content selection modal
   const [showContent, setShowContent] = useState(false);
@@ -65,40 +76,92 @@ export default function WatchTogether({ user }) {
   const autoSelectDone = useRef(false);
 
   // ── YouTube player helpers ────────────────────────────────────────────────
-  const getPlayerState = () => {
-    try { return playerRef.current?.getPlayerState?.(); } catch { return -1; }
+  const isPlayerPlaying = () => {
+    try { return playerRef.current?.getPlayerState?.() === 1; } catch { return false; }
   };
-  const isPlayerPlaying = () => getPlayerState() === 1;
 
-  const startTimeTracking = useCallback(() => {
-    if (timeIntervalRef.current) return;
-    timeIntervalRef.current = setInterval(() => {
-      if (!playerRef.current?.getCurrentTime) return;
-      try {
-        setPosition(playerRef.current.getCurrentTime());
-        const d = playerRef.current.getDuration?.();
-        if (d) setDuration(d);
-      } catch { /* player may be destroyed */ }
-    }, 500);
+  const applySync = useCallback((data) => {
+    if (!playerRef.current || !playerReady.current) {
+      pendingSyncRef.current = data;
+      return;
+    }
+    isSyncingRef.current = true;
+    try {
+      const curTime = playerRef.current.getCurrentTime?.() || 0;
+      if (Math.abs(curTime - data.position) > 2) {
+        playerRef.current.seekTo(data.position, true);
+      }
+      if (data.is_playing) {
+        playerRef.current.playVideo();
+        setIsPlaying(true);
+      } else {
+        playerRef.current.pauseVideo();
+        setIsPlaying(false);
+      }
+    } catch { /* player not ready */ }
+    setTimeout(() => { isSyncingRef.current = false; }, 200);
   }, []);
 
-  const initYouTubePlayer = useCallback(() => {
-    if (!iframeRef.current || playerRef.current) return;
-    playerRef.current = new window.YT.Player(iframeRef.current, {
+  const createPlayer = useCallback((videoId) => {
+    if (!playerContainerRef.current) return;
+    // Destroy previous
+    if (playerRef.current) {
+      try { playerRef.current.destroy(); } catch {}
+      playerRef.current = null;
+      playerReady.current = false;
+    }
+    if (timeIntervalRef.current) {
+      clearInterval(timeIntervalRef.current);
+      timeIntervalRef.current = null;
+    }
+    // Reset container — YT.Player replaces the target element
+    playerContainerRef.current.innerHTML = '<div id="wt-yt-player"></div>';
+
+    playerRef.current = new window.YT.Player('wt-yt-player', {
+      videoId,
+      width: '100%',
+      height: '100%',
+      playerVars: { enablejsapi: 1, rel: 0 },
       events: {
-        onReady: () => startTimeTracking(),
-        onStateChange: () => {
-          if (playerRef.current?.getCurrentTime) {
-            try { setPosition(playerRef.current.getCurrentTime()); } catch {}
+        onReady: () => {
+          playerReady.current = true;
+          // Start time tracking
+          timeIntervalRef.current = setInterval(() => {
+            if (!playerRef.current?.getCurrentTime) return;
+            try {
+              setPosition(playerRef.current.getCurrentTime());
+              const d = playerRef.current.getDuration?.();
+              if (d) setDuration(d);
+            } catch {}
+          }, 500);
+          // Apply any queued sync
+          if (pendingSyncRef.current) {
+            applySync(pendingSyncRef.current);
+            pendingSyncRef.current = null;
+          }
+        },
+        onStateChange: (event) => {
+          if (!playerRef.current?.getCurrentTime) return;
+          try { setPosition(playerRef.current.getCurrentTime()); } catch {}
+          // Host: sync YouTube native play/pause to other members
+          const state = event.data; // 1=playing, 2=paused
+          if (isHostRef.current && !isSyncingRef.current && (state === 1 || state === 2)) {
+            const playing = state === 1;
+            setIsPlaying(playing);
+            socketRef.current?.emit('sync_playback', {
+              room_id:    roomIdRef.current,
+              is_playing: playing,
+              position:   playerRef.current.getCurrentTime?.() || 0,
+            });
           }
         },
       },
     });
-  }, [startTimeTracking]);
+  }, [applySync]);
 
   // Load YT API once
   useEffect(() => {
-    if (window.YT?.Player) return; // already loaded
+    if (window.YT?.Player) return;
     if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
       const tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
@@ -109,30 +172,21 @@ export default function WatchTogether({ user }) {
   // (Re-)init player whenever content changes
   useEffect(() => {
     if (!content?.video_url) return;
+    const ytId = getYouTubeId(content.video_url);
+    if (!ytId) return;
 
-    // Destroy previous player
-    if (playerRef.current) {
-      try { playerRef.current.destroy(); } catch {}
-      playerRef.current = null;
-    }
-    if (timeIntervalRef.current) {
-      clearInterval(timeIntervalRef.current);
-      timeIntervalRef.current = null;
-    }
-
-    // Wait for iframe to mount, then init
-    const tryInit = () => {
+    const tryCreate = () => {
       if (window.YT?.Player) {
-        initYouTubePlayer();
+        createPlayer(ytId);
       } else {
         const prev = window.onYouTubeIframeAPIReady;
-        window.onYouTubeIframeAPIReady = () => { prev?.(); initYouTubePlayer(); };
+        window.onYouTubeIframeAPIReady = () => { prev?.(); createPlayer(ytId); };
       }
     };
-    // Small delay to let iframe render
-    const timer = setTimeout(tryInit, 300);
+    // Small delay to let container render
+    const timer = setTimeout(tryCreate, 100);
     return () => clearTimeout(timer);
-  }, [content?.video_url, initYouTubePlayer]);
+  }, [content?.video_url, createPlayer]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -209,22 +263,7 @@ export default function WatchTogether({ user }) {
     });
 
     socket.on('playback_synced', (data) => {
-      if (!playerRef.current) return;
-      isSyncingRef.current = true;
-      try {
-        const curTime = playerRef.current.getCurrentTime?.() || 0;
-        if (Math.abs(curTime - data.position) > 2) {
-          playerRef.current.seekTo(data.position, true);
-        }
-        if (data.is_playing && !isPlayerPlaying()) {
-          playerRef.current.playVideo();
-          setIsPlaying(true);
-        } else if (!data.is_playing && isPlayerPlaying()) {
-          playerRef.current.pauseVideo();
-          setIsPlaying(false);
-        }
-      } catch { /* player may not be ready */ }
-      setTimeout(() => { isSyncingRef.current = false; }, 200);
+      applySync(data);
     });
 
     socket.on('comment_received', (comment) => {
@@ -344,12 +383,6 @@ export default function WatchTogether({ user }) {
   const formatTime = (secs) => {
     const s = Math.floor(secs || 0);
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
-
-  // Extract YouTube video ID from URL
-  const getYouTubeId = (url) => {
-    const m = url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
-    return m?.[1];
   };
 
   if (!room) return null;
@@ -482,14 +515,12 @@ export default function WatchTogether({ user }) {
           }}>
             {content && ytId ? (
               <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                <iframe
-                  ref={iframeRef}
-                  src={`https://www.youtube.com/embed/${ytId}?enablejsapi=1`}
-                  title={content.title}
-                  style={{ width: '100%', height: '100%', border: 'none' }}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                <div
+                  ref={playerContainerRef}
+                  style={{ width: '100%', height: '100%' }}
+                >
+                  <div id="wt-yt-player" />
+                </div>
                 {/* Overlay for non-host to prevent direct interaction */}
                 {!isHost && (
                   <div style={{

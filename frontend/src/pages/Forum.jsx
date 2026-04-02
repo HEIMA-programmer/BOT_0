@@ -48,6 +48,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { forumAPI, friendsAPI } from '../api';
 import { getVideoInfo } from './VideoPlayer';
 
@@ -184,9 +185,11 @@ function AdminQueueCard({ post, onOpen, onReview }) {
         </Space>
         <div>
           <Title level={5} style={{ margin: 0 }}>{post.title}</Title>
-          <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '8px 0 0', color: '#6b7280' }}>
-            {post.content}
-          </Paragraph>
+          <div style={{ margin: '8px 0 0', color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+              {post.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+            </ReactMarkdown>
+          </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
           <Text type="secondary">{new Date(post.created_at).toLocaleString()}</Text>
@@ -663,9 +666,11 @@ export default function Forum({ user }) {
                 <Tag color={getTagConfig(origPost.tag).color}>{getTagConfig(origPost.tag).label}</Tag>
               </Space>
               <Title level={5} style={{ margin: '4px 0' }}>{origPost.title}</Title>
-              <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
-                {origPost.content}
-              </Paragraph>
+              <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                  {origPost.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                </ReactMarkdown>
+              </div>
             </Card>
           )}
         </Card>
@@ -693,9 +698,11 @@ export default function Forum({ user }) {
               <StatusTag status={post.status} />
             </Space>
             <Title level={5} style={{ margin: '4px 0' }}>{post.title}</Title>
-            <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
-              {post.content}
-            </Paragraph>
+            <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                {post.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+              </ReactMarkdown>
+            </div>
             <Space size={16} style={{ marginTop: 8, color: '#9ca3af' }}>
               {post.file_url && <span><FileOutlined /> File</span>}
               {post.video_url && <span><VideoCameraOutlined /> Video</span>}
@@ -1053,7 +1060,14 @@ export default function Forum({ user }) {
             </div>
 
             <div style={{ fontSize: 14, lineHeight: 1.7 }}>
-              <ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                  ),
+                }}
+              >
                 {detailPost.content.replace(/\[Video Reference\]\([^)]*\)/g, '')}
               </ReactMarkdown>
             </div>
@@ -1331,9 +1345,11 @@ export default function Forum({ user }) {
                       {item.comment && <Paragraph style={{ margin: '8px 0 6px' }}>{item.comment}</Paragraph>}
                       <Card size="small" style={{ background: '#fafafa', borderRadius: 8 }}>
                         <Text strong>{item.original_post?.title}</Text>
-                        <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '4px 0 0', color: '#6b7280' }}>
-                          {item.original_post?.content}
-                        </Paragraph>
+                        <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                            {(item.original_post?.content || '').replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                          </ReactMarkdown>
+                        </div>
                       </Card>
                     </div>
                   ) : (
@@ -1344,9 +1360,11 @@ export default function Forum({ user }) {
                         {item.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
                         <Text strong>{item.title}</Text>
                       </Space>
-                      <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '6px 0 0', color: '#6b7280' }}>
-                        {item.content}
-                      </Paragraph>
+                      <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                          {item.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                        </ReactMarkdown>
+                      </div>
                       {item.status === 'rejected' && (
                         <Text type="danger">
                           Rejected: {item.rejection_reason}
