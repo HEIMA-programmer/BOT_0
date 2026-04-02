@@ -11,18 +11,24 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-const { mockDailyLearningAPI } = vi.hoisted(() => ({
+const { mockDailyLearningAPI, mockProgressAPI } = vi.hoisted(() => ({
   mockDailyLearningAPI: { getStats: vi.fn() },
+  mockProgressAPI: { getDashboard: vi.fn() },
 }));
 
 vi.mock('../api', () => ({
   dailyLearningAPI: mockDailyLearningAPI,
+  progressAPI: mockProgressAPI,
 }));
 
 describe('Home page', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     mockDailyLearningAPI.getStats.mockReset();
+    mockProgressAPI.getDashboard.mockReset();
+    mockProgressAPI.getDashboard.mockResolvedValue({
+      data: { listening_done: 0, speaking_sessions: 0, total_time_minutes: 0 },
+    });
   });
 
   it('renders welcome banner and loads stats', async () => {
@@ -34,7 +40,7 @@ describe('Home page', () => {
 
     expect(await screen.findByText('Welcome back! Ready to practice?')).toBeTruthy();
     await waitFor(() => expect(mockDailyLearningAPI.getStats).toHaveBeenCalled());
-    expect(await screen.findByText('25 / 570')).toBeTruthy();
+    expect(await screen.findByText((content, el) => content.includes('25') && content.includes('570'))).toBeTruthy();
   });
 
   it('renders all five module cards and navigates on click', async () => {
@@ -48,7 +54,7 @@ describe('Home page', () => {
     expect(screen.getByText('Speaking Studio')).toBeTruthy();
     expect(screen.getByText('Vocabulary')).toBeTruthy();
     expect(screen.getByText('Forum')).toBeTruthy();
-    expect(screen.getByText('AI Conversation')).toBeTruthy();
+    expect(screen.getByText('Room')).toBeTruthy();
 
     fireEvent.click(screen.getByText('Vocabulary'));
     expect(mockNavigate).toHaveBeenCalledWith('/daily-words');

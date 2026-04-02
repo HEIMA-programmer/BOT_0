@@ -1,20 +1,12 @@
 import { useEffect } from 'react';
 import { Typography, Card, Row, Col, Tag, Tabs, Button } from 'antd';
-import { AudioOutlined, MessageOutlined, TrophyOutlined, RobotOutlined, CommentOutlined, TeamOutlined, HistoryOutlined } from '@ant-design/icons';
+import { AudioOutlined, MessageOutlined, RobotOutlined, CommentOutlined, TeamOutlined, HistoryOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 
 const { Title, Text } = Typography;
 
 const speakingModes = [
-  {
-    title: 'Pronunciation Practice',
-    icon: <AudioOutlined />,
-    color: '#dc2626',
-    bg: '#fef2f2',
-    desc: 'Record your voice, play back, and compare with native pronunciation.',
-    status: 'Coming soon',
-  },
   {
     title: 'Structured Speaking',
     icon: <MessageOutlined />,
@@ -23,14 +15,6 @@ const speakingModes = [
     desc: 'Pick a topic card, express your thoughts in 30-60 seconds, and get AI feedback.',
     status: '',
     clickable: true,
-  },
-  {
-    title: 'Sentence Follow-along',
-    icon: <TrophyOutlined />,
-    color: '#059669',
-    bg: '#ecfdf5',
-    desc: 'Read sentences aloud and see how closely your speech matches the target.',
-    status: 'Coming soon',
   },
 ];
 

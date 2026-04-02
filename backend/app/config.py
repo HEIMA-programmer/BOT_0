@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 
 class BaseConfig:
@@ -14,6 +14,8 @@ class BaseConfig:
     GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
     DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
     DEEPSEEK_API_URL = os.getenv('DEEPSEEK_API_URL', 'https://api.deepseek.com')
+    AGORA_APP_ID = os.getenv('AGORA_APP_ID', '')
+    AGORA_APP_CERTIFICATE = os.getenv('AGORA_APP_CERTIFICATE', '')
 
 
 class DevelopmentConfig(BaseConfig):

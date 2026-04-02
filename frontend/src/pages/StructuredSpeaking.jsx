@@ -16,6 +16,17 @@ export default function StructuredSpeaking() {
 
   const scenarioType = state.type || null;
 
+  const recommendedTopics = [
+    { id: 1, title: 'Describe your research interests', desc: 'Explain what academic topics interest you and why they are important' },
+    { id: 2, title: 'Explain a concept from your field', desc: 'Choose a key concept and explain it in simple terms' },
+    { id: 3, title: 'Discuss online vs in-person learning', desc: 'Compare the advantages and disadvantages of each learning mode' },
+    { id: 4, title: 'Describe how you approach group projects', desc: 'Explain your strategy for collaborating with classmates' },
+    { id: 5, title: 'Evaluate an academic source', desc: 'Describe how you determine if a source is credible and reliable' },
+    { id: 6, title: 'Discuss critical thinking in academia', desc: 'Explain why critical thinking is important in academic work' },
+    { id: 7, title: 'Describe a challenging academic problem', desc: 'Explain a difficult problem you faced and how you solved it' },
+    { id: 8, title: 'Summarize a recent article you read', desc: 'Briefly explain the main argument and findings of an academic article' },
+  ];
+
   const scenarioTopics = {
     'office_hours': [
       { id: 1, title: 'Assignment Questions', desc: 'Ask your professor about assignment requirements, format, and expectations' },
@@ -53,17 +64,6 @@ export default function StructuredSpeaking() {
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
   const streamRef = useRef(null);
-
-  const recommendedTopics = [
-    { id: 1, title: 'Describe your research interests', desc: 'Explain what academic topics interest you and why they are important' },
-    { id: 2, title: 'Explain a concept from your field', desc: 'Choose a key concept and explain it in simple terms' },
-    { id: 3, title: 'Discuss online vs in-person learning', desc: 'Compare the advantages and disadvantages of each learning mode' },
-    { id: 4, title: 'Describe how you approach group projects', desc: 'Explain your strategy for collaborating with classmates' },
-    { id: 5, title: 'Evaluate an academic source', desc: 'Describe how you determine if a source is credible and reliable' },
-    { id: 6, title: 'Discuss critical thinking in academia', desc: 'Explain why critical thinking is important in academic work' },
-    { id: 7, title: 'Describe a challenging academic problem', desc: 'Explain a difficult problem you faced and how you solved it' },
-    { id: 8, title: 'Summarize a recent article you read', desc: 'Briefly explain the main argument and findings of an academic article' },
-  ];
 
   // WebSocket connection
   useEffect(() => {

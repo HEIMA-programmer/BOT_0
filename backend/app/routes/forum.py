@@ -10,10 +10,12 @@ from app import db
 from app.models.forum_comment import ForumComment
 from app.models.forum_forward import ForumForward
 from app.models.forum_post import ForumPost
+from app.models.friendship import Friendship
 
 forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
 
-VALID_TAGS = ('skills', 'experience', 'academic_culture', 'public', 'note')
+SUGGESTED_TAGS = ('skills', 'experience', 'academic_culture', 'public', 'note')
+VALID_ZONES = ('public', 'friend')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'mp4', 'webm', 'mov'}
 REJECTION_REASONS = (
     'The post contains inaccurate or misleading information',
@@ -88,20 +90,44 @@ def _post_query_for_current_user():
     return ForumPost.query.filter_by(status=ForumPost.STATUS_APPROVED)
 
 
+def _get_friend_ids(user_id):
+    """Return a set of friend user IDs for the given user."""
+    rows = Friendship.query.filter_by(user_id=user_id).all()
+    return {r.friend_id for r in rows}
+
+
 # ── Posts ────────────────────────────────────────────────────────────
 
 @forum_bp.route('/posts', methods=['GET'])
 @login_required
 def get_posts():
-    """Get forum posts visible to the current user."""
+    """Get forum posts visible to the current user, with optional forward inclusion."""
     tag = request.args.get('tag')
     user_id = request.args.get('user_id', type=int)
     status = request.args.get('status')
+    zone = request.args.get('zone', 'public')
+    include_forwards = request.args.get('include_forwards', 'false').lower() == 'true'
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
 
-    query = _post_query_for_current_user()
-    if tag and tag in VALID_TAGS:
+    # Admins only see public zone
+    if _is_admin():
+        zone = 'public'
+
+    # Friend zone: show friends' posts AND the user's own friend-zone posts
+    if zone == 'friend' and not _is_admin():
+        friend_ids = _get_friend_ids(current_user.id)
+        visible_user_ids = friend_ids | {current_user.id}
+        query = ForumPost.query.filter(
+            ForumPost.status == ForumPost.STATUS_APPROVED,
+            ForumPost.zone == 'friend',
+            ForumPost.user_id.in_(visible_user_ids),
+        )
+    else:
+        query = _post_query_for_current_user()
+        query = query.filter(ForumPost.zone == 'public')
+
+    if tag:
         query = query.filter_by(tag=tag)
     if user_id:
         query = query.filter_by(user_id=user_id)
@@ -111,11 +137,50 @@ def get_posts():
     query = query.order_by(ForumPost.is_pinned.desc(), ForumPost.created_at.desc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
+    items = [_serialise_post(p) for p in pagination.items]
+    # Tag each post item with type
+    for item in items:
+        item['type'] = 'post'
+
+    total = pagination.total
+
+    # Include forwards in the feed
+    if include_forwards:
+        if zone == 'friend' and not _is_admin():
+            friend_ids = _get_friend_ids(current_user.id)
+            forward_query = ForumForward.query.join(
+                ForumPost, ForumForward.original_post_id == ForumPost.id
+            ).filter(
+                ForumPost.status == ForumPost.STATUS_APPROVED,
+                ForumForward.user_id.in_(friend_ids),
+            )
+        else:
+            forward_query = ForumForward.query.join(
+                ForumPost, ForumForward.original_post_id == ForumPost.id
+            ).filter(ForumPost.status == ForumPost.STATUS_APPROVED)
+
+        forwards = forward_query.order_by(ForumForward.created_at.desc()).all()
+        for fw in forwards:
+            data = fw.to_dict()
+            data['type'] = 'forward'
+            items.append(data)
+
+        # Sort combined list by created_at descending, pinned posts first
+        items.sort(key=lambda x: (
+            x.get('is_pinned', False),
+            x.get('created_at', ''),
+        ), reverse=True)
+
+        total = len(items)
+        start = (page - 1) * per_page
+        end = start + per_page
+        items = items[start:end]
+
     return jsonify({
-        'posts': [_serialise_post(p) for p in pagination.items],
-        'total': pagination.total,
-        'page': pagination.page,
-        'pages': pagination.pages,
+        'posts': items,
+        'total': total,
+        'page': page if not include_forwards else page,
+        'pages': pagination.pages if not include_forwards else ((total + per_page - 1) // per_page),
     }), 200
 
 
@@ -138,15 +203,26 @@ def create_post():
         title = request.form.get('title', '').strip()
         content = request.form.get('content', '').strip()
         video_url = request.form.get('video_url', '').strip() or None
+        zone = request.form.get('zone', 'public').strip()
     else:
         data = request.get_json() or {}
         tag = data.get('tag')
         title = data.get('title', '').strip()
         content = data.get('content', '').strip()
         video_url = data.get('video_url', '').strip() or None
+        zone = data.get('zone', 'public').strip()
 
-    if not tag or tag not in VALID_TAGS:
-        return jsonify({'error': f'tag must be one of: {", ".join(VALID_TAGS)}'}), 400
+    if zone not in VALID_ZONES:
+        zone = 'public'
+    # Admins always post to public zone
+    if _is_admin():
+        zone = 'public'
+
+    # Auto-set tag based on zone if not provided
+    if not tag:
+        tag = zone  # 'public' or 'friend'
+    if len(tag) > 30:
+        return jsonify({'error': 'tag must be 30 characters or less'}), 400
     if not title:
         return jsonify({'error': 'title is required'}), 400
     if not content:
@@ -165,6 +241,7 @@ def create_post():
 
     post = ForumPost(
         user_id=current_user.id,
+        zone=zone,
         tag=tag,
         title=title,
         content=content,
@@ -204,8 +281,10 @@ def update_post(post_id):
     video_url = data.get('video_url', post.video_url or '')
     video_url = video_url.strip() or None
 
-    if tag not in VALID_TAGS:
-        return jsonify({'error': f'tag must be one of: {", ".join(VALID_TAGS)}'}), 400
+    if not tag:
+        tag = post.zone or 'public'
+    if len(tag) > 30:
+        return jsonify({'error': 'tag must be 30 characters or less'}), 400
     if not title:
         return jsonify({'error': 'title is required'}), 400
     if not content:
