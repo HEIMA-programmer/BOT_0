@@ -333,6 +333,9 @@ def create_post():
             file_url = f'/api/forum/uploads/{unique_name}'
             file_name = original_name
 
+    # Game record posts are auto-approved (objective data, no moderation needed)
+    auto_approve = _is_admin() or tag == 'game'
+
     post = ForumPost(
         user_id=current_user.id,
         zone=zone,
@@ -342,9 +345,9 @@ def create_post():
         file_url=file_url,
         file_name=file_name,
         video_url=video_url,
-        status=ForumPost.STATUS_APPROVED if _is_admin() else ForumPost.STATUS_PENDING,
-        reviewed_by=current_user.id if _is_admin() else None,
-        reviewed_at=datetime.now(timezone.utc) if _is_admin() else None,
+        status=ForumPost.STATUS_APPROVED if auto_approve else ForumPost.STATUS_PENDING,
+        reviewed_by=current_user.id if auto_approve else None,
+        reviewed_at=datetime.now(timezone.utc) if auto_approve else None,
     )
     _touch_post(post)
     db.session.add(post)
@@ -352,7 +355,7 @@ def create_post():
 
     return jsonify({
         'post': _serialise_post(post),
-        'message': 'Post published' if _is_admin() else 'Post submitted for review',
+        'message': 'Post published' if auto_approve else 'Post submitted for review',
     }), 201
 
 
