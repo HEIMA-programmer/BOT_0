@@ -1,5 +1,6 @@
 import os
-from flask import Flask
+from pathlib import Path
+from flask import Flask, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_cors import CORS
@@ -63,6 +64,18 @@ def create_app(config_name=None):
     app.register_blueprint(chat_history_bp)
     app.register_blueprint(room_bp)
     app.register_blueprint(friends_bp)
+
+    # Serve frontend production build when dist/ exists
+    _dist_dir = Path(__file__).resolve().parent.parent.parent / 'frontend' / 'dist'
+    if _dist_dir.is_dir():
+        @app.route('/', defaults={'path': ''})
+        @app.route('/<path:path>')
+        def serve_frontend(path):
+            # If the requested file exists in dist/, serve it
+            if path and (_dist_dir / path).is_file():
+                return send_from_directory(_dist_dir, path)
+            # Otherwise serve index.html (SPA client-side routing)
+            return send_from_directory(_dist_dir, 'index.html')
 
     # Register SocketIO handlers
     from app.routes import speaking_ws  # noqa: F401
