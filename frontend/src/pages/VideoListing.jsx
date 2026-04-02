@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   Col,
@@ -20,119 +20,37 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
+import { roomAPI } from '../api';
+import { videoCategories } from '../data/videos';
 
 const { Title, Text, Paragraph } = Typography;
-
-const videoCategories = [
-  {
-    id: 'academic-english',
-    title: 'Academic English: ABC Education',
-    icon: <BookOutlined />,
-    color: '#2563eb',
-    bg: '#eff6ff',
-    description: 'Lectures and presentations from university courses, covering various academic subjects.',
-    videos: [
-      { 
-        id: 1, 
-        title: 'New Learn English series: Academic English', 
-        duration: '00:30', 
-        thumbnail: 'https://i.ytimg.com/vi/nUNc3SrCBSg/maxresdefault.jpg', 
-        url: 'https://www.youtube.com/watch?v=nUNc3SrCBSg' 
-      },
-      { 
-        id: 2, 
-        title: 'Academic English: Learning Academic Vocabulary', 
-        duration: '10:04', 
-        thumbnail: 'https://i.ytimg.com/vi/bMEMqjrupHk/maxresdefault.jpg', 
-        url: 'https://youtu.be/bMEMqjrupHk?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-      { 
-        id: 3, 
-        title: 'Academic English: Vocabulary For Describing Data', 
-        duration: '10:54', 
-        thumbnail: 'https://i.ytimg.com/vi/xl-nuzBnRLU/maxresdefault.jpg', 
-        url: 'https://youtu.be/xl-nuzBnRLU?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-      { 
-        id: 4, 
-        title: 'Academic English: Linking Words', 
-        duration: '7:31', 
-        thumbnail: 'https://i.ytimg.com/vi/qJ9kCO8-Vss/maxresdefault.jpg', 
-        url: 'https://youtu.be/qJ9kCO8-Vss?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-      { 
-        id: 5, 
-        title: 'Academic English: Using Verbs To Express Opinions', 
-        duration: '6:41', 
-        thumbnail: 'https://i.ytimg.com/vi/KU9sIgK3-Nc/maxresdefault.jpg', 
-        url: 'https://youtu.be/KU9sIgK3-Nc?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-      { 
-        id: 6, 
-        title: 'Academic English: Making Comparisons', 
-        duration: '9:17', 
-        thumbnail: 'https://i.ytimg.com/vi/8M7R2_U3OsI/maxresdefault.jpg', 
-        url: 'https://youtu.be/8M7R2_U3OsI?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-      { 
-        id: 7, 
-        title: 'Academic English: Paragraphing for Essays', 
-        duration: '11:52', 
-        thumbnail: 'https://i.ytimg.com/vi/dUglbHyPDz0/maxresdefault.jpg', 
-        url: 'https://youtu.be/dUglbHyPDz0?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-      { 
-        id: 8, 
-        title: 'Academic English: Passive Voice', 
-        duration: '9:55', 
-        thumbnail: 'https://i.ytimg.com/vi/oLo8I3Hn_1M/maxresdefault.jpg', 
-        url: 'https://youtu.be/oLo8I3Hn_1M?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6'  
-      },
-      { 
-        id: 9, 
-        title: 'Academic English: Introduction and Conclusion in Essays', 
-        duration: '8:19', 
-        thumbnail: 'https://i.ytimg.com/vi/hU_lfd4gxjA/maxresdefault.jpg', 
-        url: 'https://youtu.be/hU_lfd4gxjA?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6'
-      },
-      { 
-        id: 10, 
-        title: 'Academic English: Listening For Meaning', 
-        duration: '9:02', 
-        thumbnail: 'https://i.ytimg.com/vi/QUFthHGrRHo/maxresdefault.jpg?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6', 
-        url: 'https://youtu.be/QUFthHGrRHo?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6'
-      },
-      { 
-        id: 11, 
-        title: 'Academic English: Listening For Note Taking', 
-        duration: '9:08', 
-        thumbnail: 'https://i.ytimg.com/vi/Bhx4mi649YQ/maxresdefault.jpg', 
-        url: 'https://youtu.be/Bhx4mi649YQ?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-      { 
-        id: 12, 
-        title: 'Academic English: Reading Strategies For Academic Texts', 
-        duration: '7:22', 
-        thumbnail: 'https://i.ytimg.com/vi/myuu96ah0mk/maxresdefault.jpg', 
-        url: 'https://youtu.be/myuu96ah0mk?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-      { 
-        id: 13, 
-        title: 'Academic English: Answering True Or False Questions', 
-        duration: '7:49', 
-        thumbnail: 'https://i.ytimg.com/vi/RYt9fGawn5w/maxresdefault.jpg', 
-        url: 'https://youtu.be/RYt9fGawn5w?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6' 
-      },
-    ],
-  },
-];
 
 export default function VideoListing() {
   useLearningTimeTracker('listening', 'study_time:listening');
   const navigate = useNavigate();
+  const [creatingRoom, setCreatingRoom] = useState(false);
 
   const handleVideoClick = (categoryId, videoId) => {
     navigate(`/listening/video/${categoryId}/${videoId}`);
+  };
+
+  const handleCreateWatchRoom = async () => {
+    setCreatingRoom(true);
+    try {
+      const res = await roomAPI.create({
+        name: 'Watch Together',
+        room_type: 'watch',
+        max_players: 4,
+        visibility: 'public',
+      });
+      navigate(`/room/${res.data.room.id}/watch`, {
+        state: { room: res.data.room, members: res.data.members },
+      });
+    } catch {
+      // silently fail — user will see no navigation
+    } finally {
+      setCreatingRoom(false);
+    }
   };
 
   return (
@@ -150,11 +68,20 @@ export default function VideoListing() {
           <VideoCameraOutlined style={{ marginRight: 6, color: '#7c3aed' }} />
           Video Collection
         </Title>
-        <Text type="secondary">
-          Explore our curated video collection featuring Academic English lectures,
-          seminar discussions, and study tips. Take notes while watching and share
-          your insights in the forum.
-        </Text>
+        <Space style={{ marginTop: 8 }}>
+          <Text type="secondary">
+            Explore our curated video collection featuring Academic English lectures,
+            seminar discussions, and study tips. Take notes while watching and share
+            your insights in the forum.
+          </Text>
+          <Button
+            icon={<TeamOutlined />}
+            loading={creatingRoom}
+            onClick={handleCreateWatchRoom}
+          >
+            Watch Together
+          </Button>
+        </Space>
       </div>
 
       <Space orientation="vertical" size={24} style={{ width: '100%' }}>

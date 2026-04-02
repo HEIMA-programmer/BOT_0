@@ -16,6 +16,7 @@ import {
   App as AntdApp,
   Switch,
   Spin,
+  Radio,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -28,10 +29,12 @@ import {
   ClockCircleOutlined,
   SendOutlined,
   FileTextOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
-import { forumAPI } from '../api';
+import { forumAPI, roomAPI } from '../api';
+import { videoData } from '../data/videos';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -45,115 +48,6 @@ const TAG_CONFIG = {
   public: { label: 'Public', color: 'orange' },
 };
 const TAGS = Object.keys(TAG_CONFIG);
-
-const videoData = {
-  'academic-english': {
-    1: {
-      title: 'New Learn English series: Academic English',
-      duration: '00:30',
-      category: 'Academic English: ABC Education',
-      description: 'New Learn English series: Academic English',
-      url: 'https://www.youtube.com/watch?v=nUNc3SrCBSg',
-      thumbnail: 'https://i.ytimg.com/vi/nUNc3SrCBSg/maxresdefault.jpg',
-    },
-    2: {
-      title: 'Academic English: Learning Academic Vocabulary',
-      duration: '10:04',
-      category: 'Academic English: ABC Education',
-      description: 'Learn academic vocabulary with this video series.',
-      url: 'https://youtu.be/bMEMqjrupHk?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/bMEMqjrupHk/maxresdefault.jpg',
-    },
-    3: {
-      title: 'Academic English: Vocabulary For Describing Data',
-      duration: '10:54',
-      category: 'Academic English: ABC Education',
-      description: 'Learn academic vocabulary for describing data and charts with this video series.',
-      url: 'https://youtu.be/xl-nuzBnRLU?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/xl-nuzBnRLU/maxresdefault.jpg',
-    },
-    4: {
-      title: 'Academic English: Linking Words',
-      duration: '7:31',
-      category: 'Academic English: ABC Education',
-      description: 'Learn linking words with this video series.',
-      url: 'https://youtu.be/qJ9kCO8-Vss?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/qJ9kCO8-Vss/maxresdefault.jpg',
-    },
-    5: {
-      title: 'Academic English: Using Verbs To Express Opinions',
-      duration: '6:41',
-      category: 'Academic English: ABC Education',
-      description: 'Learn using verbs to express opinions with this video series.',
-      url: 'https://youtu.be/KU9sIgK3-Nc?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/KU9sIgK3-Nc/maxresdefault.jpg',
-    },
-    6: {
-      title: 'Academic English: Making Comparisons',
-      duration: '9:17',
-      category: 'Academic English: ABC Education',
-      description: 'Learn making comparisons with this video series.',
-      url: 'https://youtu.be/8M7R2_U3OsI?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/8M7R2_U3OsI/maxresdefault.jpg',
-    },
-    7: {
-      title: 'Academic English: Paragraphing for Essays',
-      duration: '11:52',
-      category: 'Academic English: ABC Education',
-      description: 'Learn paragraphing for essays with this video series.',
-      url: 'https://youtu.be/dUglbHyPDz0?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/dUglbHyPDz0/maxresdefault.jpg',
-    },
-    8: {
-      title: 'Academic English: Passive Voice',
-      duration: '9:55',
-      category: 'Academic English: ABC Education',
-      description: 'Learn passive voice with this video series.',
-      url: 'https://youtu.be/oLo8I3Hn_1M?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/oLo8I3Hn_1M/maxresdefault.jpg',
-    },
-    9: {
-      title: 'Academic English: Introduction and Conclusion in Essays',
-      duration: '8:19',
-      category: 'Academic English: ABC Education',
-      description: 'Learn introduction and conclusion in essays with this video series.',
-      url: 'https://youtu.be/hU_lfd4gxjA?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/hU_lfd4gxjA/maxresdefault.jpg',
-    },
-    10: {
-      title: 'Academic English: Listening For Meaning',
-      duration: '9:02',
-      category: 'Academic English: ABC Education',
-      description: 'Learn listening for meaning with this video series.',
-      url: 'https://youtu.be/QUFthHGrRHo?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/QUFthHGrRHo/maxresdefault.jpg',
-    },
-    11: {
-      title: 'Academic English: Listening For Note Taking',
-      duration: '9:08',
-      category: 'Academic English: ABC Education',
-      description: 'Learn listening for note taking with this video series.',
-      url: 'https://youtu.be/Bhx4mi649YQ?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/Bhx4mi649YQ/maxresdefault.jpg',
-    },
-    12: {
-      title: 'Academic English: Reading Strategies For Academic Texts',
-      duration: '7:22',
-      category: 'Academic English: ABC Education',
-      description: 'Learn reading strategies for academic texts with this video series.',
-      url: 'https://youtu.be/myuu96ah0mk?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/myuu96ah0mk/maxresdefault.jpg',
-    },
-    13: {
-      title: 'Academic English: Answering True Or False Questions',
-      duration: '7:49',
-      category: 'Academic English: ABC Education',
-      description: 'Learn answering true or false questions with this video series.',
-      url: 'https://youtu.be/RYt9fGawn5w?list=PL0wWwf_rAjWZqXY8NR0nnY5S3sz-6yAb6',
-      thumbnail: 'https://i.ytimg.com/vi/RYt9fGawn5w/maxresdefault.jpg',
-    },
-  },
-};
 
 function YouTubePlayer({ url, iframeRef }) {
   const [loading, setLoading] = useState(true);
@@ -224,6 +118,7 @@ export default function VideoPlayer() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [newNoteId, setNewNoteId] = useState(3);
   const [sharing, setSharing] = useState(false);
+  const [creatingRoom, setCreatingRoom] = useState(false);
 
   // 格式化时间为 MM:SS 格式
   const formatTime = (seconds) => {
@@ -234,44 +129,50 @@ export default function VideoPlayer() {
 
   // 加载YouTube iframe API
   useEffect(() => {
-    if (video?.url && video.url.includes('youtube.com')) {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    if (!video?.url) return;
 
-      window.onYouTubeIframeAPIReady = () => {
-        if (iframeRef.current) {
-          playerRef.current = new window.YT.Player(iframeRef.current, {
-            events: {
-              'onReady': (event) => {
-                // 开始每秒更新时间
-                intervalRef.current = setInterval(() => {
-                  if (playerRef.current) {
-                    const currentTime = playerRef.current.getCurrentTime();
-                    setCurrentVideoTime(formatTime(currentTime));
-                  }
-                }, 1000);
-              },
-              'onStateChange': (event) => {
-                // 状态变化时也更新时间
-                if (playerRef.current) {
-                  const currentTime = playerRef.current.getCurrentTime();
-                  setCurrentVideoTime(formatTime(currentTime));
-                }
+    const initPlayer = () => {
+      if (!iframeRef.current || playerRef.current) return;
+      playerRef.current = new window.YT.Player(iframeRef.current, {
+        events: {
+          onReady: () => {
+            intervalRef.current = setInterval(() => {
+              if (playerRef.current?.getCurrentTime) {
+                setCurrentVideoTime(formatTime(playerRef.current.getCurrentTime()));
               }
+            }, 1000);
+          },
+          onStateChange: () => {
+            if (playerRef.current?.getCurrentTime) {
+              setCurrentVideoTime(formatTime(playerRef.current.getCurrentTime()));
             }
-          });
-        }
+          },
+        },
+      });
+    };
+
+    if (window.YT?.Player) {
+      // API already loaded (e.g. navigated back) — create player directly
+      initPlayer();
+    } else {
+      // First load — inject script and wait for callback
+      if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(tag);
+      }
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        prev?.();
+        initPlayer();
       };
     }
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current);
       if (playerRef.current) {
         playerRef.current.destroy();
+        playerRef.current = null;
       }
     };
   }, [video?.url]);
@@ -299,6 +200,7 @@ export default function VideoPlayer() {
     setSharing(true);
     try {
       const formData = new FormData();
+      formData.append('zone', values.zone || 'public');
       formData.append('tag', values.tag);
       formData.append('title', values.title);
       formData.append('content', values.content);
@@ -330,6 +232,7 @@ export default function VideoPlayer() {
     const videoRef = JSON.stringify({ categoryId, videoId });
     const notesContent = notes.map(note => `[${note.time}] ${note.text}`).join('\n\n');
     form.setFieldsValue({
+      zone: 'public',
       title: `Notes from ${video?.title}`,
       content: `${notesContent}\n\n---\n\n[Video Reference](${videoRef})`,
       tag: 'note',
@@ -395,13 +298,43 @@ export default function VideoPlayer() {
             </Space>
           </Space>
         )}
-        <Text type="secondary">
-          {video.description}
-        </Text>
+        <Space style={{ marginTop: 8 }}>
+          <Text type="secondary">
+            {video.description}
+          </Text>
+          <Button
+            icon={<TeamOutlined />}
+            loading={creatingRoom}
+            onClick={async () => {
+              setCreatingRoom(true);
+              try {
+                const res = await roomAPI.create({
+                  name: `Watch: ${video.title.slice(0, 14)}`,
+                  room_type: 'watch',
+                  max_players: 4,
+                  visibility: 'public',
+                });
+                navigate(`/room/${res.data.room.id}/watch`, {
+                  state: {
+                    room: res.data.room,
+                    members: res.data.members,
+                    autoSelectVideo: { categoryId, videoId: Number(videoId), url: video.url, title: video.title },
+                  },
+                });
+              } catch {
+                messageApi.error('Failed to create room');
+              } finally {
+                setCreatingRoom(false);
+              }
+            }}
+          >
+            Watch Together
+          </Button>
+        </Space>
       </div>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} xl={14}>
+        <Col xs={24} xl={16}>
           <Card
             style={{ borderRadius: 16, border: '1px solid #e5e7eb' }}
             styles={{ body: { padding: 0, overflow: 'hidden' } }}
@@ -448,7 +381,7 @@ export default function VideoPlayer() {
           </Card>
         </Col>
 
-        <Col xs={24} xl={10}>
+        <Col xs={24} xl={8}>
           <Card
             style={{ borderRadius: 16, border: '1px solid #e5e7eb', height: '100%' }}
             styles={{ body: { padding: 20 } }}
@@ -595,6 +528,12 @@ export default function VideoPlayer() {
         destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={handleShareToForum}>
+          <Form.Item name="zone" label="Share to">
+            <Radio.Group>
+              <Radio.Button value="public">Public Zone</Radio.Button>
+              <Radio.Button value="friend">Friend Zone</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
           <Form.Item
             name="tag"
             label="Tag"

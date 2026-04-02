@@ -47,7 +47,9 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
+import ReactMarkdown from 'react-markdown';
 import { forumAPI, friendsAPI } from '../api';
+import { getVideoInfo } from './VideoPlayer';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -1050,9 +1052,34 @@ export default function Forum({ user }) {
               </Space>
             </div>
 
-            <Paragraph style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.7 }}>
-              {detailPost.content}
-            </Paragraph>
+            <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+              <ReactMarkdown>
+                {detailPost.content.replace(/\[Video Reference\]\([^)]*\)/g, '')}
+              </ReactMarkdown>
+            </div>
+
+            {/* Inline video preview for posts with video reference */}
+            {(() => {
+              const ref = parseVideoReference(detailPost.content);
+              if (!ref) return null;
+              const v = getVideoInfo(ref.categoryId, ref.videoId);
+              const ytMatch = v?.url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+              if (!ytMatch) return null;
+              return (
+                <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
+                    <iframe
+                      src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+                      title="Video Preview"
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {renderAttachment(detailPost)}
             {detailPost.video_url && (
