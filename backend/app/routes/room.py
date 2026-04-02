@@ -1,7 +1,12 @@
+import csv
+import random
+import re
 import secrets
 import string
 import time
 from datetime import datetime, timezone
+from functools import lru_cache
+from pathlib import Path
 
 from flask import Blueprint, jsonify, request, current_app
 from flask_login import current_user, login_required
@@ -19,6 +24,23 @@ VALID_TYPES = ('game', 'speaking', 'watch')
 VALID_VISIBILITY = ('public', 'private')
 
 _INVITE_ALPHABET = string.ascii_uppercase + string.digits
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+AWL_CSV_PATH = PROJECT_ROOT / 'frontend' / 'public' / 'AWL' / 'AWL.csv'
+AWL_SENTENCE_PATH = PROJECT_ROOT / 'frontend' / 'public' / 'AWL' / 'AWL_example_sentences.txt'
+CONTEXT_GUESSER_TOTAL_ROUNDS = 10
+CONTEXT_GUESSER_BLANK_STAGES = (1, 1, 2, 2, 2, 3, 3, 4, 4, 4)
+CONTEXT_TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z'-]*")
+CONTEXT_STOPWORDS = {
+    'about', 'after', 'again', 'along', 'also', 'because', 'before', 'being',
+    'between', 'class', 'clear', 'could', 'course', 'daily', 'direct', 'during',
+    'each', 'every', 'final', 'first', 'focuses', 'from', 'helped', 'improve',
+    'introduced', 'isolation', 'learn', 'learners', 'local', 'long', 'makes',
+    'meaning', 'more', 'rather', 'results', 'revealed', 'routine', 'should',
+    'short', 'simple', 'something', 'stronger', 'study', 'students', 'supported',
+    'survey', 'teacher', 'than', 'their', 'there', 'these', 'those', 'through',
+    'trends', 'understand', 'website', 'which', 'while', 'with', 'without',
+    'writing', 'rather',
+}
 
 
 def _generate_invite_code():
@@ -320,33 +342,191 @@ CONTEXT_TEMPLATES = [
 ]
 
 
-def generate_game_questions(game_type, count=5):
-    """Generate game questions from the AWL word database."""
-    import random
-    words = Word.query.order_by(db.func.random()).limit(count).all()
+@lru_cache(maxsize=1)
+def _load_awl_context_bank():
+    """Load AWL words and example sentences from the frontend public assets."""
+    if not AWL_CSV_PATH.is_file() or not AWL_SENTENCE_PATH.is_file():
+        return ()
 
+    with AWL_CSV_PATH.open('r', encoding='utf-8-sig', newline='') as csv_file:
+        csv_rows = [row for row in csv.reader(csv_file) if row]
+
+    with AWL_SENTENCE_PATH.open('r', encoding='utf-8-sig') as sentence_file:
+        sentence_rows = [line.strip() for line in sentence_file.read().splitlines()]
+
+    entries = []
+    for index, row in enumerate(csv_rows):
+        word = (row[0] or '').strip() if row else ''
+        definition = (row[1] or '').strip() if len(row) > 1 else ''
+        sentence = sentence_rows[index].strip() if index < len(sentence_rows) else ''
+
+        if word and sentence:
+            entries.append({
+                'word': word,
+                'definition': definition,
+                'sentence': sentence,
+            })
+
+    return tuple(entries)
+
+
+def _build_context_blank_progress(count):
+    if count <= len(CONTEXT_GUESSER_BLANK_STAGES):
+        return list(CONTEXT_GUESSER_BLANK_STAGES[:count])
+    return list(CONTEXT_GUESSER_BLANK_STAGES) + [CONTEXT_GUESSER_BLANK_STAGES[-1]] * (
+        count - len(CONTEXT_GUESSER_BLANK_STAGES)
+    )
+
+
+def _is_context_candidate(token_text):
+    normalized = (token_text or '').strip().lower()
+    return len(normalized) >= 4 and normalized not in CONTEXT_STOPWORDS
+
+
+def _mask_context_sentence(sentence, primary_word, blank_count):
+    tokens = list(CONTEXT_TOKEN_PATTERN.finditer(sentence or ''))
+    if not tokens:
+        fallback = (primary_word or '').strip()
+        return sentence or '_____', [fallback] if fallback else []
+
+    desired_blank_count = max(1, min(blank_count, len(tokens)))
+    selected_indexes = []
+    normalized_primary = (primary_word or '').strip().lower()
+
+    if normalized_primary:
+        for idx, match in enumerate(tokens):
+            if match.group(0).lower() == normalized_primary:
+                selected_indexes.append(idx)
+                break
+
+    if not selected_indexes:
+        for idx, match in enumerate(tokens):
+            if _is_context_candidate(match.group(0)):
+                selected_indexes.append(idx)
+                break
+
+    if not selected_indexes:
+        selected_indexes.append(0)
+
+    for idx, match in enumerate(tokens):
+        if len(selected_indexes) >= desired_blank_count:
+            break
+        if idx in selected_indexes:
+            continue
+        if _is_context_candidate(match.group(0)):
+            selected_indexes.append(idx)
+
+    for idx in range(len(tokens)):
+        if len(selected_indexes) >= desired_blank_count:
+            break
+        if idx not in selected_indexes:
+            selected_indexes.append(idx)
+
+    selected_indexes = sorted(selected_indexes[:desired_blank_count])
+    answers = []
+    parts = []
+    cursor = 0
+
+    for idx in selected_indexes:
+        match = tokens[idx]
+        start, end = match.span()
+        parts.append(sentence[cursor:start])
+        parts.append('_____')
+        answers.append(match.group(0))
+        cursor = end
+
+    parts.append(sentence[cursor:])
+    return ''.join(parts), answers
+
+
+def _generate_word_duel_questions(count):
+    words = Word.query.order_by(db.func.random()).limit(count).all()
+    return [
+        {
+            'id': index + 1,
+            'question': word.definition or f'Definition for: {word.text}',
+            'answer': word.text,
+        }
+        for index, word in enumerate(words)
+    ]
+
+
+def _generate_awl_context_questions(count):
+    context_bank = list(_load_awl_context_bank())
+    if not context_bank:
+        return []
+
+    selected_entries = random.sample(context_bank, min(count, len(context_bank)))
+    blank_schedule = _build_context_blank_progress(len(selected_entries))
+    questions = []
+
+    for index, entry in enumerate(selected_entries):
+        masked_sentence, answers = _mask_context_sentence(
+            entry['sentence'],
+            entry['word'],
+            blank_schedule[index],
+        )
+        if not answers:
+            continue
+
+        questions.append({
+            'id': index + 1,
+            'sentence': masked_sentence,
+            'spoken_text': entry['sentence'],
+            'answers': answers,
+            'answer': answers[0],
+            'blank_count': len(answers),
+            'blank_lengths': [max(5, len(answer)) for answer in answers],
+            'explanation': entry['definition'] or f"{entry['word']} - an academic vocabulary word.",
+        })
+
+    return questions
+
+
+def _generate_fallback_context_questions(count):
+    words = Word.query.order_by(db.func.random()).limit(count).all()
     if not words:
         return []
 
+    blank_schedule = _build_context_blank_progress(len(words))
     questions = []
-    for i, word in enumerate(words):
-        if game_type == 'word_duel':
-            questions.append({
-                'id': i + 1,
-                'question': word.definition or f'Definition for: {word.text}',
-                'answer': word.text,
-            })
-        else:  # context_guesser
-            template = CONTEXT_TEMPLATES[i % len(CONTEXT_TEMPLATES)]
-            sentence = template.replace('_____', '_____')
-            questions.append({
-                'id': i + 1,
-                'sentence': sentence,
-                'answer': word.text,
-                'explanation': word.definition or f'{word.text} - an academic vocabulary word.',
-            })
+
+    for index, word in enumerate(words):
+        full_sentence = CONTEXT_TEMPLATES[index % len(CONTEXT_TEMPLATES)].replace('_____', word.text)
+        masked_sentence, answers = _mask_context_sentence(
+            full_sentence,
+            word.text,
+            blank_schedule[index],
+        )
+        if not answers:
+            answers = [word.text]
+
+        questions.append({
+            'id': index + 1,
+            'sentence': masked_sentence,
+            'spoken_text': full_sentence,
+            'answers': answers,
+            'answer': answers[0],
+            'blank_count': len(answers),
+            'blank_lengths': [max(5, len(answer)) for answer in answers],
+            'explanation': word.definition or f'{word.text} - an academic vocabulary word.',
+        })
 
     return questions
+
+
+def generate_game_questions(game_type, count=5):
+    """Generate game questions for room games."""
+    if game_type == 'word_duel':
+        return _generate_word_duel_questions(count)
+
+    if game_type == 'context_guesser':
+        questions = _generate_awl_context_questions(count)
+        if questions:
+            return questions
+        return _generate_fallback_context_questions(count)
+
+    return []
 
 
 @room_bp.route('/game-questions', methods=['GET'])
