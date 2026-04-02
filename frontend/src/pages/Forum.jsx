@@ -65,6 +65,11 @@ const TAG_CONFIG = {
   friend: { label: 'Friend', color: 'cyan', desc: 'Friend zone posts' },
 };
 const getTagConfig = (tag) => TAG_CONFIG[tag] || { label: tag, color: 'default' };
+const ZONE_CONFIG = {
+  public: { label: 'Public Zone', color: 'orange' },
+  friend: { label: 'Friend Zone', color: 'cyan' },
+};
+const getZoneConfig = (zone) => ZONE_CONFIG[zone] || { label: zone || 'Unknown Zone', color: 'default' };
 const STATUS_CONFIG = {
   approved: { label: 'Approved', color: 'green' },
   pending: { label: 'Pending Review', color: 'gold' },
@@ -73,6 +78,7 @@ const STATUS_CONFIG = {
 // Tags available for user selection (public/friend are auto-set by zone, not user-selectable)
 const USER_SELECTABLE_TAGS = ['skills', 'experience', 'academic_culture'];
 const POSTS_PAGE_SIZE = 10;
+const ADMIN_POSTS_PAGE_SIZE = 20;
 const REVIEW_PAGE_SIZE = 8;
 const MY_POSTS_PAGE_SIZE = 10;
 
@@ -206,11 +212,13 @@ function AdminQueueCard({ post, onOpen, onReview }) {
 
 export default function Forum({ user }) {
   const isAdmin = Boolean(user?.is_admin);
+  const postsPageSize = isAdmin ? ADMIN_POSTS_PAGE_SIZE : POSTS_PAGE_SIZE;
   const { message } = AntdApp.useApp();
   const navigate = useNavigate();
 
   const [activeZone, setActiveZone] = useState('public');
-  const [activeTab, setActiveTab] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -238,6 +246,7 @@ export default function Forum({ user }) {
   const [forwardOpen, setForwardOpen] = useState(false);
   const [forwardPostId, setForwardPostId] = useState(null);
   const [forwardComment, setForwardComment] = useState('');
+  const [forwardZone, setForwardZone] = useState('public');
   const [forwarding, setForwarding] = useState(false);
 
   const [myPostsOpen, setMyPostsOpen] = useState(false);
@@ -265,8 +274,9 @@ export default function Forum({ user }) {
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, per_page: POSTS_PAGE_SIZE, zone: activeZone, include_forwards: 'true' };
-      if (activeTab !== 'all') params.tag = activeTab;
+      const params = { page, per_page: postsPageSize, include_forwards: 'true' };
+      if (!isAdmin) params.zone = activeZone;
+      if (searchQuery) params.search = searchQuery;
       const res = await forumAPI.getPosts(params);
       setPosts(res.data.posts);
       setTotal(res.data.total);
@@ -275,7 +285,7 @@ export default function Forum({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, activeZone, message, page]);
+  }, [activeZone, isAdmin, message, page, postsPageSize, searchQuery]);
 
   const fetchPendingPosts = useCallback(async (targetPage) => {
     if (!isAdmin) return;
@@ -512,11 +522,12 @@ export default function Forum({ user }) {
     if (!forwardPostId) return;
     setForwarding(true);
     try {
-      await forumAPI.forwardPost(forwardPostId, forwardComment.trim() || undefined);
+      await forumAPI.forwardPost(forwardPostId, forwardComment.trim() || undefined, forwardZone);
       message.success('Post forwarded');
       setForwardOpen(false);
       setForwardPostId(null);
       setForwardComment('');
+      setForwardZone('public');
       fetchPosts();
       fetchMyPosts(1);
     } catch (err) {
@@ -607,13 +618,16 @@ export default function Forum({ user }) {
     }
   };
 
-  const tabItems = [
-    { key: 'all', label: 'All Posts' },
-    ...USER_SELECTABLE_TAGS.map((tag) => ({
-      key: tag,
-      label: <Tag color={getTagConfig(tag).color}>{getTagConfig(tag).label}</Tag>,
-    })),
-  ];
+  const handleSearchSubmit = (value) => {
+    const nextQuery = value.trim();
+    setSearchInput(value);
+    setPage(1);
+    setSearchQuery(nextQuery);
+  };
+
+  const paginationTotal = page > 1 && total <= (page - 1) * postsPageSize
+    ? ((page - 1) * postsPageSize) + 1
+    : total;
 
   const renderAttachment = (post) => {
     if (!post.file_url) return null;
@@ -649,6 +663,7 @@ export default function Forum({ user }) {
             <Text type="secondary">
               <Text strong>{item.username}</Text> forwarded this post
             </Text>
+            <Tag color={getZoneConfig(item.zone).color}>{getZoneConfig(item.zone).label}</Tag>
             <Text type="secondary" style={{ fontSize: 12 }}>{new Date(item.created_at).toLocaleDateString()}</Text>
           </Space>
           {item.comment && (
@@ -663,6 +678,7 @@ export default function Forum({ user }) {
                   {origPost.username?.charAt(0)?.toUpperCase() || 'U'}
                 </Avatar>
                 <Text strong style={{ fontSize: 13 }}>{origPost.username}</Text>
+                <Tag color={getZoneConfig(origPost.zone).color}>{getZoneConfig(origPost.zone).label}</Tag>
                 <Tag color={getTagConfig(origPost.tag).color}>{getTagConfig(origPost.tag).label}</Tag>
               </Space>
               <Title level={5} style={{ margin: '4px 0' }}>{origPost.title}</Title>
@@ -694,6 +710,7 @@ export default function Forum({ user }) {
               </Avatar>
               <Text strong>{post.username}</Text>
               {post.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
+              <Tag color={getZoneConfig(post.zone).color}>{getZoneConfig(post.zone).label}</Tag>
               <Tag color={getTagConfig(post.tag).color}>{getTagConfig(post.tag).label}</Tag>
               <StatusTag status={post.status} />
             </Space>
@@ -721,6 +738,7 @@ export default function Forum({ user }) {
                   onClick={() => {
                     setForwardPostId(post.id);
                     setForwardComment('');
+                    setForwardZone(activeZone === 'friend' ? 'friend' : 'public');
                     setForwardOpen(true);
                   }}
                 />
@@ -817,7 +835,7 @@ export default function Forum({ user }) {
       {!isAdmin && (
         <Segmented
           value={activeZone}
-          onChange={(val) => { setActiveZone(val); setActiveTab('all'); setPage(1); }}
+          onChange={(val) => { setActiveZone(val); setPage(1); }}
           options={[
             { label: 'Public Zone', value: 'public' },
             { label: 'Friend Zone', value: 'friend' },
@@ -826,25 +844,28 @@ export default function Forum({ user }) {
         />
       )}
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={(key) => {
-          setActiveTab(key);
-          setPage(1);
-        }}
-        items={tabItems}
+      <Input.Search
+        allowClear
+        enterButton="Search"
+        placeholder="Search by post title or tag"
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.target.value)}
+        onSearch={handleSearchSubmit}
+        style={{ marginBottom: 16, maxWidth: 520 }}
       />
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>
-      ) : posts.length === 0 ? (
-        <Empty description={isAdmin ? 'No approved posts yet.' : 'No posts yet.'} />
       ) : (
         <>
-          {posts.map(renderPostCard)}
-          {total > POSTS_PAGE_SIZE && (
+          {posts.length === 0 ? (
+            <Empty description={isAdmin ? 'No approved posts yet.' : 'No posts yet.'} />
+          ) : (
+            posts.map(renderPostCard)
+          )}
+          {(paginationTotal > postsPageSize || page > 1) && (
             <div style={{ textAlign: 'center', marginTop: 16 }}>
-              <Pagination current={page} total={total} pageSize={POSTS_PAGE_SIZE} onChange={setPage} showSizeChanger={false} />
+              <Pagination current={page} total={paginationTotal} pageSize={postsPageSize} onChange={setPage} showSizeChanger={false} />
             </div>
           )}
         </>
@@ -1005,6 +1026,7 @@ export default function Forum({ user }) {
                   {new Date(detailPost.created_at).toLocaleString()}
                 </Text>
               </div>
+              <Tag color={getZoneConfig(detailPost.zone).color}>{getZoneConfig(detailPost.zone).label}</Tag>
               <Tag color={getTagConfig(detailPost.tag).color}>{getTagConfig(detailPost.tag).label}</Tag>
               <StatusTag status={detailPost.status} />
               {detailPost.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
@@ -1167,11 +1189,23 @@ export default function Forum({ user }) {
       <Modal
         title="Forward Post"
         open={forwardOpen}
-        onCancel={() => setForwardOpen(false)}
+        onCancel={() => {
+          setForwardOpen(false);
+          setForwardZone('public');
+        }}
         onOk={handleForward}
         confirmLoading={forwarding}
         okText="Forward"
       >
+        {!isAdmin && (
+          <div style={{ marginBottom: 12 }}>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>Forward To</Text>
+            <Radio.Group value={forwardZone} onChange={(e) => setForwardZone(e.target.value)}>
+              <Radio.Button value="public">Public Zone</Radio.Button>
+              <Radio.Button value="friend">Friend Zone</Radio.Button>
+            </Radio.Group>
+          </div>
+        )}
         <TextArea
           rows={3}
           value={forwardComment}
@@ -1341,10 +1375,16 @@ export default function Forum({ user }) {
                 >
                   {item.type === 'forward' ? (
                     <div style={{ width: '100%' }}>
-                      <Tag color="cyan">Forwarded</Tag>
+                      <Space size={6} wrap>
+                        <Tag color="cyan">Forwarded</Tag>
+                        <Tag color={getZoneConfig(item.zone).color}>{getZoneConfig(item.zone).label}</Tag>
+                      </Space>
                       {item.comment && <Paragraph style={{ margin: '8px 0 6px' }}>{item.comment}</Paragraph>}
                       <Card size="small" style={{ background: '#fafafa', borderRadius: 8 }}>
-                        <Text strong>{item.original_post?.title}</Text>
+                        <Space size={6} wrap style={{ marginBottom: 4 }}>
+                          <Tag color={getZoneConfig(item.original_post?.zone).color}>{getZoneConfig(item.original_post?.zone).label}</Tag>
+                          <Text strong>{item.original_post?.title}</Text>
+                        </Space>
                         <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
                           <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
                             {(item.original_post?.content || '').replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
@@ -1355,6 +1395,7 @@ export default function Forum({ user }) {
                   ) : (
                     <div style={{ width: '100%' }}>
                       <Space size={6} wrap>
+                        <Tag color={getZoneConfig(item.zone).color}>{getZoneConfig(item.zone).label}</Tag>
                         <Tag color={getTagConfig(item.tag).color}>{getTagConfig(item.tag).label}</Tag>
                         <StatusTag status={item.status} />
                         {item.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}

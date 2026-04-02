@@ -97,6 +97,7 @@ def create_app(config_name=None):
             word,
             word_bank,
             forum_post,
+            forum_post_pin,
             forum_comment,
             forum_forward,
             room,
@@ -152,6 +153,23 @@ def _ensure_runtime_schema():
     ))
     db.session.execute(text(
         'UPDATE users SET is_admin = 0 WHERE is_admin IS NULL'
+    ))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS forum_post_pins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            post_id INTEGER NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(post_id) REFERENCES forum_posts(id) ON DELETE CASCADE,
+            CONSTRAINT uq_forum_post_pins_user_post UNIQUE (user_id, post_id)
+        )
+    """))
+    forum_forward_columns = {col['name'] for col in inspector.get_columns('forum_forwards')}
+    if 'zone' not in forum_forward_columns:
+        db.session.execute(text("ALTER TABLE forum_forwards ADD COLUMN zone VARCHAR(10) NOT NULL DEFAULT 'public'"))
+    db.session.execute(text(
+        "UPDATE forum_forwards SET zone = 'public' WHERE zone IS NULL OR zone = ''"
     ))
     db.session.commit()
 

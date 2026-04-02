@@ -77,8 +77,8 @@ export const forumAPI = {
   addComment: (postId, content) =>
     api.post(`/forum/posts/${postId}/comments`, { content }),
   deleteComment: (commentId) => api.delete(`/forum/comments/${commentId}`),
-  forwardPost: (postId, comment) =>
-    api.post(`/forum/posts/${postId}/forward`, { comment }),
+  forwardPost: (postId, comment, zone) =>
+    api.post(`/forum/posts/${postId}/forward`, { comment, zone }),
   getMyPosts: (params) => api.get('/forum/my-posts', { params }),
   getPendingPosts: (params) => api.get('/forum/admin/pending-posts', { params }),
   reviewPost: (id, data) => api.post(`/forum/admin/posts/${id}/review`, data),

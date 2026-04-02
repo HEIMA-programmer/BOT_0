@@ -10,6 +10,7 @@ from app import db
 from app.models.forum_comment import ForumComment
 from app.models.forum_forward import ForumForward
 from app.models.forum_post import ForumPost
+from app.models.forum_post_pin import ForumPostPin
 from app.models.friendship import Friendship
 
 forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
@@ -52,11 +53,25 @@ def _require_admin():
 
 
 def _can_view_post(post):
-    if post.status == ForumPost.STATUS_APPROVED:
-        return True
     if _is_admin():
         return True
+    if post.status == ForumPost.STATUS_APPROVED:
+        if post.zone == 'public':
+            return True
+        friend_ids = _get_friend_ids(current_user.id)
+        return post.user_id == current_user.id or post.user_id in friend_ids
     return post.user_id == current_user.id
+
+
+def _can_view_forward(forward):
+    if _is_admin():
+        return True
+    if forward.zone == 'public':
+        return forward.post is not None and forward.post.status == ForumPost.STATUS_APPROVED
+    if forward.zone == 'friend':
+        friend_ids = _get_friend_ids(current_user.id)
+        return forward.user_id == current_user.id or forward.user_id in friend_ids
+    return False
 
 
 def _get_visible_post_or_404(post_id):
@@ -66,8 +81,35 @@ def _get_visible_post_or_404(post_id):
     return post, None
 
 
-def _serialise_post(post, include_comments=False):
+def _get_friend_pinned_post_ids(post_ids):
+    if _is_admin() or not post_ids:
+        return set()
+    rows = ForumPostPin.query.filter(
+        ForumPostPin.user_id == current_user.id,
+        ForumPostPin.post_id.in_(post_ids),
+    ).all()
+    return {row.post_id for row in rows}
+
+
+def _can_pin_post(post):
+    if post.status != ForumPost.STATUS_APPROVED:
+        return False
+    if _is_admin():
+        return post.zone == 'public'
+    return post.zone == 'friend' and _can_view_post(post)
+
+
+def _serialise_post(post, include_comments=False, friend_pinned_post_ids=None):
     data = post.to_dict(include_comments=include_comments)
+    if post.zone == 'friend':
+        friend_pinned = (
+            post.id in friend_pinned_post_ids
+            if friend_pinned_post_ids is not None
+            else bool(
+                ForumPostPin.query.filter_by(user_id=current_user.id, post_id=post.id).first()
+            )
+        )
+        data['is_pinned'] = friend_pinned
     data['can_delete'] = _is_admin() or post.user_id == current_user.id
     # Intentional policy: admins can edit their own posts at any status, while
     # regular users can only revise their own rejected posts for resubmission.
@@ -75,9 +117,23 @@ def _serialise_post(post, include_comments=False):
         not _is_admin() and post.user_id == current_user.id and post.status == ForumPost.STATUS_REJECTED
     )
     data['can_forward'] = post.status == ForumPost.STATUS_APPROVED
-    data['can_pin'] = _is_admin() and post.status == ForumPost.STATUS_APPROVED
+    data['can_pin'] = _can_pin_post(post)
     data['can_review'] = _is_admin() and post.status == ForumPost.STATUS_PENDING
     return data
+
+
+def _serialise_posts(posts):
+    friend_pinned_post_ids = _get_friend_pinned_post_ids([
+        post.id for post in posts if post.zone == 'friend'
+    ])
+    return [
+        _serialise_post(post, friend_pinned_post_ids=friend_pinned_post_ids)
+        for post in posts
+    ]
+
+
+def _clear_friend_pins(post_id):
+    ForumPostPin.query.filter_by(post_id=post_id).delete(synchronize_session=False)
 
 
 def _touch_post(post):
@@ -103,16 +159,13 @@ def _get_friend_ids(user_id):
 def get_posts():
     """Get forum posts visible to the current user, with optional forward inclusion."""
     tag = request.args.get('tag')
+    search = (request.args.get('search') or '').strip()
     user_id = request.args.get('user_id', type=int)
     status = request.args.get('status')
-    zone = request.args.get('zone', 'public')
+    zone = request.args.get('zone')
     include_forwards = request.args.get('include_forwards', 'false').lower() == 'true'
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
-
-    # Admins only see public zone
-    if _is_admin():
-        zone = 'public'
 
     # Friend zone: show friends' posts AND the user's own friend-zone posts
     if zone == 'friend' and not _is_admin():
@@ -122,22 +175,41 @@ def get_posts():
             ForumPost.status == ForumPost.STATUS_APPROVED,
             ForumPost.zone == 'friend',
             ForumPost.user_id.in_(visible_user_ids),
+        ).outerjoin(
+            ForumPostPin,
+            db.and_(
+                ForumPostPin.post_id == ForumPost.id,
+                ForumPostPin.user_id == current_user.id,
+            ),
         )
     else:
         query = _post_query_for_current_user()
-        query = query.filter(ForumPost.zone == 'public')
+        if _is_admin():
+            if zone in VALID_ZONES:
+                query = query.filter(ForumPost.zone == zone)
+        else:
+            query = query.filter(ForumPost.zone == 'public')
 
     if tag:
         query = query.filter_by(tag=tag)
+    if search:
+        pattern = f'%{search}%'
+        query = query.filter(db.or_(
+            ForumPost.title.ilike(pattern),
+            ForumPost.tag.ilike(pattern),
+        ))
     if user_id:
         query = query.filter_by(user_id=user_id)
     if _is_admin() and status in VALID_POST_STATUSES:
         query = query.filter_by(status=status)
 
-    query = query.order_by(ForumPost.is_pinned.desc(), ForumPost.created_at.desc())
+    if zone == 'friend' and not _is_admin():
+        query = query.order_by(ForumPostPin.id.is_not(None).desc(), ForumPost.created_at.desc())
+    else:
+        query = query.order_by(ForumPost.is_pinned.desc(), ForumPost.created_at.desc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
-    items = [_serialise_post(p) for p in pagination.items]
+    items = _serialise_posts(pagination.items)
     # Tag each post item with type
     for item in items:
         item['type'] = 'post'
@@ -148,16 +220,33 @@ def get_posts():
     if include_forwards:
         if zone == 'friend' and not _is_admin():
             friend_ids = _get_friend_ids(current_user.id)
+            visible_user_ids = friend_ids | {current_user.id}
             forward_query = ForumForward.query.join(
                 ForumPost, ForumForward.original_post_id == ForumPost.id
             ).filter(
                 ForumPost.status == ForumPost.STATUS_APPROVED,
-                ForumForward.user_id.in_(friend_ids),
+                ForumForward.user_id.in_(visible_user_ids),
+                ForumForward.zone == 'friend',
+            )
+        elif zone == 'public' and not _is_admin():
+            forward_query = ForumForward.query.join(
+                ForumPost, ForumForward.original_post_id == ForumPost.id
+            ).filter(
+                ForumPost.status == ForumPost.STATUS_APPROVED,
+                ForumForward.zone == 'public',
             )
         else:
             forward_query = ForumForward.query.join(
                 ForumPost, ForumForward.original_post_id == ForumPost.id
             ).filter(ForumPost.status == ForumPost.STATUS_APPROVED)
+            if zone in VALID_ZONES:
+                forward_query = forward_query.filter(ForumForward.zone == zone)
+        if search:
+            pattern = f'%{search}%'
+            forward_query = forward_query.filter(db.or_(
+                ForumPost.title.ilike(pattern),
+                ForumPost.tag.ilike(pattern),
+            ))
 
         forwards = forward_query.order_by(ForumForward.created_at.desc()).all()
         for fw in forwards:
@@ -191,7 +280,12 @@ def get_post(post_id):
     post, error = _get_visible_post_or_404(post_id)
     if error:
         return error
-    return jsonify(_serialise_post(post, include_comments=True)), 200
+    friend_pinned_post_ids = _get_friend_pinned_post_ids([post.id]) if post.zone == 'friend' else set()
+    return jsonify(_serialise_post(
+        post,
+        include_comments=True,
+        friend_pinned_post_ids=friend_pinned_post_ids,
+    )), 200
 
 
 @forum_bp.route('/posts', methods=['POST'])
@@ -304,6 +398,7 @@ def update_post(post_id):
         post.reviewed_by = None
         post.reviewed_at = None
         post.is_pinned = False
+        _clear_friend_pins(post.id)
     _touch_post(post)
     db.session.commit()
     return jsonify({
@@ -367,7 +462,7 @@ def delete_comment(comment_id):
 def forward_post(post_id):
     """Forward (repost) someone else's approved post to your own timeline."""
     post = db.session.get(ForumPost, post_id)
-    if not post or post.status != ForumPost.STATUS_APPROVED:
+    if not post or post.status != ForumPost.STATUS_APPROVED or not _can_view_post(post):
         return jsonify({'error': 'Post not found'}), 404
 
     existing = ForumForward.query.filter_by(
@@ -378,9 +473,14 @@ def forward_post(post_id):
 
     data = request.get_json() or {}
     comment = data.get('comment', '').strip() or None
+    zone = (data.get('zone') or 'public').strip()
+    if zone not in VALID_ZONES:
+        zone = 'public'
+    if _is_admin():
+        zone = 'public'
 
     forward = ForumForward(
-        user_id=current_user.id, original_post_id=post_id, comment=comment
+        user_id=current_user.id, original_post_id=post_id, zone=zone, comment=comment
     )
     db.session.add(forward)
     db.session.commit()
@@ -398,10 +498,13 @@ def my_posts():
         .order_by(ForumPost.created_at.desc()).all()
     forwards = ForumForward.query.filter_by(user_id=current_user.id)\
         .order_by(ForumForward.created_at.desc()).all()
+    friend_pinned_post_ids = _get_friend_pinned_post_ids([
+        item.id for item in posts if item.zone == 'friend'
+    ])
 
     items = []
     for post in posts:
-        data = _serialise_post(post)
+        data = _serialise_post(post, friend_pinned_post_ids=friend_pinned_post_ids)
         data['type'] = 'post'
         items.append(data)
     for forward in forwards:
@@ -483,6 +586,7 @@ def review_post(post_id):
             return jsonify({'error': 'rejection_reason is required when rejecting'}), 400
         post.status = ForumPost.STATUS_REJECTED
         post.is_pinned = False
+        _clear_friend_pins(post.id)
         post.rejection_reason = rejection_reason
         post.review_note = review_note
 
@@ -494,22 +598,32 @@ def review_post(post_id):
 @forum_bp.route('/admin/posts/<int:post_id>/pin', methods=['POST'])
 @login_required
 def pin_post(post_id):
-    resp = _require_admin()
-    if resp is not None:
-        return resp
-
     post = db.session.get(ForumPost, post_id)
     if not post:
         return jsonify({'error': 'Post not found'}), 404
-    if post.status != ForumPost.STATUS_APPROVED:
-        return jsonify({'error': 'Only approved posts can be pinned'}), 400
 
     data = request.get_json() or {}
     is_pinned = bool(data.get('is_pinned', True))
-    post.is_pinned = is_pinned
-    _touch_post(post)
+    if not _can_pin_post(post):
+        if _is_admin():
+            if post.status != ForumPost.STATUS_APPROVED:
+                return jsonify({'error': 'Only approved posts can be pinned'}), 400
+            return jsonify({'error': 'Only public posts can be pinned'}), 400
+        return jsonify({'error': 'Only approved friend zone posts visible to you can be pinned'}), 403
+
+    if _is_admin():
+        post.is_pinned = is_pinned
+        _touch_post(post)
+    else:
+        existing_pin = ForumPostPin.query.filter_by(user_id=current_user.id, post_id=post.id).first()
+        if is_pinned and not existing_pin:
+            db.session.add(ForumPostPin(user_id=current_user.id, post_id=post.id))
+        elif not is_pinned and existing_pin:
+            db.session.delete(existing_pin)
+
     db.session.commit()
-    return jsonify(_serialise_post(post)), 200
+    friend_pinned_post_ids = {post.id} if (post.zone == 'friend' and is_pinned and not _is_admin()) else set()
+    return jsonify(_serialise_post(post, friend_pinned_post_ids=friend_pinned_post_ids)), 200
 
 
 # ── File serving ─────────────────────────────────────────────────────

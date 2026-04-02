@@ -59,6 +59,12 @@ class ForumPost(db.Model):
         cascade='all, delete-orphan', lazy=True,
         foreign_keys='ForumForward.original_post_id'
     )
+    friend_pins = db.relationship(
+        'ForumPostPin',
+        back_populates='post',
+        cascade='all, delete-orphan',
+        lazy=True,
+    )
 
     def to_dict(self, include_comments=False):
         d = {
