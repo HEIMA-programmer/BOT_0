@@ -79,6 +79,7 @@ export default function GameRoom({ user }) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareZone, setShareZone] = useState('public');
   const [shareLoading, setShareLoading] = useState(false);
+  const [shared, setShared] = useState(false);
 
   useEffect(() => {
     speakRef.current = speak;
@@ -310,16 +311,18 @@ export default function GameRoom({ user }) {
       formData.append('content', content);
       formData.append('zone', shareZone);
       formData.append('tag', 'game');
+      formData.append('room_id', roomId);
 
       await forumAPI.createPost(formData);
       message.success('Game record shared to forum!');
+      setShared(true);
       setShowShareModal(false);
     } catch {
       message.error('Failed to share game record');
     } finally {
       setShareLoading(false);
     }
-  }, [finalResults, shareZone, message]);
+  }, [finalResults, shareZone, message, roomId]);
 
   const handleLeave = useCallback(async () => {
     if (isLeavingRef.current) {
@@ -779,10 +782,11 @@ export default function GameRoom({ user }) {
               <Space size={12}>
                 <Button
                   size="large"
+                  disabled={shared}
                   onClick={() => setShowShareModal(true)}
                   style={{ borderRadius: 8, borderColor: '#3b82f6', color: '#3b82f6' }}
                 >
-                  Share to Forum
+                  {shared ? 'Shared' : 'Share to Forum'}
                 </Button>
                 <Button
                   size="large"

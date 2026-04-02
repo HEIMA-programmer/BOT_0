@@ -12,6 +12,7 @@ from app.models.forum_forward import ForumForward
 from app.models.forum_post import ForumPost
 from app.models.forum_post_pin import ForumPostPin
 from app.models.friendship import Friendship
+from app.models.room import Room, RoomMember
 
 forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
 
@@ -333,8 +334,26 @@ def create_post():
             file_url = f'/api/forum/uploads/{unique_name}'
             file_name = original_name
 
-    # Game record posts are auto-approved (objective data, no moderation needed)
-    auto_approve = _is_admin() or tag == 'game'
+    # Game record posts are auto-approved, but only if the user actually
+    # participated in the referenced game room (prevents tag abuse).
+    game_verified = False
+    if tag == 'game':
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            room_id = request.form.get('room_id')
+        else:
+            room_id = (request.get_json() or {}).get('room_id')
+        if room_id:
+            member = RoomMember.query.filter_by(
+                room_id=room_id, user_id=current_user.id
+            ).first()
+            room = Room.query.filter_by(
+                id=room_id, room_type='game'
+            ).first()
+            game_verified = member is not None and room is not None
+        if not game_verified:
+            tag = 'public'  # downgrade to normal tag
+
+    auto_approve = _is_admin() or game_verified
 
     post = ForumPost(
         user_id=current_user.id,
