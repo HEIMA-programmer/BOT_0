@@ -24,6 +24,7 @@ import {
   ReadOutlined,
   SoundOutlined,
   TeamOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 
@@ -123,6 +124,7 @@ export default function Listening({ user }) {
   const location = useLocation();
   const state = location.state || {};
   
+  const [mediaType, setMediaType] = useState(searchParams.get('type') || null);
   const difficulty = searchParams.get('difficulty') || state.difficulty || levelId;
 
   const [catalog, setCatalog] = useState({ levels: [], source_count: 0 });
@@ -469,6 +471,151 @@ export default function Listening({ user }) {
     setPracticeError('');
   };
 
+  const renderMediaTypeSelection = () => (
+    <>
+      <Card
+        style={{
+          borderRadius: 16,
+          border: '1px solid #f3e8d7',
+          background: 'linear-gradient(135deg, #fffdf7, #fff7ed)',
+          marginBottom: 24,
+        }}
+        styles={{ body: { padding: 24 } }}
+      >
+        <Row gutter={[16, 16]} align="middle" justify="space-between">
+          <Col xs={24} md={16}>
+            <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#7c2d12' }}>
+              Listening & Video Lab
+            </Title>
+            <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+              Choose your preferred format: audio-only recordings for focused listening practice,
+              or video materials for engaging visual learning experiences.
+            </Text>
+          </Col>
+          <Col xs={24} md={8} lg={6}>
+            <Space wrap size={[8, 8]}>
+              <Tag color="gold" style={{ borderRadius: 999, padding: '4px 10px', fontSize: 13 }}>
+                {catalog.source_count} recordings ready
+              </Tag>
+              <Tag color="blue" style={{ borderRadius: 999, padding: '4px 10px', fontSize: 13 }}>
+                Video Collection
+              </Tag>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+
+      <div style={{ marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#374151' }}>
+          Choose your format
+        </Title>
+      </div>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={12} key="audio">
+          <Card
+            hoverable
+            role="button"
+            tabIndex={0}
+            onClick={() => setMediaType('audio')}
+            onKeyDown={(event) => handleSelectableKeyDown(
+              event,
+              () => setMediaType('audio')
+            )}
+            style={{
+              borderRadius: 14,
+              border: '1px solid #e5e7eb',
+              height: '100%',
+            }}
+            styles={{ body: { padding: 24 } }}
+          >
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 14,
+                background: '#eff6ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 18,
+                color: '#2563eb',
+                fontSize: 28,
+              }}
+            >
+              <SoundOutlined />
+            </div>
+            <Space wrap size={[8, 8]} style={{ marginBottom: 12 }}>
+              <Title level={4} style={{ margin: 0, fontWeight: 600 }}>
+                Audio Practice
+              </Title>
+              <Tag color="success" style={{ borderRadius: 999 }}>
+                Ready now
+              </Tag>
+            </Space>
+            <Text type="secondary" style={{ display: 'block', fontSize: 13, lineHeight: 1.6 }}>
+              Focused listening practice with lecture clips, group discussions,
+              Q&A sessions, and office hour recordings.
+            </Text>
+            <Text style={{ color: '#2563eb', fontWeight: 600, display: 'block', marginTop: 16 }}>
+              Start Audio Practice
+            </Text>
+          </Card>
+        </Col>
+
+        <Col xs={24} md={12} key="video">
+          <Card
+            hoverable
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate('/listening/video')}
+            onKeyDown={(event) => handleSelectableKeyDown(
+              event,
+              () => navigate('/listening/video')
+            )}
+            style={{
+              borderRadius: 14,
+              border: '1px solid #e5e7eb',
+              height: '100%',
+            }}
+            styles={{ body: { padding: 24 } }}
+          >
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 14,
+                background: '#f5f3ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 18,
+                color: '#7c3aed',
+                fontSize: 28,
+              }}
+            >
+              <VideoCameraOutlined />
+            </div>
+            <Space wrap size={[8, 8]} style={{ marginBottom: 12 }}>
+              <Title level={4} style={{ margin: 0, fontWeight: 600 }}>
+                Video Collection
+              </Title>
+              <Tag color="processing" style={{ borderRadius: 999 }}>
+                New!
+              </Tag>
+            </Space>
+            <Text type="secondary" style={{ display: 'block', fontSize: 13, lineHeight: 1.6 }}>
+              Engaging video content with Academic English lectures,
+              note-taking features, and forum integration.
+            </Text>
+            <Text style={{ color: '#7c3aed', fontWeight: 600, display: 'block', marginTop: 16 }}>
+              Explore Videos
+            </Text>
+          </Card>
+        </Col>
+      </Row>
+    </>
+  );
+
   const renderLanding = () => (
     <>
       <Card
@@ -499,9 +646,14 @@ export default function Listening({ user }) {
       </Card>
 
       <div style={{ marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#374151' }}>
-          Select a difficulty
-        </Title>
+        <Space wrap size={[8, 8]}>
+          <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#374151' }}>
+            Select a difficulty
+          </Title>
+          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setMediaType(null)}>
+            Back to format selection
+          </Button>
+        </Space>
       </div>
       <Row gutter={[16, 16]}>
         {levels.map((level) => {
@@ -1019,11 +1171,13 @@ export default function Listening({ user }) {
     <div className="page-container">
       <div className="page-header">
         <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>
-          <SoundOutlined style={{ marginRight: 10, color: '#d97706' }} />
-          Listening Lab
+          <SoundOutlined style={{ marginRight: 6, color: '#d97706' }} />
+          {mediaType === 'audio' ? 'Listening Lab' : 'Listening & Video Lab'}
         </Title>
         <Text type="secondary">
-          Practice lectures, group discussions, Q&A, and office-hour recordings with instant feedback.
+          {mediaType === 'audio' 
+            ? 'Practice lectures, group discussions, Q&A, and office-hour recordings with instant feedback.'
+            : 'Choose your preferred format: audio-only recordings or engaging video materials.'}
         </Text>
       </div>
 
@@ -1043,15 +1197,11 @@ export default function Listening({ user }) {
         </div>
       ) : null}
 
-      {!loading && !levels.length ? (
-        <Card style={{ borderRadius: 16, border: '1px solid #e5e7eb' }}>
-          <Empty description="No listening materials were found in the project content folders yet." />
-        </Card>
-      ) : null}
+      {!loading && !mediaType ? renderMediaTypeSelection() : null}
 
-      {!loading && levels.length && !difficulty ? renderLanding() : null}
+      {!loading && mediaType === 'audio' && !difficulty ? renderLanding() : null}
 
-      {!loading && levels.length && difficulty && !selectedLevel ? (
+      {!loading && mediaType === 'audio' && difficulty && !selectedLevel ? (
         <Card style={{ borderRadius: 16, border: '1px solid #e5e7eb' }} styles={{ body: { padding: 24 } }}>
           <Empty description="That listening level was not found.">
             <Button type="primary" onClick={() => navigate('/listening')}>
@@ -1061,7 +1211,7 @@ export default function Listening({ user }) {
         </Card>
       ) : null}
 
-      {!loading && selectedLevel ? renderLevelDetail() : null}
+      {!loading && mediaType === 'audio' && selectedLevel ? renderLevelDetail() : null}
     </div>
   );
 }

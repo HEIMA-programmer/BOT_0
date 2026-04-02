@@ -13,7 +13,7 @@ from app.models.forum_post import ForumPost
 
 forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
 
-VALID_TAGS = ('skills', 'experience', 'academic_culture', 'public')
+VALID_TAGS = ('skills', 'experience', 'academic_culture', 'public', 'note')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'mp4', 'webm', 'mov'}
 REJECTION_REASONS = (
     'The post contains inaccurate or misleading information',

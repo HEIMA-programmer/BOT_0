@@ -34,7 +34,9 @@ import {
   UploadOutlined,
   UserOutlined,
   VideoCameraOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 
 import { forumAPI } from '../api';
 
@@ -43,6 +45,7 @@ const { TextArea } = Input;
 
 const VIDEO_EXTS = /\.(mp4|webm|mov|ogg)(\?|$)/i;
 const TAG_CONFIG = {
+  note: { label: 'Note', color: 'cyan', desc: 'Video notes shared from the player' },
   skills: { label: 'Skills', color: 'blue', desc: 'Turnitin, Teams, plagiarism tips & more' },
   experience: { label: 'Experience', color: 'green', desc: 'Share your academic journey' },
   academic_culture: { label: 'Academic Culture', color: 'purple', desc: 'Cultural insights & norms' },
@@ -187,6 +190,7 @@ function AdminQueueCard({ post, onOpen, onReview }) {
 export default function Forum({ user }) {
   const isAdmin = Boolean(user?.is_admin);
   const { message } = AntdApp.useApp();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('all');
   const [posts, setPosts] = useState([]);
@@ -283,6 +287,23 @@ export default function Forum({ user }) {
       message.error('Failed to load rejection reasons');
     }
   }, [isAdmin, message]);
+
+  const parseVideoReference = (content) => {
+    if (!content) return null;
+    const match = content.match(/\[Video Reference\]\((\{.*?\})\)/);
+    if (!match) return null;
+    try {
+      return JSON.parse(match[1]);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleGoToVideo = (videoRef) => {
+    if (!videoRef?.categoryId || !videoRef?.videoId) return;
+    setDetailOpen(false);
+    navigate(`/listening/video/${videoRef.categoryId}/${videoRef.videoId}?fromForum=true`);
+  };
 
   useEffect(() => {
     fetchPosts();
@@ -842,6 +863,15 @@ export default function Forum({ user }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
               <Title level={4} style={{ margin: '12px 0 8px' }}>{detailPost.title}</Title>
               <Space wrap>
+                {parseVideoReference(detailPost.content) && (
+                  <Button
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => handleGoToVideo(parseVideoReference(detailPost.content))}
+                  >
+                    View in Video Player
+                  </Button>
+                )}
                 {detailPost.can_edit && (
                   <Button icon={<EditOutlined />} onClick={() => openEdit(detailPost)}>
                     {detailPost.status === 'rejected' && !isAdmin ? 'Edit & Resubmit' : 'Edit'}
