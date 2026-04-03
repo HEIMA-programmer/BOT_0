@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules
+.venv
+venv
+__pycache__
+*.pyc
+
+# Runtime data (should not be baked into image)
+backend/instance
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Built artifacts (rebuilt during Docker build)
+frontend/dist
+
+# Content data not needed at runtime
+Audio/
+GroupDiscussion/
+OfficeHour/
+Q&ASession/
+output/
+generated_questions_md/
+
+# Docs and tests
+docs/
+test/
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Nginx config (mounted as volume, not in image)
+nginx/

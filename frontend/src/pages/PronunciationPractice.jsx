@@ -41,7 +41,7 @@ export default function PronunciationPractice() {
   ];
 
   useEffect(() => {
-    const socket = io('http://localhost:5000');
+    const socket = io('/');
     socketRef.current = socket;
 
     socket.on('connected', () => {
