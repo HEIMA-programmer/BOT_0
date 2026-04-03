@@ -96,7 +96,36 @@ def handle_audio_chunk(data):
 def handle_end_conversation():
     session_id = request.sid
     current_app.logger.info(f'Ending conversation for session: {session_id}')
-    _cleanup_session(session_id, save_messages=True)
+    session_data = active_sessions.get(session_id)
+    if not session_data:
+        return
+
+    service = session_data['service']
+    db_session_id = session_data.get('db_session_id')
+
+    # Save messages to database
+    if db_session_id:
+        try:
+            messages = service.get_messages()
+            if messages:
+                for msg in messages:
+                    db.session.add(ChatMessage(
+                        session_id=db_session_id,
+                        role=msg['role'],
+                        content=msg['content'],
+                    ))
+                chat_session = db.session.get(ChatSession, db_session_id)
+                if chat_session and not chat_session.ended_at:
+                    chat_session.ended_at = datetime.now(timezone.utc)
+                db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f'Failed to save messages: {e}')
+
+    # Stop the service but keep session data for scoring
+    try:
+        service.stop()
+    except Exception:
+        pass
 
 
 @socketio.on('request_scoring', namespace='/conversation')
@@ -125,6 +154,9 @@ def handle_request_scoring(data=None):
         args=(messages, scenario_type, sub_scenario, db_session_id, session_id, app),
         daemon=True
     ).start()
+
+    # Now safe to remove from active_sessions
+    active_sessions.pop(session_id, None)
 
 
 def _do_scoring(messages, scenario_type, sub_scenario, db_session_id, ws_session_id, app):
