@@ -73,9 +73,9 @@ def handle_start_conversation(data=None):
         }
         service.start()
 
-        # Forward Gemini responses to the client in a real OS thread
+        # Forward responses in a green thread (must use patched threading for socketio.emit)
         app = current_app._get_current_object()
-        _real_threading.Thread(
+        threading.Thread(
             target=_forward_responses,
             args=(service, session_id, app),
             daemon=True
