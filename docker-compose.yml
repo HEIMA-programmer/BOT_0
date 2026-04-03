@@ -3,6 +3,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env.production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - app-data:/app/backend/instance
     networks:
