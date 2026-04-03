@@ -50,7 +50,14 @@ class ConversationService:
                 "或单独安装 `google-genai`。"
             )
 
-        self.client = genai.Client(api_key=api_key)
+        gemini_base_url = os.getenv('GEMINI_BASE_URL')
+        if gemini_base_url:
+            self.client = genai.Client(
+                api_key=api_key,
+                http_options={'api_version': 'v1beta', 'url': gemini_base_url},
+            )
+        else:
+            self.client = genai.Client(api_key=api_key)
         self.system_prompt = system_prompt or SYSTEM_PROMPT
         self.voice_name = voice_name or "Puck"
         self.initial_message = initial_message  # text to send first to trigger AI to speak
