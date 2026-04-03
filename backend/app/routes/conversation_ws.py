@@ -14,6 +14,13 @@ from app.models.chat_session import ChatSession
 from app.models.chat_message import ChatMessage
 from datetime import datetime, timezone
 
+# Use real OS threads (not eventlet green threads) for response forwarding
+try:
+    import eventlet.patcher
+    _real_threading = eventlet.patcher.original('threading')
+except ImportError:
+    _real_threading = threading
+
 
 # Store active sessions (session_id -> {service, db_session_id, scenario_type})
 active_sessions = {}
@@ -66,9 +73,9 @@ def handle_start_conversation(data=None):
         }
         service.start()
 
-        # Forward Gemini responses to the client in a background thread
+        # Forward Gemini responses to the client in a real OS thread
         app = current_app._get_current_object()
-        threading.Thread(
+        _real_threading.Thread(
             target=_forward_responses,
             args=(service, session_id, app),
             daemon=True
