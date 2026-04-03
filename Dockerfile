@@ -36,6 +36,14 @@ COPY --from=frontend-build /build/dist ./frontend/dist
 # Copy AWL data needed for word seeding on first run
 COPY frontend/public/AWL ./frontend/public/AWL
 
+# Copy content directories needed by listening module
+COPY Audio/ ./Audio/
+COPY output/ ./output/
+COPY generated_questions_md/ ./generated_questions_md/
+COPY GroupDiscussion/ ./GroupDiscussion/
+COPY Q&ASession/ ./Q&ASession/
+COPY OfficeHour/ ./OfficeHour/
+
 # Set working directory to backend for relative imports
 WORKDIR /app/backend
 

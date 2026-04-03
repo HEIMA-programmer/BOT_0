@@ -20,13 +20,8 @@ backend/instance
 # Built artifacts (rebuilt during Docker build)
 frontend/dist
 
-# Content data not needed at runtime
-Audio/
-GroupDiscussion/
-OfficeHour/
-Q&ASession/
-output/
-generated_questions_md/
+# Note: Audio/, GroupDiscussion/, OfficeHour/, Q&ASession/, output/,
+# generated_questions_md/ are NOT excluded — listening module needs them
 
 # Docs and tests
 docs/
