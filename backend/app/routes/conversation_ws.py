@@ -48,6 +48,11 @@ def handle_start_conversation(data=None):
     if scenario_type in ('office_hours', 'seminar_discussion'):
         initial_message = "Hello, I just arrived. Please start the conversation according to your role."
 
+    # Clean up any existing session before starting a new one
+    if session_id in active_sessions:
+        current_app.logger.info(f'Cleaning up existing session before restart: {session_id}')
+        _cleanup_session(session_id)
+
     try:
         service = ConversationService(
             system_prompt=system_prompt,
@@ -175,8 +180,11 @@ def _cleanup_session(session_id, save_messages=False):
         except Exception as e:
             current_app.logger.error(f'Failed to save messages: {e}')
 
-    service.stop()
-    del active_sessions[session_id]
+    try:
+        service.stop()
+    except Exception:
+        pass
+    active_sessions.pop(session_id, None)
 
 
 def _forward_responses(service, session_id, app):
