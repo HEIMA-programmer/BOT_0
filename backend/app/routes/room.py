@@ -548,7 +548,7 @@ def get_game_questions():
     """Generate random game questions from the word database."""
     game_type = request.args.get('type', 'word_duel')
     count = request.args.get('count', 5, type=int)
-    count = min(max(count, 3), 10)
+    count = min(max(count, 3), 30)
 
     if game_type not in ('word_duel', 'context_guesser'):
         return jsonify({'error': 'type must be word_duel or context_guesser'}), 400

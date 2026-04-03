@@ -344,7 +344,12 @@ def handle_start_game(data):
         emit('room_error', {'message': 'All members must be ready before starting'})
         return
 
-    count = 5 if game_type == 'word_duel' else CONTEXT_GUESSER_TOTAL_ROUNDS
+    # Accept optional question_count from frontend (3–30), fall back to defaults
+    raw_count = data.get('question_count')
+    if isinstance(raw_count, int) and 3 <= raw_count <= 30:
+        count = raw_count
+    else:
+        count = 5 if game_type == 'word_duel' else CONTEXT_GUESSER_TOTAL_ROUNDS
     questions = generate_game_questions(game_type, count)
     if not questions:
         emit('room_error', {'message': 'No questions available. Please seed word data first.'})

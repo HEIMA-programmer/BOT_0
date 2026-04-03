@@ -3,6 +3,7 @@ import { Typography, Card, Row, Col, Tag, Tabs, Button } from 'antd';
 import { AudioOutlined, MessageOutlined, RobotOutlined, CommentOutlined, TeamOutlined, HistoryOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
+import HelpButton from '../components/HelpButton';
 
 const { Title, Text } = Typography;
 
@@ -168,6 +169,7 @@ export default function Speaking() {
         items={tabItems}
         style={{ marginTop: 24 }}
       />
+      <HelpButton guideKey="speaking" />
     </div>
   );
 }

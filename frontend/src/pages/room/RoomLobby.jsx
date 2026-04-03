@@ -14,6 +14,7 @@ import {
 import { io } from 'socket.io-client';
 import { roomAPI } from '../../api/index';
 import { TYPE_CONFIG } from '../../utils/roomUtils';
+import HelpButton from '../../components/HelpButton';
 
 const { Title, Text } = Typography;
 
@@ -473,6 +474,7 @@ export default function RoomLobby({ user }) {
           </Button>
         </div>
       </Modal>
+      <HelpButton guideKey="room" />
     </div>
   );
 }
