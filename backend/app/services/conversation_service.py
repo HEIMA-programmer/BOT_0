@@ -9,6 +9,14 @@ import queue
 import threading
 import os
 
+# eventlet monkey-patches threading.Thread into green threads, which breaks asyncio.
+# Use the original unpatched threading module so ConversationService runs in a real OS thread.
+try:
+    import eventlet.patcher
+    _real_threading = eventlet.patcher.original('threading')
+except ImportError:
+    _real_threading = threading
+
 try:
     from google import genai
     from google.genai import types as genai_types
@@ -62,8 +70,8 @@ class ConversationService:
         self.messages = []  # accumulated conversation messages
 
     def start(self):
-        """Start the Gemini session in a background thread."""
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        """Start the Gemini session in a real OS thread (not eventlet green thread)."""
+        self._thread = _real_threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def _run(self):
@@ -231,5 +239,7 @@ class ConversationService:
         return list(self.messages)
 
     def stop(self):
-        """Signal the session to stop."""
+        """Signal the session to stop and wait for thread to finish."""
         self.running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=5.0)
