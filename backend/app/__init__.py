@@ -111,9 +111,9 @@ def create_app(config_name=None):
         db.create_all()
         _ensure_runtime_schema()
         _seed_words_if_empty(app)
+        _ensure_dev_admin_user(app)
         if app.config.get('DEBUG'):
             _ensure_dev_test_user(app)
-            _ensure_dev_admin_user(app)
         _seed_guidance_posts(app)
 
     return app
@@ -231,7 +231,7 @@ def _ensure_dev_test_user(app):
 
 
 def _ensure_dev_admin_user(app):
-    """Create a development admin account if it doesn't exist."""
+    """Create the system admin account if it doesn't exist."""
     from app.models.user import User
 
     admin = User.query.filter_by(email='admin@example.com').first()
