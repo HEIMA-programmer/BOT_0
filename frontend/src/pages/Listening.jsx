@@ -31,6 +31,7 @@ import { useNavigate, useParams, useLocation, useSearchParams } from 'react-rout
 import AudioPlayer from '../components/AudioPlayer';
 import { listeningAPI } from '../api';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
+import HelpButton from '../components/HelpButton';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -1212,6 +1213,7 @@ export default function Listening({ user }) {
       ) : null}
 
       {!loading && mediaType === 'audio' && selectedLevel ? renderLevelDetail() : null}
+      <HelpButton guideKey="listening" />
     </div>
   );
 }

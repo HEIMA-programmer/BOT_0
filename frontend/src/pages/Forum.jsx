@@ -48,6 +48,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { forumAPI } from '../api';
 import { getVideoInfo } from './VideoPlayer';
+import HelpButton from '../components/HelpButton';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -1217,6 +1218,7 @@ export default function Forum({ user }) {
           </>
         )}
       </Modal>
+      <HelpButton guideKey="forum" />
     </div>
   );
 }
