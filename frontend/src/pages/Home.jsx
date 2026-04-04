@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { dailyLearningAPI, progressAPI } from '../api';
+import HelpButton from '../components/HelpButton';
 
 const { Title, Text } = Typography;
 
@@ -167,6 +168,7 @@ export default function Home() {
           </Col>
         ))}
       </Row>
+      <HelpButton guideKey="home" />
     </div>
   );
 }

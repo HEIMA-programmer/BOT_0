@@ -17,6 +17,7 @@ import WordPronunciationControl from '../components/WordPronunciationControl';
 import useAwlExampleSentences, { highlightWordInSentence } from '../hooks/useAwlExampleSentences';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 import useWordPronunciation from '../hooks/useWordPronunciation';
+import HelpButton from '../components/HelpButton';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -1561,6 +1562,7 @@ export default function DailyWords() {
           </div>
         )}
       </Modal>
+      <HelpButton guideKey="dailyWords" />
     </div>
   );
 }

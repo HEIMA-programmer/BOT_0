@@ -19,6 +19,7 @@ from app.models.room_record import RoomRecord
 from app.models.friend_request import FriendRequest
 from app.models.friendship import Friendship
 from app.models.game_record import GameRecord
+from app.models.forum_post_pin import ForumPostPin
 
 
 @event.listens_for(Engine, 'connect')
@@ -46,4 +47,5 @@ __all__ = [
     'FriendRequest',
     'Friendship',
     'GameRecord',
+    'ForumPostPin',
 ]

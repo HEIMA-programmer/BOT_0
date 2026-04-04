@@ -31,6 +31,7 @@ import { useNavigate, useParams, useLocation, useSearchParams } from 'react-rout
 import AudioPlayer from '../components/AudioPlayer';
 import { listeningAPI } from '../api';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
+import HelpButton from '../components/HelpButton';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -664,10 +665,10 @@ export default function Listening({ user }) {
                 hoverable
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/listening/${level.id}`)}
+                onClick={() => navigate(`/listening/${level.id}?type=audio`)}
                 onKeyDown={(event) => handleSelectableKeyDown(
                   event,
-                  () => navigate(`/listening/${level.id}`)
+                  () => navigate(`/listening/${level.id}?type=audio`)
                 )}
                 style={{
                   borderRadius: 14,
@@ -1123,7 +1124,7 @@ export default function Listening({ user }) {
             <Button
               type="text"
               icon={<ArrowLeftOutlined />}
-              onClick={() => navigate('/listening')}
+              onClick={() => navigate('/listening?type=audio')}
               style={{ width: 'fit-content', paddingInline: 0 }}
             >
               Back to listening levels
@@ -1204,7 +1205,7 @@ export default function Listening({ user }) {
       {!loading && mediaType === 'audio' && difficulty && !selectedLevel ? (
         <Card style={{ borderRadius: 16, border: '1px solid #e5e7eb' }} styles={{ body: { padding: 24 } }}>
           <Empty description="That listening level was not found.">
-            <Button type="primary" onClick={() => navigate('/listening')}>
+            <Button type="primary" onClick={() => navigate('/listening?type=audio')}>
               Return to listening levels
             </Button>
           </Empty>
@@ -1212,6 +1213,7 @@ export default function Listening({ user }) {
       ) : null}
 
       {!loading && mediaType === 'audio' && selectedLevel ? renderLevelDetail() : null}
+      <HelpButton guideKey="listening" />
     </div>
   );
 }

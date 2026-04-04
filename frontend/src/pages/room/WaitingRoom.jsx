@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import {
   Typography, Button, Tag, Modal, Space, Avatar, App as AntdApp,
-  Popover, Select, Row, Col, Tooltip,
+  Popover, Select, Row, Col, Tooltip, Radio, InputNumber,
 } from 'antd';
 import {
   CrownOutlined, TeamOutlined, LinkOutlined, CheckOutlined,
-  ArrowLeftOutlined,
+  ArrowLeftOutlined, StopOutlined,
 } from '@ant-design/icons';
 import { io } from 'socket.io-client';
 import { roomAPI, friendsAPI } from '../../api/index';
@@ -25,7 +25,7 @@ const GAMES = [
   {
     key: 'context_guesser',
     label: 'Context Guesser',
-    desc: 'Fill in the blank word from context. Semantic matches earn partial points.',
+    desc: 'Listen to the sentence, fill multiple blanks, and earn 1 point for each correct word.',
     players: '1–8',
     icon: '🔍',
   },
@@ -47,6 +47,8 @@ export default function WaitingRoom({ user }) {
   const [transferTarget, setTransferTarget] = useState(null);
   const [selectedGame, setSelectedGame] = useState(null);
   const [gameStep, setGameStep] = useState(1);
+  const [questionCount, setQuestionCount] = useState(null);
+  const [customCount, setCustomCount] = useState(10);
 
   const socketRef = useRef(null);
   const isLeavingRef = useRef(false);   // true when navigating to game or clicking Leave
@@ -56,13 +58,17 @@ export default function WaitingRoom({ user }) {
   // Derive host status from live members array so it stays in sync
   const myMember = members.find(m => m.user_id === userId);
   const isHost = myMember?.role === 'host';
-  const canStart = members.length >= 1 && members.every(m => m.is_ready) && !!selectedGame;
+  const resolvedCount = questionCount === 'custom' ? customCount : questionCount;
+  const isCountValid = questionCount === 'custom'
+    ? (Number.isInteger(customCount) && customCount >= 3 && customCount <= 30)
+    : [5, 10, 15].includes(questionCount);
+  const canStart = members.length >= 1 && members.every(m => m.is_ready) && !!selectedGame && isCountValid;
 
   const roomId = room?.id ? Number(room.id) : Number(roomIdParam);
   const tc = TYPE_CONFIG[room?.room_type] || TYPE_CONFIG.speaking;
 
   // Used by game_started to navigate with latest state (avoids stale socket closure)
-  const [gameLaunching, setGameLaunching] = useState(false);
+  const [gameLaunching, setGameLaunching] = useState(null);
 
   // ── Load room data ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -114,7 +120,7 @@ export default function WaitingRoom({ user }) {
     // replace: WaitingRoom is no longer meaningful once the game starts,
     // so back-button should go to Lobby, not back here.
     navigate(`/room/${roomId}/game`, {
-      state: { room: { ...room, gameType: selectedGame }, members },
+      state: { room: { ...room, gameType: gameLaunching.game_type || selectedGame }, members },
       replace: true,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,9 +170,20 @@ export default function WaitingRoom({ user }) {
       );
     });
 
-    socket.on('game_started', () => {
+    socket.on('member_kicked', ({ user_id }) => {
+      if (user_id === userId) {
+        isLeavingRef.current = true;
+        message.warning('You have been removed from the room by the host');
+        navigate('/room');
+      }
+    });
+
+    socket.on('game_started', (payload) => {
       isLeavingRef.current = true;
-      setGameLaunching(true);  // triggers the navigation useEffect above with fresh state
+      if (payload?.game_type) {
+        setSelectedGame(payload.game_type);
+      }
+      setGameLaunching(payload || { game_type: selectedGame });  // triggers navigation with fresh state
     });
 
     socket.on('room_error', ({ message: errMsg }) => {
@@ -217,6 +234,10 @@ export default function WaitingRoom({ user }) {
     message.success('Host transfer requested');
   }, [roomId, message]);
 
+  const handleKickMember = useCallback((targetUserId) => {
+    socketRef.current?.emit('kick_member', { room_id: roomId, target_user_id: targetUserId });
+  }, [roomId]);
+
   const handleLeave = useCallback(async () => {
     if (isHost && members.length > 1) {
       setShowLeaveModal(true);
@@ -243,8 +264,12 @@ export default function WaitingRoom({ user }) {
 
   const handleStart = useCallback(() => {
     if (!canStart) return;
-    socketRef.current?.emit('start_game', { room_id: roomId, game_type: selectedGame });
-  }, [canStart, roomId]);
+    socketRef.current?.emit('start_game', {
+      room_id: roomId,
+      game_type: selectedGame,
+      question_count: resolvedCount,
+    });
+  }, [canStart, roomId, selectedGame, resolvedCount]);
 
   if (!room) return null;
 
@@ -362,7 +387,7 @@ export default function WaitingRoom({ user }) {
             {members.map(member => {
               const isMe = member.user_id === userId;
               const memberMenu = isHost && !isMe ? (
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <Button
                     type="text"
                     size="small"
@@ -371,6 +396,16 @@ export default function WaitingRoom({ user }) {
                     style={{ width: '100%', textAlign: 'left' }}
                   >
                     Transfer Host
+                  </Button>
+                  <Button
+                    type="text"
+                    size="small"
+                    danger
+                    icon={<StopOutlined />}
+                    onClick={() => handleKickMember(member.user_id)}
+                    style={{ width: '100%', textAlign: 'left' }}
+                  >
+                    Kick
                   </Button>
                 </div>
               ) : null;
@@ -432,7 +467,7 @@ export default function WaitingRoom({ user }) {
                   {GAMES.map(game => (
                     <Col span={12} key={game.key}>
                       <div
-                        onClick={() => isHost && setSelectedGame(game.key)}
+                        onClick={() => { if (isHost) { setSelectedGame(game.key); setQuestionCount(null); setCustomCount(10); } }}
                         style={{
                           border: `2px solid ${selectedGame === game.key ? '#ea580c' : '#e5e7eb'}`,
                           borderRadius: 10, padding: '14px',
@@ -457,6 +492,34 @@ export default function WaitingRoom({ user }) {
                 </Row>
               )}
 
+              {gameStep === 2 && (
+                <div style={{ marginBottom: 16 }}>
+                  <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>Number of Rounds</Text>
+                  <Radio.Group
+                    value={questionCount}
+                    onChange={(e) => setQuestionCount(e.target.value)}
+                    optionType="button"
+                    buttonStyle="solid"
+                    disabled={!isHost}
+                  >
+                    <Radio.Button value={5}>5</Radio.Button>
+                    <Radio.Button value={10}>10</Radio.Button>
+                    <Radio.Button value={15}>15</Radio.Button>
+                    <Radio.Button value="custom">Custom</Radio.Button>
+                  </Radio.Group>
+                  {questionCount === 'custom' && (
+                    <InputNumber
+                      min={3}
+                      max={30}
+                      value={customCount}
+                      onChange={(val) => setCustomCount(val)}
+                      disabled={!isHost}
+                      style={{ marginLeft: 12, width: 80 }}
+                    />
+                  )}
+                </div>
+              )}
+
               {gameStep === 2 && selectedGame === 'word_duel' && (
                 <div>
                   <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>Difficulty</Text>
@@ -475,17 +538,24 @@ export default function WaitingRoom({ user }) {
 
               {gameStep === 2 && selectedGame === 'context_guesser' && (
                 <div>
-                  <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>Question Category</Text>
-                  <Select
-                    defaultValue="academic"
-                    style={{ width: 200 }}
-                    disabled={!isHost}
-                    options={[
-                      { value: 'academic', label: 'Academic English' },
-                      { value: 'general', label: 'General Vocabulary' },
-                      { value: 'science', label: 'Science & Tech' },
-                    ]}
-                  />
+                  <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>
+                    Match Rules
+                  </Text>
+                  <div style={{
+                    borderRadius: 10,
+                    border: '1px solid #fed7aa',
+                    background: '#fff7ed',
+                    padding: '14px 16px',
+                    display: 'grid',
+                    gap: 8,
+                    maxWidth: 420,
+                  }}
+                  >
+                    <Text style={{ fontSize: 13, color: '#9a3412' }}>{resolvedCount || '?'} shared rounds for everyone in the room</Text>
+                    <Text style={{ fontSize: 13, color: '#9a3412' }}>20 seconds per round with the timer shown in-game</Text>
+                    <Text style={{ fontSize: 13, color: '#9a3412' }}>Early rounds blank 1-2 words, later rounds blank more</Text>
+                    <Text style={{ fontSize: 13, color: '#9a3412' }}>Each correct blank is worth 1 point</Text>
+                  </div>
                 </div>
               )}
 
@@ -531,7 +601,7 @@ export default function WaitingRoom({ user }) {
             {myMember?.is_ready ? '✓ Ready' : 'Ready'}
           </Button>
           {isHost && (
-            <Tooltip title={!canStart ? (!selectedGame ? 'Please select a game first' : 'All members must be ready') : ''}>
+            <Tooltip title={!canStart ? (!selectedGame ? 'Please select a game first' : !isCountValid ? 'Please select number of rounds' : 'All members must be ready') : ''}>
               <Button
                 size="large"
                 type="primary"

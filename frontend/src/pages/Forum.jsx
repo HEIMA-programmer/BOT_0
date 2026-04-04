@@ -4,7 +4,6 @@ import {
   App as AntdApp,
   AutoComplete,
   Avatar,
-  Badge,
   Button,
   Card,
   Empty,
@@ -38,16 +37,18 @@ import {
   PushpinOutlined,
   SearchOutlined,
   ShareAltOutlined,
-  TeamOutlined,
   UploadOutlined,
-  UserAddOutlined,
   UserOutlined,
   VideoCameraOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
-import { forumAPI, friendsAPI } from '../api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { forumAPI } from '../api';
+import { getVideoInfo } from './VideoPlayer';
+import HelpButton from '../components/HelpButton';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -62,6 +63,11 @@ const TAG_CONFIG = {
   friend: { label: 'Friend', color: 'cyan', desc: 'Friend zone posts' },
 };
 const getTagConfig = (tag) => TAG_CONFIG[tag] || { label: tag, color: 'default' };
+const ZONE_CONFIG = {
+  public: { label: 'Public Zone', color: 'orange' },
+  friend: { label: 'Friend Zone', color: 'cyan' },
+};
+const getZoneConfig = (zone) => ZONE_CONFIG[zone] || { label: zone || 'Unknown Zone', color: 'default' };
 const STATUS_CONFIG = {
   approved: { label: 'Approved', color: 'green' },
   pending: { label: 'Pending Review', color: 'gold' },
@@ -70,6 +76,7 @@ const STATUS_CONFIG = {
 // Tags available for user selection (public/friend are auto-set by zone, not user-selectable)
 const USER_SELECTABLE_TAGS = ['skills', 'experience', 'academic_culture'];
 const POSTS_PAGE_SIZE = 10;
+const ADMIN_POSTS_PAGE_SIZE = 20;
 const REVIEW_PAGE_SIZE = 8;
 const MY_POSTS_PAGE_SIZE = 10;
 
@@ -182,9 +189,11 @@ function AdminQueueCard({ post, onOpen, onReview }) {
         </Space>
         <div>
           <Title level={5} style={{ margin: 0 }}>{post.title}</Title>
-          <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '8px 0 0', color: '#6b7280' }}>
-            {post.content}
-          </Paragraph>
+          <div style={{ margin: '8px 0 0', color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+              {post.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+            </ReactMarkdown>
+          </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
           <Text type="secondary">{new Date(post.created_at).toLocaleString()}</Text>
@@ -201,23 +210,17 @@ function AdminQueueCard({ post, onOpen, onReview }) {
 
 export default function Forum({ user }) {
   const isAdmin = Boolean(user?.is_admin);
+  const postsPageSize = isAdmin ? ADMIN_POSTS_PAGE_SIZE : POSTS_PAGE_SIZE;
   const { message } = AntdApp.useApp();
   const navigate = useNavigate();
 
   const [activeZone, setActiveZone] = useState('public');
-  const [activeTab, setActiveTab] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-
-  // Friend management
-  const [friendsOpen, setFriendsOpen] = useState(false);
-  const [friends, setFriends] = useState([]);
-  const [friendRequests, setFriendRequests] = useState({ received: [], sent: [] });
-  const [friendSearchEmail, setFriendSearchEmail] = useState('');
-  const [friendSearchResults, setFriendSearchResults] = useState([]);
-  const [friendsLoading, setFriendsLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -233,6 +236,7 @@ export default function Forum({ user }) {
   const [forwardOpen, setForwardOpen] = useState(false);
   const [forwardPostId, setForwardPostId] = useState(null);
   const [forwardComment, setForwardComment] = useState('');
+  const [forwardZone, setForwardZone] = useState('public');
   const [forwarding, setForwarding] = useState(false);
 
   const [myPostsOpen, setMyPostsOpen] = useState(false);
@@ -260,8 +264,9 @@ export default function Forum({ user }) {
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, per_page: POSTS_PAGE_SIZE, zone: activeZone, include_forwards: 'true' };
-      if (activeTab !== 'all') params.tag = activeTab;
+      const params = { page, per_page: postsPageSize, include_forwards: 'true' };
+      if (!isAdmin) params.zone = activeZone;
+      if (searchQuery) params.search = searchQuery;
       const res = await forumAPI.getPosts(params);
       setPosts(res.data.posts);
       setTotal(res.data.total);
@@ -270,7 +275,7 @@ export default function Forum({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, activeZone, message, page]);
+  }, [activeZone, isAdmin, message, page, postsPageSize, searchQuery]);
 
   const fetchPendingPosts = useCallback(async (targetPage) => {
     if (!isAdmin) return;
@@ -326,70 +331,6 @@ export default function Forum({ user }) {
     navigate(`/listening/video/${videoRef.categoryId}/${videoRef.videoId}?fromForum=true`);
   };
 
-  const fetchFriends = useCallback(async () => {
-    try {
-      const [friendRes, reqRes] = await Promise.all([
-        friendsAPI.list(),
-        friendsAPI.getRequests(),
-      ]);
-      setFriends(friendRes.data.friends || []);
-      setFriendRequests(reqRes.data || { received: [], sent: [] });
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const handleSearchFriends = async () => {
-    if (!friendSearchEmail.trim()) return;
-    try {
-      const res = await friendsAPI.search(friendSearchEmail.trim());
-      setFriendSearchResults(res.data.users || []);
-    } catch {
-      message.error('Search failed');
-    }
-  };
-
-  const handleSendFriendRequest = async (email) => {
-    try {
-      await friendsAPI.sendRequest(email);
-      message.success('Friend request sent');
-      handleSearchFriends();
-      fetchFriends();
-    } catch (err) {
-      message.error(err.response?.data?.error || 'Failed to send request');
-    }
-  };
-
-  const handleAcceptFriend = async (requestId) => {
-    try {
-      await friendsAPI.accept(requestId);
-      message.success('Friend request accepted');
-      fetchFriends();
-    } catch (err) {
-      message.error(err.response?.data?.error || 'Failed to accept request');
-    }
-  };
-
-  const handleRejectFriend = async (requestId) => {
-    try {
-      await friendsAPI.reject(requestId);
-      message.success('Friend request rejected');
-      fetchFriends();
-    } catch (err) {
-      message.error(err.response?.data?.error || 'Failed to reject request');
-    }
-  };
-
-  const handleRemoveFriend = async (friendUserId) => {
-    try {
-      await friendsAPI.remove(friendUserId);
-      message.success('Friend removed');
-      fetchFriends();
-    } catch {
-      message.error('Failed to remove friend');
-    }
-  };
-
   useEffect(() => {
     fetchPosts();
   }, [fetchPosts]);
@@ -398,10 +339,8 @@ export default function Forum({ user }) {
     if (isAdmin) {
       fetchPendingPosts(reviewPage);
       fetchRejectReasons();
-    } else {
-      fetchFriends();
     }
-  }, [fetchPendingPosts, fetchRejectReasons, fetchFriends, isAdmin, reviewPage]);
+  }, [fetchPendingPosts, fetchRejectReasons, isAdmin, reviewPage]);
 
   const refreshDetail = useCallback(async (postId) => {
     try {
@@ -507,11 +446,12 @@ export default function Forum({ user }) {
     if (!forwardPostId) return;
     setForwarding(true);
     try {
-      await forumAPI.forwardPost(forwardPostId, forwardComment.trim() || undefined);
+      await forumAPI.forwardPost(forwardPostId, forwardComment.trim() || undefined, forwardZone);
       message.success('Post forwarded');
       setForwardOpen(false);
       setForwardPostId(null);
       setForwardComment('');
+      setForwardZone('public');
       fetchPosts();
       fetchMyPosts(1);
     } catch (err) {
@@ -602,13 +542,16 @@ export default function Forum({ user }) {
     }
   };
 
-  const tabItems = [
-    { key: 'all', label: 'All Posts' },
-    ...USER_SELECTABLE_TAGS.map((tag) => ({
-      key: tag,
-      label: <Tag color={getTagConfig(tag).color}>{getTagConfig(tag).label}</Tag>,
-    })),
-  ];
+  const handleSearchSubmit = (value) => {
+    const nextQuery = value.trim();
+    setSearchInput(value);
+    setPage(1);
+    setSearchQuery(nextQuery);
+  };
+
+  const paginationTotal = page > 1 && total <= (page - 1) * postsPageSize
+    ? ((page - 1) * postsPageSize) + 1
+    : total;
 
   const renderAttachment = (post) => {
     if (!post.file_url) return null;
@@ -644,6 +587,7 @@ export default function Forum({ user }) {
             <Text type="secondary">
               <Text strong>{item.username}</Text> forwarded this post
             </Text>
+            <Tag color={getZoneConfig(item.zone).color}>{getZoneConfig(item.zone).label}</Tag>
             <Text type="secondary" style={{ fontSize: 12 }}>{new Date(item.created_at).toLocaleDateString()}</Text>
           </Space>
           {item.comment && (
@@ -658,12 +602,15 @@ export default function Forum({ user }) {
                   {origPost.username?.charAt(0)?.toUpperCase() || 'U'}
                 </Avatar>
                 <Text strong style={{ fontSize: 13 }}>{origPost.username}</Text>
+                <Tag color={getZoneConfig(origPost.zone).color}>{getZoneConfig(origPost.zone).label}</Tag>
                 <Tag color={getTagConfig(origPost.tag).color}>{getTagConfig(origPost.tag).label}</Tag>
               </Space>
               <Title level={5} style={{ margin: '4px 0' }}>{origPost.title}</Title>
-              <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
-                {origPost.content}
-              </Paragraph>
+              <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                  {origPost.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                </ReactMarkdown>
+              </div>
             </Card>
           )}
         </Card>
@@ -687,13 +634,16 @@ export default function Forum({ user }) {
               </Avatar>
               <Text strong>{post.username}</Text>
               {post.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
+              <Tag color={getZoneConfig(post.zone).color}>{getZoneConfig(post.zone).label}</Tag>
               <Tag color={getTagConfig(post.tag).color}>{getTagConfig(post.tag).label}</Tag>
               <StatusTag status={post.status} />
             </Space>
             <Title level={5} style={{ margin: '4px 0' }}>{post.title}</Title>
-            <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0, color: '#6b7280' }}>
-              {post.content}
-            </Paragraph>
+            <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                {post.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+              </ReactMarkdown>
+            </div>
             <Space size={16} style={{ marginTop: 8, color: '#9ca3af' }}>
               {post.file_url && <span><FileOutlined /> File</span>}
               {post.video_url && <span><VideoCameraOutlined /> Video</span>}
@@ -712,6 +662,7 @@ export default function Forum({ user }) {
                   onClick={() => {
                     setForwardPostId(post.id);
                     setForwardComment('');
+                    setForwardZone(activeZone === 'friend' ? 'friend' : 'public');
                     setForwardOpen(true);
                   }}
                 />
@@ -753,13 +704,6 @@ export default function Forum({ user }) {
           </Text>
         </div>
         <Space wrap>
-          {!isAdmin && (
-            <Badge count={friendRequests.received?.length || 0} size="small">
-              <Button icon={<TeamOutlined />} onClick={() => { setFriendsOpen(true); fetchFriends(); }}>
-                Friends
-              </Button>
-            </Badge>
-          )}
           <Button icon={<HistoryOutlined />} onClick={() => { setMyPostsOpen(true); setMyPage(1); fetchMyPosts(1); }}>
             My Posts
           </Button>
@@ -808,7 +752,7 @@ export default function Forum({ user }) {
       {!isAdmin && (
         <Segmented
           value={activeZone}
-          onChange={(val) => { setActiveZone(val); setActiveTab('all'); setPage(1); }}
+          onChange={(val) => { setActiveZone(val); setPage(1); }}
           options={[
             { label: 'Public Zone', value: 'public' },
             { label: 'Friend Zone', value: 'friend' },
@@ -817,25 +761,28 @@ export default function Forum({ user }) {
         />
       )}
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={(key) => {
-          setActiveTab(key);
-          setPage(1);
-        }}
-        items={tabItems}
+      <Input.Search
+        allowClear
+        enterButton="Search"
+        placeholder="Search by post title or tag"
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.target.value)}
+        onSearch={handleSearchSubmit}
+        style={{ marginBottom: 16, maxWidth: 520 }}
       />
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>
-      ) : posts.length === 0 ? (
-        <Empty description={isAdmin ? 'No approved posts yet.' : 'No posts yet.'} />
       ) : (
         <>
-          {posts.map(renderPostCard)}
-          {total > POSTS_PAGE_SIZE && (
+          {posts.length === 0 ? (
+            <Empty description={isAdmin ? 'No approved posts yet.' : 'No posts yet.'} />
+          ) : (
+            posts.map(renderPostCard)
+          )}
+          {(paginationTotal > postsPageSize || page > 1) && (
             <div style={{ textAlign: 'center', marginTop: 16 }}>
-              <Pagination current={page} total={total} pageSize={POSTS_PAGE_SIZE} onChange={setPage} showSizeChanger={false} />
+              <Pagination current={page} total={paginationTotal} pageSize={postsPageSize} onChange={setPage} showSizeChanger={false} />
             </div>
           )}
         </>
@@ -996,6 +943,7 @@ export default function Forum({ user }) {
                   {new Date(detailPost.created_at).toLocaleString()}
                 </Text>
               </div>
+              <Tag color={getZoneConfig(detailPost.zone).color}>{getZoneConfig(detailPost.zone).label}</Tag>
               <Tag color={getTagConfig(detailPost.tag).color}>{getTagConfig(detailPost.tag).label}</Tag>
               <StatusTag status={detailPost.status} />
               {detailPost.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
@@ -1050,9 +998,41 @@ export default function Forum({ user }) {
               </Space>
             </div>
 
-            <Paragraph style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.7 }}>
-              {detailPost.content}
-            </Paragraph>
+            <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                  ),
+                }}
+              >
+                {detailPost.content.replace(/\[Video Reference\]\([^)]*\)/g, '')}
+              </ReactMarkdown>
+            </div>
+
+            {/* Inline video preview for posts with video reference */}
+            {(() => {
+              const ref = parseVideoReference(detailPost.content);
+              if (!ref) return null;
+              const v = getVideoInfo(ref.categoryId, ref.videoId);
+              const ytMatch = v?.url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+              if (!ytMatch) return null;
+              return (
+                <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
+                    <iframe
+                      src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+                      title="Video Preview"
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {renderAttachment(detailPost)}
             {detailPost.video_url && (
@@ -1126,11 +1106,23 @@ export default function Forum({ user }) {
       <Modal
         title="Forward Post"
         open={forwardOpen}
-        onCancel={() => setForwardOpen(false)}
+        onCancel={() => {
+          setForwardOpen(false);
+          setForwardZone('public');
+        }}
         onOk={handleForward}
         confirmLoading={forwarding}
         okText="Forward"
       >
+        {!isAdmin && (
+          <div style={{ marginBottom: 12 }}>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>Forward To</Text>
+            <Radio.Group value={forwardZone} onChange={(e) => setForwardZone(e.target.value)}>
+              <Radio.Button value="public">Public Zone</Radio.Button>
+              <Radio.Button value="friend">Friend Zone</Radio.Button>
+            </Radio.Group>
+          </div>
+        )}
         <TextArea
           rows={3}
           value={forwardComment}
@@ -1138,140 +1130,6 @@ export default function Forum({ user }) {
           placeholder="Add a comment to your forward (optional)..."
           maxLength={500}
         />
-      </Modal>
-
-      {/* Friends Management Modal */}
-      <Modal
-        title="Manage Friends"
-        open={friendsOpen}
-        onCancel={() => { setFriendsOpen(false); setFriendSearchEmail(''); setFriendSearchResults([]); }}
-        footer={null}
-        width={600}
-      >
-        <Tabs items={[
-          {
-            key: 'friends',
-            label: `My Friends (${friends.length})`,
-            children: friends.length === 0 ? (
-              <Empty description="No friends yet" />
-            ) : (
-              <List
-                dataSource={friends}
-                renderItem={(f) => (
-                  <List.Item
-                    actions={[
-                      <Popconfirm key="rm" title="Remove this friend?" onConfirm={() => handleRemoveFriend(f.friend_id)}>
-                        <Button size="small" danger icon={<DeleteOutlined />}>Remove</Button>
-                      </Popconfirm>,
-                    ]}
-                  >
-                    <List.Item.Meta
-                      avatar={<Avatar style={{ backgroundColor: '#2563eb' }}>{f.friend_username?.charAt(0)?.toUpperCase()}</Avatar>}
-                      title={f.friend_username}
-                      description={f.friend_email}
-                    />
-                  </List.Item>
-                )}
-              />
-            ),
-          },
-          {
-            key: 'search',
-            label: 'Find Friends',
-            children: (
-              <div>
-                <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
-                  <Input
-                    placeholder="Search by email..."
-                    value={friendSearchEmail}
-                    onChange={(e) => setFriendSearchEmail(e.target.value)}
-                    onPressEnter={handleSearchFriends}
-                  />
-                  <Button type="primary" icon={<SearchOutlined />} onClick={handleSearchFriends}>Search</Button>
-                </Space.Compact>
-                {friendSearchResults.length > 0 ? (
-                  <List
-                    dataSource={friendSearchResults}
-                    renderItem={(u) => (
-                      <List.Item
-                        actions={[
-                          u.is_friend ? (
-                            <Tag key="f" color="green">Already Friends</Tag>
-                          ) : u.has_pending_request ? (
-                            <Tag key="p" color="gold">Request Pending</Tag>
-                          ) : (
-                            <Button key="add" size="small" type="primary" icon={<UserAddOutlined />}
-                              onClick={() => handleSendFriendRequest(u.email)}>
-                              Add Friend
-                            </Button>
-                          ),
-                        ]}
-                      >
-                        <List.Item.Meta
-                          avatar={<Avatar style={{ backgroundColor: '#7c3aed' }}>{u.username?.charAt(0)?.toUpperCase()}</Avatar>}
-                          title={u.username}
-                          description={u.email}
-                        />
-                      </List.Item>
-                    )}
-                  />
-                ) : friendSearchEmail ? (
-                  <Empty description="No users found" />
-                ) : null}
-              </div>
-            ),
-          },
-          {
-            key: 'requests',
-            label: <Badge count={friendRequests.received?.length || 0} size="small" offset={[8, 0]}>Requests</Badge>,
-            children: (
-              <div>
-                {friendRequests.received?.length > 0 && (
-                  <>
-                    <Text strong style={{ display: 'block', marginBottom: 8 }}>Received</Text>
-                    <List
-                      dataSource={friendRequests.received}
-                      renderItem={(r) => (
-                        <List.Item
-                          actions={[
-                            <Button key="a" size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleAcceptFriend(r.id)}>Accept</Button>,
-                            <Button key="r" size="small" danger icon={<CloseOutlined />} onClick={() => handleRejectFriend(r.id)}>Reject</Button>,
-                          ]}
-                        >
-                          <List.Item.Meta
-                            avatar={<Avatar style={{ backgroundColor: '#059669' }}>{r.sender_username?.charAt(0)?.toUpperCase()}</Avatar>}
-                            title={r.sender_username}
-                            description={r.sender_email}
-                          />
-                        </List.Item>
-                      )}
-                    />
-                  </>
-                )}
-                {friendRequests.sent?.length > 0 && (
-                  <>
-                    <Text strong style={{ display: 'block', marginTop: 16, marginBottom: 8 }}>Sent</Text>
-                    <List
-                      dataSource={friendRequests.sent}
-                      renderItem={(r) => (
-                        <List.Item>
-                          <List.Item.Meta
-                            avatar={<Avatar>{r.receiver_username?.charAt(0)?.toUpperCase()}</Avatar>}
-                            title={r.receiver_username}
-                            description={<Tag color={r.status === 'pending' ? 'gold' : r.status === 'accepted' ? 'green' : 'red'}>{r.status}</Tag>}
-                          />
-                        </List.Item>
-                      )}
-                    />
-                  </>
-                )}
-                {(!friendRequests.received?.length && !friendRequests.sent?.length) && (
-                  <Empty description="No friend requests" />
-                )}
-              </div>
-            ),
-          },
-        ]} />
       </Modal>
 
       <Modal
@@ -1300,26 +1158,37 @@ export default function Forum({ user }) {
                 >
                   {item.type === 'forward' ? (
                     <div style={{ width: '100%' }}>
-                      <Tag color="cyan">Forwarded</Tag>
+                      <Space size={6} wrap>
+                        <Tag color="cyan">Forwarded</Tag>
+                        <Tag color={getZoneConfig(item.zone).color}>{getZoneConfig(item.zone).label}</Tag>
+                      </Space>
                       {item.comment && <Paragraph style={{ margin: '8px 0 6px' }}>{item.comment}</Paragraph>}
                       <Card size="small" style={{ background: '#fafafa', borderRadius: 8 }}>
-                        <Text strong>{item.original_post?.title}</Text>
-                        <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '4px 0 0', color: '#6b7280' }}>
-                          {item.original_post?.content}
-                        </Paragraph>
+                        <Space size={6} wrap style={{ marginBottom: 4 }}>
+                          <Tag color={getZoneConfig(item.original_post?.zone).color}>{getZoneConfig(item.original_post?.zone).label}</Tag>
+                          <Text strong>{item.original_post?.title}</Text>
+                        </Space>
+                        <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                            {(item.original_post?.content || '').replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                          </ReactMarkdown>
+                        </div>
                       </Card>
                     </div>
                   ) : (
                     <div style={{ width: '100%' }}>
                       <Space size={6} wrap>
+                        <Tag color={getZoneConfig(item.zone).color}>{getZoneConfig(item.zone).label}</Tag>
                         <Tag color={getTagConfig(item.tag).color}>{getTagConfig(item.tag).label}</Tag>
                         <StatusTag status={item.status} />
                         {item.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
                         <Text strong>{item.title}</Text>
                       </Space>
-                      <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '6px 0 0', color: '#6b7280' }}>
-                        {item.content}
-                      </Paragraph>
+                      <div style={{ color: '#6b7280', maxHeight: 44, overflow: 'hidden', fontSize: 14, lineHeight: 1.6 }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span>, p: ({ children }) => <span>{children} </span> }}>
+                          {item.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
+                        </ReactMarkdown>
+                      </div>
                       {item.status === 'rejected' && (
                         <Text type="danger">
                           Rejected: {item.rejection_reason}
@@ -1349,6 +1218,7 @@ export default function Forum({ user }) {
           </>
         )}
       </Modal>
+      <HelpButton guideKey="forum" />
     </div>
   );
 }

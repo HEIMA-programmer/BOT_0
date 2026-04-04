@@ -25,6 +25,7 @@ export default function VideoTile({
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: tileSize,
+        aspectRatio: '16 / 9',
         position: 'relative',
         overflow: 'hidden',
       }}

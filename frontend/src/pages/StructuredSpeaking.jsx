@@ -1,5 +1,5 @@
 import { Typography, Card, Row, Col, Button, Space, Progress, Breadcrumb, Input, Divider, Tag, message, Spin } from 'antd';
-import { AudioOutlined, MessageOutlined, PauseCircleOutlined, ArrowLeftOutlined, PlusOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { AudioOutlined, MessageOutlined, PauseCircleOutlined, ArrowLeftOutlined, PlusOutlined, CheckCircleOutlined, LoadingOutlined, ReadOutlined, TeamOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
@@ -16,15 +16,63 @@ export default function StructuredSpeaking() {
 
   const scenarioType = state.type || null;
 
-  const recommendedTopics = [
-    { id: 1, title: 'Describe your research interests', desc: 'Explain what academic topics interest you and why they are important' },
-    { id: 2, title: 'Explain a concept from your field', desc: 'Choose a key concept and explain it in simple terms' },
-    { id: 3, title: 'Discuss online vs in-person learning', desc: 'Compare the advantages and disadvantages of each learning mode' },
-    { id: 4, title: 'Describe how you approach group projects', desc: 'Explain your strategy for collaborating with classmates' },
-    { id: 5, title: 'Evaluate an academic source', desc: 'Describe how you determine if a source is credible and reliable' },
-    { id: 6, title: 'Discuss critical thinking in academia', desc: 'Explain why critical thinking is important in academic work' },
-    { id: 7, title: 'Describe a challenging academic problem', desc: 'Explain a difficult problem you faced and how you solved it' },
-    { id: 8, title: 'Summarize a recent article you read', desc: 'Briefly explain the main argument and findings of an academic article' },
+  const SPEAKING_CATEGORIES = [
+    {
+      id: 'lecture-response',
+      label: 'Lecture Response',
+      icon: <ReadOutlined />,
+      color: '#059669',
+      bg: '#ecfdf5',
+      description: 'Practice summarizing, explaining, and reacting to lecture content',
+      topics: [
+        { id: 1, title: 'Summarize a recent article you read', desc: 'Briefly explain the main argument and findings of an academic article' },
+        { id: 2, title: 'Explain a concept from your field', desc: 'Choose a key concept and explain it in simple terms' },
+        { id: 3, title: 'React to a lecture claim', desc: 'Agree or disagree with a statement from a lecture and explain why' },
+        { id: 4, title: 'Compare two theories', desc: 'Describe two theories from your field and explain how they differ' },
+      ],
+    },
+    {
+      id: 'group-discussion',
+      label: 'Group Discussion',
+      icon: <TeamOutlined />,
+      color: '#2563eb',
+      bg: '#eff6ff',
+      description: 'Practice expressing opinions, collaborating, and debating in groups',
+      topics: [
+        { id: 5, title: 'Discuss online vs in-person learning', desc: 'Compare the advantages and disadvantages of each learning mode' },
+        { id: 6, title: 'Describe how you approach group projects', desc: 'Explain your strategy for collaborating with classmates' },
+        { id: 7, title: 'Pitch a research idea to your team', desc: 'Present a new research concept and persuade others of its value' },
+        { id: 8, title: 'Mediate a disagreement in a group', desc: 'Practice finding common ground when team members have different views' },
+      ],
+    },
+    {
+      id: 'qa-session',
+      label: 'Q&A Session',
+      icon: <QuestionCircleOutlined />,
+      color: '#d97706',
+      bg: '#fffbeb',
+      description: 'Practice asking and answering academic questions with clarity',
+      topics: [
+        { id: 9, title: 'Discuss critical thinking in academia', desc: 'Explain why critical thinking is important in academic work' },
+        { id: 10, title: 'Evaluate an academic source', desc: 'Describe how you determine if a source is credible and reliable' },
+        { id: 11, title: 'Ask clarifying questions about a paper', desc: 'Practice formulating thoughtful questions about research methodology or findings' },
+        { id: 12, title: 'Respond to a challenging question', desc: 'Practice handling unexpected or difficult questions in a presentation Q&A' },
+      ],
+    },
+    {
+      id: 'office-hour',
+      label: 'Office Hour',
+      icon: <MessageOutlined />,
+      color: '#dc2626',
+      bg: '#fef2f2',
+      description: 'Practice one-on-one conversations with professors and advisors',
+      topics: [
+        { id: 13, title: 'Describe your research interests', desc: 'Explain what academic topics interest you and why they are important' },
+        { id: 14, title: 'Describe a challenging academic problem', desc: 'Explain a difficult problem you faced and how you solved it' },
+        { id: 15, title: 'Request feedback on a draft', desc: 'Ask your professor for specific feedback on your writing or research' },
+        { id: 16, title: 'Discuss your academic goals', desc: 'Share your long-term academic plans and seek guidance' },
+      ],
+    },
   ];
 
   const scenarioTopics = {
@@ -44,10 +92,15 @@ export default function StructuredSpeaking() {
     ],
   };
 
-  const currentTopics = scenarioType ? scenarioTopics[scenarioType] : recommendedTopics;
-
   // State management
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedTopic, setSelectedTopic] = useState(null);
+
+  const currentTopics = scenarioType
+    ? scenarioTopics[scenarioType]
+    : selectedCategory
+      ? SPEAKING_CATEGORIES.find(c => c.id === selectedCategory)?.topics || []
+      : [];
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [customTopicTitle, setCustomTopicTitle] = useState('');
@@ -318,30 +371,112 @@ export default function StructuredSpeaking() {
           )}
         </Card>
 
-        <Divider>
-          <Tag color="blue">{scenarioType ? 'Selected Scenario Topics' : 'Recommended Topics'}</Tag>
-        </Divider>
-
-        <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
-          {currentTopics.map((topic) => (
-            <Col xs={24} sm={12} key={topic.id}>
-              <Card
-                style={{
-                  borderRadius: 12,
-                  border: '1px solid #e5e7eb',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                bodyStyle={{ padding: 24 }}
-                onClick={() => handleTopicSelect(topic)}
-                hoverable
+        {scenarioType ? (
+          <>
+            <Divider>
+              <Tag color="blue">Selected Scenario Topics</Tag>
+            </Divider>
+            <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
+              {currentTopics.map((topic) => (
+                <Col xs={24} sm={12} key={topic.id}>
+                  <Card
+                    style={{ borderRadius: 12, border: '1px solid #e5e7eb', cursor: 'pointer', transition: 'all 0.2s' }}
+                    styles={{ body: { padding: 24 } }}
+                    onClick={() => handleTopicSelect(topic)}
+                    hoverable
+                  >
+                    <Title level={4} style={{ fontWeight: 600, marginBottom: 12 }}>{topic.title}</Title>
+                    <Text type="secondary" style={{ fontSize: 14 }}>{topic.desc}</Text>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </>
+        ) : !selectedCategory ? (
+          <>
+            <div style={{ marginBottom: 16, marginTop: 24 }}>
+              <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#374151' }}>
+                Choose a category
+              </Title>
+            </div>
+            <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
+              {SPEAKING_CATEGORIES.map((cat) => (
+                <Col xs={24} sm={12} lg={6} key={cat.id}>
+                  <Card
+                    hoverable
+                    onClick={() => setSelectedCategory(cat.id)}
+                    style={{
+                      borderRadius: 12,
+                      border: '1px solid #e5e7eb',
+                      height: '100%',
+                      cursor: 'pointer',
+                    }}
+                    styles={{ body: { padding: 20 } }}
+                  >
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 12,
+                        background: cat.bg,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: 14,
+                        fontSize: 20,
+                        color: cat.color,
+                      }}
+                    >
+                      {cat.icon}
+                    </div>
+                    <Space wrap size={[8, 8]} style={{ marginBottom: 10 }}>
+                      <Title level={5} style={{ margin: 0, fontWeight: 600 }}>
+                        {cat.label}
+                      </Title>
+                      <Tag color="processing" style={{ borderRadius: 999 }}>
+                        {cat.topics.length} topics
+                      </Tag>
+                    </Space>
+                    <Text type="secondary" style={{ display: 'block', fontSize: 13, lineHeight: 1.6 }}>
+                      {cat.description}
+                    </Text>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: 16, marginTop: 24 }}>
+              <Button
+                type="link"
+                icon={<ArrowLeftOutlined />}
+                onClick={() => setSelectedCategory(null)}
+                style={{ padding: 0, fontSize: 14, color: '#6b7280' }}
               >
-                <Title level={4} style={{ fontWeight: 600, marginBottom: 12 }}>{topic.title}</Title>
-                <Text type="secondary" style={{ fontSize: 14 }}>{topic.desc}</Text>
-              </Card>
-            </Col>
-          ))}
-        </Row>
+                All Categories
+              </Button>
+              <Title level={4} style={{ margin: '8px 0 0', fontWeight: 600, color: '#374151' }}>
+                {SPEAKING_CATEGORIES.find(c => c.id === selectedCategory)?.label} Topics
+              </Title>
+            </div>
+            <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
+              {currentTopics.map((topic) => (
+                <Col xs={24} sm={12} key={topic.id}>
+                  <Card
+                    style={{ borderRadius: 12, border: '1px solid #e5e7eb', cursor: 'pointer', transition: 'all 0.2s' }}
+                    styles={{ body: { padding: 24 } }}
+                    onClick={() => handleTopicSelect(topic)}
+                    hoverable
+                  >
+                    <Title level={4} style={{ fontWeight: 600, marginBottom: 12 }}>{topic.title}</Title>
+                    <Text type="secondary" style={{ fontSize: 14 }}>{topic.desc}</Text>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </>
+        )}
       </div>
     );
   }

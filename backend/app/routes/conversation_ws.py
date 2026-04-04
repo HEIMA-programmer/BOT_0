@@ -14,6 +14,13 @@ from app.models.chat_session import ChatSession
 from app.models.chat_message import ChatMessage
 from datetime import datetime, timezone
 
+# Use real OS threads (not eventlet green threads) for response forwarding
+try:
+    import eventlet.patcher
+    _real_threading = eventlet.patcher.original('threading')
+except ImportError:
+    _real_threading = threading
+
 
 # Store active sessions (session_id -> {service, db_session_id, scenario_type})
 active_sessions = {}
@@ -48,6 +55,11 @@ def handle_start_conversation(data=None):
     if scenario_type in ('office_hours', 'seminar_discussion'):
         initial_message = "Hello, I just arrived. Please start the conversation according to your role."
 
+    # Clean up any existing session before starting a new one
+    if session_id in active_sessions:
+        current_app.logger.info(f'Cleaning up existing session before restart: {session_id}')
+        _cleanup_session(session_id)
+
     try:
         service = ConversationService(
             system_prompt=system_prompt,
@@ -61,7 +73,7 @@ def handle_start_conversation(data=None):
         }
         service.start()
 
-        # Forward Gemini responses to the client in a background thread
+        # Forward responses in a green thread (must use patched threading for socketio.emit)
         app = current_app._get_current_object()
         threading.Thread(
             target=_forward_responses,
@@ -91,7 +103,36 @@ def handle_audio_chunk(data):
 def handle_end_conversation():
     session_id = request.sid
     current_app.logger.info(f'Ending conversation for session: {session_id}')
-    _cleanup_session(session_id, save_messages=True)
+    session_data = active_sessions.get(session_id)
+    if not session_data:
+        return
+
+    service = session_data['service']
+    db_session_id = session_data.get('db_session_id')
+
+    # Save messages to database
+    if db_session_id:
+        try:
+            messages = service.get_messages()
+            if messages:
+                for msg in messages:
+                    db.session.add(ChatMessage(
+                        session_id=db_session_id,
+                        role=msg['role'],
+                        content=msg['content'],
+                    ))
+                chat_session = db.session.get(ChatSession, db_session_id)
+                if chat_session and not chat_session.ended_at:
+                    chat_session.ended_at = datetime.now(timezone.utc)
+                db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f'Failed to save messages: {e}')
+
+    # Stop the service but keep session data for scoring
+    try:
+        service.stop()
+    except Exception:
+        pass
 
 
 @socketio.on('request_scoring', namespace='/conversation')
@@ -120,6 +161,9 @@ def handle_request_scoring(data=None):
         args=(messages, scenario_type, sub_scenario, db_session_id, session_id, app),
         daemon=True
     ).start()
+
+    # Now safe to remove from active_sessions
+    active_sessions.pop(session_id, None)
 
 
 def _do_scoring(messages, scenario_type, sub_scenario, db_session_id, ws_session_id, app):
@@ -175,8 +219,11 @@ def _cleanup_session(session_id, save_messages=False):
         except Exception as e:
             current_app.logger.error(f'Failed to save messages: {e}')
 
-    service.stop()
-    del active_sessions[session_id]
+    try:
+        service.stop()
+    except Exception:
+        pass
+    active_sessions.pop(session_id, None)
 
 
 def _forward_responses(service, session_id, app):

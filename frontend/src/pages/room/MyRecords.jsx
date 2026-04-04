@@ -16,7 +16,25 @@ const TABS = [
   { key: 'game', label: 'Game' },
 ];
 
-export default function MyRecords() {
+function getMySubmission(round, userId) {
+  if (!round.answers || !userId) return null;
+  // Word Duel uses int keys, Context Guesser uses string keys — try both
+  return round.answers[userId] || round.answers[String(userId)] || null;
+}
+
+function getRoundPoints(round, userId, gameType) {
+  if (gameType === 'word_duel') {
+    return round.winner_user_id === userId ? 1 : 0;
+  }
+  // Context Guesser: use points dict or submission's correct_count
+  if (round.points && round.points[userId] != null) {
+    return round.points[userId];
+  }
+  const sub = getMySubmission(round, userId);
+  return sub?.correct_count ?? 0;
+}
+
+export default function MyRecords({ user }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
   const [records, setRecords] = useState([]);
@@ -167,35 +185,100 @@ export default function MyRecords() {
           <div>
             <Space style={{ marginBottom: 16 }}>
               <Tag color="blue">{gameDetailData.game_type?.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Game'}</Tag>
-              <Text>Score: <Text strong>{gameDetailData.score}</Text> / {gameDetailData.total_rounds}</Text>
+              <Text>Score: <Text strong>{gameDetailData.score}</Text> pts</Text>
+              <Text>Rounds: <Text strong>{gameDetailData.total_rounds}</Text></Text>
               <Text>Placement: <Text strong>#{gameDetailData.placement}</Text></Text>
+              {gameDetailData.duration_secs ? (
+                <Text>Time: <Text strong>{Math.max(gameDetailData.duration_secs, 0)}s</Text></Text>
+              ) : null}
             </Space>
             {gameDetailData.rounds_data && (() => {
               try {
                 const rounds = JSON.parse(gameDetailData.rounds_data);
+                const uid = gameDetailData.user_id || user?.id;
+                const isContextGuesser = gameDetailData.game_type === 'context_guesser';
+
                 return (
                   <List
                     dataSource={rounds}
-                    renderItem={(round, idx) => (
-                      <List.Item>
-                        <div style={{ width: '100%' }}>
-                          <Text strong>Round {idx + 1}</Text>
-                          <div style={{ marginTop: 4 }}>
-                            <Text type="secondary">Q: {round.question || round.sentence}</Text>
-                          </div>
-                          <div style={{ marginTop: 4 }}>
-                            <Text>Answer: <Text code>{round.correct_answer}</Text></Text>
-                            {round.winner_user_id ? (
-                              <Tag color="green" style={{ marginLeft: 8 }}>
-                                Won by user #{round.winner_user_id}
+                    renderItem={(round, idx) => {
+                      const pts = getRoundPoints(round, uid, gameDetailData.game_type);
+                      const mySub = getMySubmission(round, uid);
+
+                      return (
+                        <List.Item>
+                          <div style={{ width: '100%' }}>
+                            {/* Round header with points */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Text strong>Round {idx + 1}</Text>
+                              <Tag color={pts > 0 ? 'green' : 'default'} style={{ fontSize: 11 }}>
+                                +{pts} pt{pts !== 1 ? 's' : ''}
                               </Tag>
-                            ) : (
-                              <Tag color="default" style={{ marginLeft: 8 }}>No winner</Tag>
-                            )}
+                            </div>
+
+                            {/* Question */}
+                            <div style={{ marginTop: 4 }}>
+                              <Text type="secondary">Q: {round.question || round.sentence}</Text>
+                            </div>
+                            {round.revealed_sentence ? (
+                              <div style={{ marginTop: 4 }}>
+                                <Text type="secondary">Sentence: {round.revealed_sentence}</Text>
+                              </div>
+                            ) : null}
+
+                            {/* Correct answer */}
+                            <div style={{ marginTop: 4 }}>
+                              <Text>
+                                Correct answer:{' '}
+                                <Text code>
+                                  {Array.isArray(round.correct_answers)
+                                    ? round.correct_answers.join(', ')
+                                    : round.correct_answer}
+                                </Text>
+                              </Text>
+                            </div>
+
+                            {/* My answer */}
+                            <div style={{ marginTop: 6 }}>
+                              {!isContextGuesser ? (
+                                // Word Duel: single answer
+                                mySub ? (
+                                  <Text>
+                                    My answer:{' '}
+                                    <Tag color={mySub.correct ? 'success' : 'error'} style={{ fontSize: 12 }}>
+                                      {mySub.answer || '(no answer)'}
+                                    </Tag>
+                                  </Text>
+                                ) : (
+                                  <Text type="secondary" style={{ fontSize: 12 }}>No answer submitted</Text>
+                                )
+                              ) : (
+                                // Context Guesser: multiple blanks
+                                mySub && Array.isArray(mySub.answers) ? (
+                                  <div>
+                                    <Text>My answers:{' '}</Text>
+                                    {mySub.answers.map((ans, i) => {
+                                      const isCorrect = mySub.correct_mask?.[i];
+                                      return (
+                                        <Tag
+                                          key={i}
+                                          color={isCorrect ? 'success' : 'error'}
+                                          style={{ fontSize: 12, marginBottom: 4 }}
+                                        >
+                                          {ans || '(blank)'}
+                                        </Tag>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <Text type="secondary" style={{ fontSize: 12 }}>No answer submitted</Text>
+                                )
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </List.Item>
-                    )}
+                        </List.Item>
+                      );
+                    }}
                   />
                 );
               } catch {

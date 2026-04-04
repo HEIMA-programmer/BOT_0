@@ -10,6 +10,8 @@ Handles WaitingRoom real-time sync:
 """
 
 import threading
+import math
+import re
 from datetime import datetime, timezone
 
 from flask_socketio import emit, join_room, leave_room
@@ -23,7 +25,11 @@ from app import socketio, db
 from app.models.room import Room, RoomMember
 from app.models.room_record import RoomRecord
 from app.models.game_record import GameRecord
-from app.routes.room import _remove_member, generate_game_questions
+from app.routes.room import (
+    _remove_member,
+    CONTEXT_GUESSER_TOTAL_ROUNDS,
+    generate_game_questions,
+)
 
 # Lock protecting all three dicts below — acquire before reading or mutating.
 _state_lock = threading.Lock()
@@ -33,7 +39,7 @@ active_rooms: dict = {}
 sid_room: dict = {}
 # user_id → pending threading.Timer for deferred DB cleanup on disconnect
 pending_cleanups: dict = {}
-# room_id → {title, audio_url, source_slug}  (WatchTogether content)
+# room_id → {title, video_url, categoryId, videoId}  (WatchTogether content)
 room_content: dict = {}
 # room_id → {is_playing: bool, position: float}
 room_playback: dict = {}
@@ -45,6 +51,8 @@ game_states: dict = {}
 room_invitations: dict = {}
 # user_id → sid (for direct messaging)
 user_sids: dict = {}
+ROUND_DURATION_SECS = 20
+GUESS_TOKEN_PATTERN = re.compile(r"[A-Za-z'-]+")
 
 
 def _deferred_cleanup(app, user_id, room_id):
@@ -240,16 +248,7 @@ def _emit_game_state_sync(room_id):
     state = game_states.get(room_id)
     if not state:
         return
-    cur_round = state['current_round']
-    question = _sanitize_question(state['questions'][cur_round], state['game_type'])
-    emit('game_state_sync', {
-        'game_type': state['game_type'],
-        'total_rounds': state['total_rounds'],
-        'round': cur_round,
-        'question': question,
-        'scores': {int(k): v for k, v in state['scores'].items()},
-        'members': state['members'],
-    })
+    emit('game_state_sync', _build_round_payload(room_id, state))
 
 
 @socketio.on('request_game_state', namespace='/room')
@@ -345,7 +344,12 @@ def handle_start_game(data):
         emit('room_error', {'message': 'All members must be ready before starting'})
         return
 
-    count = 5 if game_type == 'word_duel' else 4
+    # Accept optional question_count from frontend (3–30), fall back to defaults
+    raw_count = data.get('question_count')
+    if isinstance(raw_count, int) and 3 <= raw_count <= 30:
+        count = raw_count
+    else:
+        count = 5 if game_type == 'word_duel' else CONTEXT_GUESSER_TOTAL_ROUNDS
     questions = generate_game_questions(game_type, count)
     if not questions:
         emit('room_error', {'message': 'No questions available. Please seed word data first.'})
@@ -357,6 +361,7 @@ def handle_start_game(data):
     member_list = [{'user_id': m.user_id, 'username': m.user.username, 'role': m.role} for m in members]
 
     # Initialize game state
+    round_started_at = _time.time()
     game_state = {
         'game_type': game_type,
         'questions': questions,
@@ -365,26 +370,18 @@ def handle_start_game(data):
         'scores': {m.user_id: 0 for m in members},
         'round_answers': {},  # user_id → {answer, correct, timestamp}
         'locked_players': set(),
-        'round_start_time': _time.time(),
+        'round_start_time': round_started_at,
         'members': member_list,
         'rounds_log': [],
-        'start_time': _time.time(),
+        'start_time': round_started_at,
+        'round_duration_secs': ROUND_DURATION_SECS,
+        'player_completion_ms': {m.user_id: 0 for m in members},
     }
     game_states[room_id] = game_state
 
-    # Strip answers before sending question to clients
-    first_q = _sanitize_question(questions[0], game_type)
-
     socketio.emit(
         'game_started',
-        {
-            'room_id': room_id,
-            'game_type': game_type,
-            'total_rounds': len(questions),
-            'members': member_list,
-            'question': first_q,
-            'round': 0,
-        },
+        _build_round_payload(room_id, game_state),
         namespace='/room',
         room=str(room_id),
     )
@@ -399,18 +396,72 @@ def _sanitize_question(q, game_type):
     """Remove answer from question before sending to clients."""
     if game_type == 'word_duel':
         return {'id': q['id'], 'question': q['question']}
-    else:
-        return {'id': q['id'], 'sentence': q['sentence']}
+    return {
+        'id': q['id'],
+        'sentence': q['sentence'],
+        'spoken_text': q.get('spoken_text', ''),
+        'blank_count': q.get('blank_count', 1),
+        'blank_lengths': q.get('blank_lengths', []),
+    }
+
+
+def _build_round_payload(room_id, state):
+    cur_round = state['current_round']
+    question = _sanitize_question(state['questions'][cur_round], state['game_type'])
+    return {
+        'room_id': room_id,
+        'game_type': state['game_type'],
+        'total_rounds': state['total_rounds'],
+        'round': cur_round,
+        'question': question,
+        'scores': {int(k): v for k, v in state['scores'].items()},
+        'members': state['members'],
+        'remaining_time': _remaining_round_seconds(state),
+        'submitted_players': list(state['locked_players']),
+    }
+
+
+def _remaining_round_seconds(state):
+    limit = state.get('round_duration_secs', ROUND_DURATION_SECS)
+    elapsed = _time.time() - state['round_start_time']
+    return max(0, min(limit, math.ceil(limit - elapsed)))
+
+
+def _normalize_guess_token(value):
+    matches = GUESS_TOKEN_PATTERN.findall((value or '').strip())
+    return matches[0].lower() if matches else ''
+
+
+def _all_players_locked(state):
+    return all(uid in state['locked_players'] for uid in state['scores'])
+
+
+def _context_round_leader(round_answers):
+    best_user_id = None
+    best_signature = None
+
+    for uid, submission in round_answers.items():
+        # Higher correct_count is better; lower response_ms (faster) is better.
+        signature = (
+            submission.get('correct_count', 0),
+            -submission.get('response_ms', ROUND_DURATION_SECS * 1000),
+        )
+        if best_signature is None or signature > best_signature:
+            best_signature = signature
+            best_user_id = uid
+
+    return best_user_id
 
 
 def _round_timer(app, room_id, round_idx):
     """Background task: waits 20 seconds then ends the round if not already ended."""
-    socketio.sleep(20)
+    socketio.sleep(ROUND_DURATION_SECS)
     with app.app_context():
-        state = game_states.get(room_id)
-        if not state or state['current_round'] != round_idx:
-            return  # Round already ended
-        _end_round(app, room_id, winner_id=None)
+        with _state_lock:
+            state = game_states.get(room_id)
+            if not state or state['current_round'] != round_idx:
+                return  # Round already ended
+            _end_round(app, room_id, winner_id=None)
 
 
 def _end_round(app, room_id, winner_id=None):
@@ -421,35 +472,88 @@ def _end_round(app, room_id, winner_id=None):
 
     round_idx = state['current_round']
     question = state['questions'][round_idx]
-    correct_answer = question['answer']
-    explanation = question.get('explanation')
-
-    # Log this round
-    round_log = {
-        'round': round_idx,
-        'question': question.get('question') or question.get('sentence'),
-        'correct_answer': correct_answer,
-        'winner_user_id': winner_id,
-        'answers': dict(state['round_answers']),
-    }
-    state['rounds_log'].append(round_log)
-
-    # Build points for this round
     points = {uid: 0 for uid in state['scores']}
-    if winner_id is not None:
-        points[winner_id] = 1
 
-    # Broadcast round result
-    socketio.emit(
-        'round_ended',
-        {
+    if state['game_type'] == 'word_duel':
+        correct_answer = question['answer']
+        explanation = question.get('explanation')
+        round_log = {
+            'round': round_idx,
+            'question': question.get('question') or question.get('sentence'),
+            'correct_answer': correct_answer,
+            'winner_user_id': winner_id,
+            'answers': dict(state['round_answers']),
+        }
+        if winner_id is not None:
+            points[winner_id] = 1
+
+        round_payload = {
             'round': round_idx,
             'correct_answer': correct_answer,
             'explanation': explanation,
             'winner_user_id': winner_id,
             'points': points,
             'scores': dict(state['scores']),
-        },
+        }
+    else:
+        correct_answers = question.get('answers', [])
+        revealed_sentence = question.get('spoken_text', '')
+        winner_id = _context_round_leader(state['round_answers'])
+        serialized_answers = {}
+
+        for uid in state['scores']:
+            submission = state['round_answers'].get(uid)
+            if submission:
+                points[uid] = submission.get('correct_count', 0)
+                state['scores'][uid] = state['scores'].get(uid, 0) + points[uid]
+                state['player_completion_ms'][uid] = (
+                    state['player_completion_ms'].get(uid, 0)
+                    + submission.get('response_ms', ROUND_DURATION_SECS * 1000)
+                )
+                serialized_answers[str(uid)] = {
+                    'answers': submission.get('answers', []),
+                    'correct_mask': submission.get('correct_mask', []),
+                    'correct_count': submission.get('correct_count', 0),
+                    'response_ms': submission.get('response_ms', ROUND_DURATION_SECS * 1000),
+                }
+            else:
+                state['player_completion_ms'][uid] = (
+                    state['player_completion_ms'].get(uid, 0)
+                    + state.get('round_duration_secs', ROUND_DURATION_SECS) * 1000
+                )
+                serialized_answers[str(uid)] = {
+                    'answers': [],
+                    'correct_mask': [],
+                    'correct_count': 0,
+                    'response_ms': state.get('round_duration_secs', ROUND_DURATION_SECS) * 1000,
+                }
+
+        round_log = {
+            'round': round_idx,
+            'question': question.get('sentence'),
+            'revealed_sentence': revealed_sentence,
+            'correct_answer': ', '.join(correct_answers),
+            'correct_answers': correct_answers,
+            'winner_user_id': winner_id,
+            'answers': serialized_answers,
+            'points': points,
+        }
+        round_payload = {
+            'round': round_idx,
+            'correct_answer': ', '.join(correct_answers),
+            'correct_answers': correct_answers,
+            'revealed_sentence': revealed_sentence,
+            'explanation': question.get('explanation'),
+            'winner_user_id': winner_id,
+            'points': points,
+            'scores': dict(state['scores']),
+        }
+
+    state['rounds_log'].append(round_log)
+
+    socketio.emit(
+        'round_ended',
+        round_payload,
         namespace='/room',
         room=str(room_id),
     )
@@ -466,14 +570,9 @@ def _end_round(app, room_id, winner_id=None):
         state['locked_players'] = set()
         state['round_start_time'] = _time.time()
 
-        next_q = _sanitize_question(state['questions'][state['current_round']], state['game_type'])
         socketio.emit(
             'next_round',
-            {
-                'round': state['current_round'],
-                'question': next_q,
-                'scores': dict(state['scores']),
-            },
+            _build_round_payload(room_id, state),
             namespace='/room',
             room=str(room_id),
         )
@@ -488,7 +587,14 @@ def _end_game(app, room_id):
         return
 
     scores = state['scores']
-    sorted_players = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    player_completion_ms = state.get('player_completion_ms', {})
+    if state['game_type'] == 'context_guesser':
+        sorted_players = sorted(
+            scores.items(),
+            key=lambda item: (-item[1], player_completion_ms.get(item[0], ROUND_DURATION_SECS * 1000)),
+        )
+    else:
+        sorted_players = sorted(scores.items(), key=lambda item: item[1], reverse=True)
     placements = {}
     for idx, (uid, _) in enumerate(sorted_players):
         placements[uid] = idx + 1
@@ -496,13 +602,29 @@ def _end_game(app, room_id):
     duration_secs = int(_time.time() - state['start_time'])
 
     final_results = [
-        {'user_id': uid, 'score': scores[uid], 'placement': placements[uid],
-         'username': next((m['username'] for m in state['members'] if m['user_id'] == uid), 'Unknown')}
+        {
+            'user_id': uid,
+            'score': scores[uid],
+            'placement': placements[uid],
+            'username': next((m['username'] for m in state['members'] if m['user_id'] == uid), 'Unknown'),
+            'completion_ms': (
+                player_completion_ms.get(uid) if state['game_type'] == 'context_guesser' else None
+            ),
+            'completion_secs': (
+                round(player_completion_ms.get(uid, 0) / 1000, 2)
+                if state['game_type'] == 'context_guesser'
+                else None
+            ),
+        }
         for uid, _ in sorted_players
     ]
 
     # Save game records to database and broadcast results
     try:
+        room = db.session.get(Room, room_id)
+        room_name = room.name if room else 'Game Room'
+        game_label = state['game_type'].replace('_', ' ').title()
+
         for uid, score in scores.items():
             game_record = GameRecord(
                 room_id=room_id,
@@ -517,21 +639,18 @@ def _end_game(app, room_id):
             db.session.add(game_record)
 
             # Also create a RoomRecord for room history
-            room = db.session.get(Room, room_id)
-            room_name = room.name if room else 'Game Room'
             placement_str = f'{placements[uid]}{"st" if placements[uid] == 1 else "nd" if placements[uid] == 2 else "rd" if placements[uid] == 3 else "th"}'
             room_record = RoomRecord(
                 room_id=room_id,
                 user_id=uid,
                 room_name=room_name,
                 room_type='game',
-                summary=f'{state["game_type"].replace("_", " ").title()} · {score} pts · {placement_str} place',
+                summary=f'{game_label} · {score} pts · {placement_str} place',
                 duration_secs=duration_secs,
             )
             db.session.add(room_record)
 
         # Reset room status
-        room = db.session.get(Room, room_id)
         if room:
             room.status = 'waiting'
             for member in RoomMember.query.filter_by(room_id=room_id).all():
@@ -575,73 +694,100 @@ def handle_submit_answer(data):
         return
 
     if uid in state['locked_players']:
-        emit('answer_result', {'correct': False, 'locked': True})
+        if state['game_type'] == 'context_guesser':
+            emit('answer_result', {'submitted': True, 'locked': True})
+        else:
+            emit('answer_result', {'correct': False, 'locked': True})
         return
 
     round_idx = state['current_round']
     question = state['questions'][round_idx]
-    correct = answer.lower() == question['answer'].lower()
+    if state['game_type'] == 'word_duel':
+        correct = answer.lower() == question['answer'].lower()
 
-    state['round_answers'][uid] = {
-        'answer': answer,
-        'correct': correct,
-        'timestamp': _time.time(),
-    }
+        state['round_answers'][uid] = {
+            'answer': answer,
+            'correct': correct,
+            'timestamp': _time.time(),
+        }
 
-    if correct:
-        state['scores'][uid] = state['scores'].get(uid, 0) + 1
-        state['locked_players'].add(uid)
-        emit('answer_result', {'correct': True})
+        if correct:
+            state['scores'][uid] = state['scores'].get(uid, 0) + 1
+            state['locked_players'].add(uid)
+            emit('answer_result', {'correct': True})
 
-        # For word duel, first correct answer ends the round immediately
-        if state['game_type'] == 'word_duel':
             app = current_app._get_current_object()
             socketio.start_background_task(_end_round_wrapper, app, room_id, uid, round_idx)
         else:
-            # For context guesser, notify but don't end the round
+            emit('answer_result', {'correct': False, 'locked': False})
             socketio.emit(
                 'player_answered',
-                {'user_id': uid, 'correct': True},
+                {'user_id': uid, 'correct': False},
                 namespace='/room',
                 room=str(room_id),
             )
-    else:
-        if state['game_type'] == 'context_guesser':
-            # Lock player after wrong answer in context guesser
-            state['locked_players'].add(uid)
-            emit('answer_result', {'correct': False, 'locked': True})
-        else:
-            # Word duel: can retry
-            emit('answer_result', {'correct': False, 'locked': False})
+        return
 
-        socketio.emit(
-            'player_answered',
-            {'user_id': uid, 'correct': False},
-            namespace='/room',
-            room=str(room_id),
-        )
+    raw_answers = data.get('answers')
+    if not isinstance(raw_answers, list):
+        raw_answers = [answer]
 
-    # Check if all players are locked (context guesser)
-    if state['game_type'] == 'context_guesser':
-        all_locked = all(uid in state['locked_players'] for uid in state['scores'])
-        if all_locked:
-            # Find winner (first correct answer by timestamp)
-            winner = None
-            best_time = float('inf')
-            for uid, ans in state['round_answers'].items():
-                if ans['correct'] and ans['timestamp'] < best_time:
-                    winner = uid
-                    best_time = ans['timestamp']
-            app = current_app._get_current_object()
-            socketio.start_background_task(_end_round_wrapper, app, room_id, winner, round_idx)
+    expected_answers = question.get('answers', [])
+    submitted_answers = []
+    for index, _ in enumerate(expected_answers):
+        value = raw_answers[index] if index < len(raw_answers) else ''
+        submitted_answers.append((value or '').strip())
+
+    correct_mask = [
+        _normalize_guess_token(submitted_answers[index]) == _normalize_guess_token(expected_answers[index])
+        for index in range(len(expected_answers))
+    ]
+    response_ms = min(
+        int((_time.time() - state['round_start_time']) * 1000),
+        state.get('round_duration_secs', ROUND_DURATION_SECS) * 1000,
+    )
+
+    state['round_answers'][uid] = {
+        'answers': submitted_answers,
+        'correct_mask': correct_mask,
+        'correct_count': sum(correct_mask),
+        'timestamp': _time.time(),
+        'response_ms': max(response_ms, 0),
+    }
+    state['locked_players'].add(uid)
+
+    emit(
+        'answer_result',
+        {
+            'submitted': True,
+            'locked': True,
+            'filled_count': sum(1 for submitted_answer in submitted_answers if submitted_answer),
+            'blank_count': len(expected_answers),
+        },
+    )
+    socketio.emit(
+        'player_answered',
+        {
+            'user_id': uid,
+            'submitted': True,
+            'correct_count': sum(correct_mask),
+        },
+        namespace='/room',
+        room=str(room_id),
+    )
+
+    if _all_players_locked(state):
+        app = current_app._get_current_object()
+        socketio.start_background_task(_end_round_wrapper, app, room_id, None, round_idx)
 
 
 def _end_round_wrapper(app, room_id, winner_id, expected_round):
     """Wrapper to call _end_round only if the round hasn't been ended yet."""
     with app.app_context():
-        state = game_states.get(room_id)
-        if state and state['current_round'] == expected_round:
-            _end_round(app, room_id, winner_id)
+        with _state_lock:
+            state = game_states.get(room_id)
+            if state and state['current_round'] == expected_round:
+                _end_round(app, room_id, winner_id)
 
 
 @socketio.on('invite_friend', namespace='/room')
@@ -693,8 +839,9 @@ def handle_select_content(data):
         return
     content = {
         'title':       (data.get('title') or '').strip(),
-        'audio_url':   (data.get('audio_url') or '').strip(),
-        'source_slug': (data.get('source_slug') or '').strip(),
+        'video_url':   (data.get('video_url') or '').strip(),
+        'categoryId':  (data.get('categoryId') or '').strip(),
+        'videoId':     data.get('videoId'),
     }
     room_content[room_id] = content
     room_playback[room_id] = {'is_playing': False, 'position': 0.0}
