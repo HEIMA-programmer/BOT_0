@@ -10,6 +10,7 @@ export default function AudioPlayer({ src, title }) {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset state when audio source changes */
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -23,6 +24,7 @@ export default function AudioPlayer({ src, title }) {
       audio.load();
     }
   }, [src]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const togglePlay = async () => {
     if (!audioRef.current) return;

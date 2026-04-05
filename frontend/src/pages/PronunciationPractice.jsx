@@ -18,7 +18,7 @@ export default function PronunciationPractice() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [progressMessage, setProgressMessage] = useState('');
-  const [nativeAudioUrl, setNativeAudioUrl] = useState(null);
+  const [_nativeAudioUrl, setNativeAudioUrl] = useState(null);
   const [userAudioUrl, setUserAudioUrl] = useState(null);
 
   const socketRef = useRef(null);
@@ -26,7 +26,7 @@ export default function PronunciationPractice() {
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
   const streamRef = useRef(null);
-  const nativeAudioRef = useRef(null);
+  const _nativeAudioRef = useRef(null);
   const userAudioRef = useRef(null);
 
   const practiceWords = [

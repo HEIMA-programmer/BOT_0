@@ -46,10 +46,6 @@ export default function ConversationHistory() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  useEffect(() => {
-    loadSessions();
-  }, [page]);
-
   const loadSessions = async () => {
     setLoading(true);
     try {
@@ -61,6 +57,12 @@ export default function ConversationHistory() {
     }
     setLoading(false);
   };
+
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- load data on page change */
+  useEffect(() => {
+    loadSessions();
+  }, [page]);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const loadSessionDetail = async (sessionId) => {
     setDetailLoading(true);

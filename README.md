@@ -137,3 +137,5 @@ Visit http://localhost:5173 — recommend **Chrome** for full voice features.
 | 1294201870 | Yupei Yang |
 | qwqsad11 | Chenxi Huang |
 | KoCookie, kira Hu | Ruoqi Hu |
+
+> **Note on commit distribution:** Yanbin Xu (HEIMA-programmer) has a higher commit count because, in addition to feature development, he handled cross-cutting responsibilities including PR code review, CI/CD pipeline configuration, production deployment (Docker, Nginx, ECS), release management, and debugging integration issues across sprints. Merge commits from reviewing and merging teammates' PRs also contribute to the count. Feature development was distributed across all team members through sprint-based task assignment with rotating Scrum roles (see [Team Working Agreement](docs/team_working_agreement.md)).

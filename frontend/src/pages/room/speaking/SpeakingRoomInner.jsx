@@ -61,7 +61,7 @@ export default function SpeakingRoomInner({ user, roomId, initialRoom, initialMe
       setShowLeave(true);
     } else {
       markLeaving();
-      try { await roomAPI.leave(roomId, { summary: `Topic: ${topic}` }); } catch {}
+      try { await roomAPI.leave(roomId, { summary: `Topic: ${topic}` }); } catch { /* ignored */ }
       navigate('/room');
     }
   }, [isHost, members.length, roomId, navigate, topic, markLeaving]);
@@ -69,7 +69,7 @@ export default function SpeakingRoomInner({ user, roomId, initialRoom, initialMe
   const confirmLeave = useCallback(async () => {
     markLeaving();
     setShowLeave(false);
-    try { await roomAPI.leave(roomId, { summary: `Topic: ${topic}` }); } catch {}
+    try { await roomAPI.leave(roomId, { summary: `Topic: ${topic}` }); } catch { /* ignored */ }
     navigate('/room');
   }, [roomId, navigate, topic, markLeaving]);
 

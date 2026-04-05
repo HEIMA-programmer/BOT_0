@@ -22,6 +22,16 @@ import HelpButton from '../components/HelpButton';
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
 
+const LEARN_ENCOURAGEMENTS = [
+  'Keep it up! Every word counts.',
+  'Great progress! Stay consistent.',
+  'You are building a strong vocabulary!',
+  'Practice makes perfect!',
+  'One step at a time — you got this!',
+];
+
+const getRandomMsg = (messages) => messages[Math.floor(Math.random() * messages.length)];
+
 const DAILY_COUNT_KEY = 'dailyWordsCount';
 const DEFAULT_COUNT = 10;
 
@@ -79,7 +89,6 @@ export default function DailyWords() {
   const [reviewWords, setReviewWords] = useState([]);
   const [reviewIndex, setReviewIndex] = useState(0);
   const [showReviewDef, setShowReviewDef] = useState(false);
-  const [reviewCountSetting, setReviewCountSetting] = useState(0);
   const [reviewSettingOpen, setReviewSettingOpen] = useState(false);
   const [tempReviewCount, setTempReviewCount] = useState(10);
 
@@ -335,7 +344,7 @@ export default function DailyWords() {
       setReviewListWords(words);
       setTempReviewCount(Math.min(10, words.length));
       setReviewSettingOpen(true);
-    } catch (error) {
+    } catch {
       message.error('Failed to load review words');
     } finally {
       setReviewListLoading(false);
@@ -386,7 +395,7 @@ export default function DailyWords() {
       setAllWords(res.data.words || []);
       setAllWordsTotal(res.data.total || 0);
       setAllWordsPage(page);
-    } catch (error) {
+    } catch {
       message.error('Failed to load words');
     } finally {
       setAllWordsLoading(false);
@@ -408,7 +417,7 @@ export default function DailyWords() {
       ));
       setMasteredCount(prev => prev + 1);
       setTodayWords(prev => prev.filter(w => w.word_id !== wordId));
-    } catch (error) {
+    } catch {
       message.error('Failed to mark as mastered');
     }
   };
@@ -420,7 +429,7 @@ export default function DailyWords() {
       const res = await dailyLearningAPI.getReviewWords();
       setReviewListWords(res.data.words || []);
       setReviewListOpen(true);
-    } catch (error) {
+    } catch {
       message.error('Failed to load review words');
     } finally {
       setReviewListLoading(false);
@@ -444,7 +453,7 @@ export default function DailyWords() {
       const res = await dailyLearningAPI.getMasteredWords();
       setMasteredWords(res.data.words || []);
       setMasteredOpen(true);
-    } catch (error) {
+    } catch {
       message.error('Failed to load mastered words');
     } finally {
       setMasteredLoading(false);
@@ -466,7 +475,7 @@ export default function DailyWords() {
     try {
       const res = await wordBankAPI.getAll();
       setBankWords(res.data.words || []);
-    } catch (err) {
+    } catch {
       message.error('Failed to load word bank');
     } finally {
       setBankLoading(false);
@@ -516,7 +525,7 @@ export default function DailyWords() {
       await wordBankAPI.remove(bankWordToDelete);
       setBankWords(bankWords.filter((w) => w.id !== bankWordToDelete));
       message.success('Word removed from bank');
-    } catch (err) {
+    } catch {
       message.error('Failed to remove word');
     } finally {
       setBankDeleteModalVisible(false);
@@ -546,7 +555,7 @@ export default function DailyWords() {
         message.success('Copied to clipboard');
       }
       setBankExportModalVisible(false);
-    } catch (err) {
+    } catch {
       message.error('Export failed');
     }
   };
@@ -594,7 +603,7 @@ export default function DailyWords() {
       }
       setBankShowDef(false);
       message.success('Removed from bank');
-    } catch (err) {
+    } catch {
       message.error('Failed to remove');
     }
   };

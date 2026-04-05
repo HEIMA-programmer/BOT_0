@@ -23,7 +23,7 @@ export default function useConversation() {
   const nextPlayTimeRef = useRef(0);
   const optionsRef = useRef(null);
   const statusRef = useRef(status);
-  statusRef.current = status;
+  statusRef.current = status; // eslint-disable-line react-hooks/refs -- sync ref with latest status for use in callbacks
 
   // Track the latest AI transcript text via ref to avoid stale closure issues
   const aiTranscriptRef = useRef('');

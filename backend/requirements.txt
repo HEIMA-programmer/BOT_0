@@ -17,3 +17,4 @@ google-genai>=1.47.0
 cryptography==41.0.7
 agora-token-builder
 eventlet
+flake8
