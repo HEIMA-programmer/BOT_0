@@ -639,7 +639,9 @@ def _end_game(app, room_id):
             db.session.add(game_record)
 
             # Also create a RoomRecord for room history
-            placement_str = f'{placements[uid]}{"st" if placements[uid] == 1 else "nd" if placements[uid] == 2 else "rd" if placements[uid] == 3 else "th"}'
+            p = placements[uid]
+            suffix = "st" if p == 1 else "nd" if p == 2 else "rd" if p == 3 else "th"
+            placement_str = f'{p}{suffix}'
             room_record = RoomRecord(
                 room_id=room_id,
                 user_id=uid,
@@ -838,10 +840,10 @@ def handle_select_content(data):
         emit('room_error', {'message': 'Only the host can select content'})
         return
     content = {
-        'title':       (data.get('title') or '').strip(),
-        'video_url':   (data.get('video_url') or '').strip(),
-        'categoryId':  (data.get('categoryId') or '').strip(),
-        'videoId':     data.get('videoId'),
+        'title': (data.get('title') or '').strip(),
+        'video_url': (data.get('video_url') or '').strip(),
+        'categoryId': (data.get('categoryId') or '').strip(),
+        'videoId': data.get('videoId'),
     }
     room_content[room_id] = content
     room_playback[room_id] = {'is_playing': False, 'position': 0.0}
@@ -859,7 +861,7 @@ def handle_sync_playback(data):
         return
     state = {
         'is_playing': bool(data.get('is_playing', False)),
-        'position':   float(data.get('position', 0)),
+        'position': float(data.get('position', 0)),
     }
     room_playback[room_id] = state
     socketio.emit('playback_synced', state, namespace='/room',
@@ -877,10 +879,10 @@ def handle_send_comment(data):
     if not member or not text:
         return
     comment = {
-        'user_id':  current_user.id,
+        'user_id': current_user.id,
         'username': current_user.username,
-        'text':     text,
-        'time':     datetime.now(timezone.utc).strftime('%H:%M'),
+        'text': text,
+        'time': datetime.now(timezone.utc).strftime('%H:%M'),
     }
     socketio.emit('comment_received', comment, namespace='/room', room=str(room_id))
 

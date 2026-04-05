@@ -130,7 +130,7 @@ export default function WordBank() {
       await wordBankAPI.remove(wordToDelete);
       setWords(words.filter((w) => w.id !== wordToDelete));
       message.success('Word removed from bank');
-    } catch (err) {
+    } catch {
       message.error('Failed to remove word');
     } finally {
       setDeleteModalVisible(false);
@@ -155,7 +155,7 @@ export default function WordBank() {
           setSelectedWords(new Set());
           setBatchDeleteMode(false);
           message.success(`${selectedWords.size} words deleted`);
-        } catch (err) {
+        } catch {
           message.error('Failed to delete words');
         }
       }
@@ -241,7 +241,7 @@ export default function WordBank() {
         message.success('Copied to clipboard');
       }
       setExportModalVisible(false);
-    } catch (err) {
+    } catch {
       message.error('Export failed');
     }
   };
@@ -291,7 +291,7 @@ export default function WordBank() {
       }
       setShowDef(false);
       message.success('Removed from bank');
-    } catch (err) {
+    } catch {
       message.error('Failed to remove');
     }
   };
@@ -321,7 +321,7 @@ export default function WordBank() {
       setAllWords(res.data.words || []);
       setAllWordsTotal(res.data.total || 0);
       setAllWordsPage(page);
-    } catch (error) {
+    } catch {
       message.error('Failed to load words');
     } finally {
       setAllWordsLoading(false);
@@ -340,7 +340,7 @@ export default function WordBank() {
       const res = await dailyLearningAPI.getReviewWords();
       setReviewListWords(res.data.words || []);
       setReviewListOpen(true);
-    } catch (error) {
+    } catch {
       message.error('Failed to load review words');
     } finally {
       setReviewListLoading(false);
@@ -353,7 +353,7 @@ export default function WordBank() {
       const res = await dailyLearningAPI.getMasteredWords();
       setMasteredWords(res.data.words || []);
       setMasteredOpen(true);
-    } catch (error) {
+    } catch {
       message.error('Failed to load mastered words');
     } finally {
       setMasteredLoading(false);
@@ -368,7 +368,7 @@ export default function WordBank() {
       setAllWords(prev => prev.map(w =>
         w.id === wordId ? { ...w, progress_status: 'mastered' } : w
       ));
-    } catch (error) {
+    } catch {
       message.error('Failed to mark as mastered');
     }
   };

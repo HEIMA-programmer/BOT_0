@@ -3,8 +3,7 @@ import random
 import re
 import secrets
 import string
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request, current_app

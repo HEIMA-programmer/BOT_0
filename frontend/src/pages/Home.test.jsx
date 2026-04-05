@@ -40,7 +40,7 @@ describe('Home page', () => {
 
     expect(await screen.findByText('Welcome back! Ready to practice?')).toBeTruthy();
     await waitFor(() => expect(mockDailyLearningAPI.getStats).toHaveBeenCalled());
-    expect(await screen.findByText((content, el) => content.includes('25') && content.includes('570'))).toBeTruthy();
+    expect(await screen.findByText((content) => content.includes('25') && content.includes('570'))).toBeTruthy();
   });
 
   it('renders all five module cards and navigates on click', async () => {

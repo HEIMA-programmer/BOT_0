@@ -13,7 +13,10 @@ class ForumPost(db.Model):
     user_id = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False
     )
-    zone = db.Column(db.String(10), nullable=False, default='public', server_default=db.text("'public'"))  # public, friend
+    zone = db.Column(
+        db.String(10), nullable=False, default='public',
+        server_default=db.text("'public'"),
+    )  # public, friend
     tag = db.Column(db.String(30), nullable=False)  # user-defined tags
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)

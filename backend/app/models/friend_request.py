@@ -34,8 +34,14 @@ class FriendRequest(db.Model):
         db.UniqueConstraint('sender_id', 'receiver_id', name='uq_friend_request'),
     )
 
-    sender = db.relationship('User', foreign_keys=[sender_id], backref=db.backref('sent_friend_requests', lazy=True))
-    receiver = db.relationship('User', foreign_keys=[receiver_id], backref=db.backref('received_friend_requests', lazy=True))
+    sender = db.relationship(
+        'User', foreign_keys=[sender_id],
+        backref=db.backref('sent_friend_requests', lazy=True),
+    )
+    receiver = db.relationship(
+        'User', foreign_keys=[receiver_id],
+        backref=db.backref('received_friend_requests', lazy=True),
+    )
 
     def to_dict(self):
         return {

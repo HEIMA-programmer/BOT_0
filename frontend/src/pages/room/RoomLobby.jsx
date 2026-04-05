@@ -24,6 +24,7 @@ const TYPE_CARDS = [
   { key: 'game', label: 'Game Room', Icon: TrophyOutlined, color: '#ea580c', desc: 'Vocabulary games' },
 ];
 
+// eslint-disable-next-line no-unused-vars
 export default function RoomLobby({ user }) {
   const navigate = useNavigate();
   const { message } = AntdApp.useApp();

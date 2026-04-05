@@ -69,7 +69,7 @@ class SpeakingService:
                     time.sleep(0.1)
                     try:
                         os.unlink(temp_input_path)
-                    except:
+                    except OSError:
                         current_app.logger.warning(f'Could not delete temp input file: {temp_input_path}')
 
             if temp_output_path and os.path.exists(temp_output_path):
@@ -79,7 +79,7 @@ class SpeakingService:
                     time.sleep(0.1)
                     try:
                         os.unlink(temp_output_path)
-                    except:
+                    except OSError:
                         current_app.logger.warning(f'Could not delete temp output file: {temp_output_path}')
 
     def _get_extension(self, mime_type):
@@ -153,9 +153,9 @@ class SpeakingService:
                 done = True
 
             def recognized(evt):
-                nonlocal pron_results, recognized_text
-                if (evt.result.reason == speechsdk.ResultReason.RecognizedSpeech or
-                        evt.result.reason == speechsdk.ResultReason.NoMatch):
+                nonlocal recognized_text
+                if (evt.result.reason == speechsdk.ResultReason.RecognizedSpeech
+                        or evt.result.reason == speechsdk.ResultReason.NoMatch):
                     pron_results.append(speechsdk.PronunciationAssessmentResult(evt.result))
                     if evt.result.text.strip():
                         recognized_text += " " + evt.result.text.strip()
@@ -245,7 +245,9 @@ You are an academic English speaking assessor. Evaluate the CONTENT of this spok
 Topic: "{topic}"
 Transcript: "{transcript}"
 
-IMPORTANT CONTEXT: This transcript comes from speech recognition, which may contain minor transcription errors. Focus on the overall communication ability rather than penalizing small recognition mistakes.
+IMPORTANT CONTEXT: This transcript comes from speech recognition, which may contain minor
+transcription errors. Focus on the overall communication ability rather than penalizing
+small recognition mistakes.
 
 Evaluate on three dimensions (0-100 scale). Use 60 as the baseline for acceptable performance.
 
@@ -300,7 +302,10 @@ Return ONLY a JSON object with this exact structure:
                     json={
                         "model": "deepseek-chat",
                         "messages": [
-                            {"role": "system", "content": "You are an expert English language assessor. Always respond with valid JSON only."},
+                            {"role": "system", "content": (
+                                "You are an expert English language assessor. "
+                                "Always respond with valid JSON only."
+                            )},
                             {"role": "user", "content": prompt},
                         ],
                         "temperature": 0,

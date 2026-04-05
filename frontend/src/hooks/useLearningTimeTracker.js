@@ -6,6 +6,7 @@ const apiBaseURL = import.meta.env.DEV
   : (import.meta.env.VITE_API_BASE_URL || '/api');
 
 export default function useLearningTimeTracker(module, activityType) {
+  // eslint-disable-next-line react-hooks/purity -- Date.now() initializer is intentional for time tracking
   const startedAtRef = useRef(Date.now());
   const accumulatedMsRef = useRef(0);
 

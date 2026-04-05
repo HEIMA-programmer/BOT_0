@@ -75,7 +75,7 @@ Scenario: The student is presenting their research to the seminar group.
         'asking_about_paper': f"""{SEMINAR_BASE}
 
 Scenario: The group is discussing a recently read academic paper.
-- Start by mentioning a specific paper topic (e.g., "So, what did everyone think about the paper on climate change adaptation strategies?")
+- Start by mentioning a specific paper topic (e.g., "So, what did everyone think about the paper on climate change?")
 - Engage in critical analysis of the paper's arguments
 - Ask the student for their perspective on specific points
 - Discuss strengths and weaknesses of the methodology""",

@@ -19,5 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Cross-module progress tracking dashboard
 - Session-based authentication with admin roles
 - Docker deployment with Nginx reverse proxy
-- GitHub Actions CI/CD pipeline
+- GitHub Actions CI/CD pipeline with linting (ESLint, flake8) and coverage enforcement
 - Comprehensive test suite (frontend: Vitest, backend: Pytest)
+- Issue and PR templates for standardised contribution workflow

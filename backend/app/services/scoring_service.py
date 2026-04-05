@@ -41,7 +41,10 @@ class ScoringService:
                     json={
                         "model": "deepseek-chat",
                         "messages": [
-                            {"role": "system", "content": "You are an expert English language assessor. Always respond with valid JSON only."},
+                            {"role": "system", "content": (
+                                "You are an expert English language assessor. "
+                                "Always respond with valid JSON only."
+                            )},
                             {"role": "user", "content": prompt},
                         ],
                         "temperature": 0.3,
@@ -82,7 +85,11 @@ class ScoringService:
       "feedback": "<one sentence about how well the student accomplished the scenario goals>"
     },"""
 
-        return f"""Evaluate the following English conversation between a student and an AI conversation partner.{scenario_context}
+        header = (
+            "Evaluate the following English conversation "
+            "between a student and an AI conversation partner."
+        )
+        return f"""{header}{scenario_context}
 
 ## Conversation Transcript:
 {transcript}
