@@ -120,6 +120,12 @@ Visit http://localhost:5173 — recommend **Chrome** for full voice features.
 - **Edge**: Full support
 - **Safari**: Limited — Web Speech API has limited support. Voice features show a graceful fallback message.
 
+## AI Disclosure
+
+> In accordance with our [Team Working Agreement (Section 8 - AI Usage Policy)](docs/team_working_agreement.md), we disclose all AI-assisted contributions in this project.
+>
+> **Claude (Anthropic)** appears in the contributors list solely due to a **non-functional infrastructure change** — switching the Dockerfile's Debian package mirror from `deb.debian.org` to `mirrors.aliyun.com` to resolve network issues during Docker builds. **No application features or business logic were involved.** While AI tools were used to assist development throughout the project, all AI-generated code was personally reviewed and understood by the submitting team member before committing, in compliance with our AI Usage Policy.
+
 ## Our Team
 
 | GitHub Username | Real Name |
