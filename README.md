@@ -4,21 +4,22 @@ A web application that helps incoming university students transition from everyd
 
 ## Tech Stack
 
-| Layer    | Technology                     |
-|----------|--------------------------------|
-| Frontend | React + Vite + Ant Design      |
-| Backend  | Python Flask                   |
-| Database | SQLite + SQLAlchemy            |
-| AI       | OpenAI Chat API                |
-| Voice    | Web Speech API (browser native)|
-| Auth     | Flask-Login (session-based)    |
-| CI/CD    | GitHub Actions                 |
-| Deploy   | Render (free tier)             |
+| Layer      | Technology                                              |
+|------------|---------------------------------------------------------|
+| Frontend   | React 19 + Vite 8 + Ant Design 6                       |
+| Backend    | Python 3.11 + Flask 3.1 + Flask-SocketIO                |
+| Database   | SQLite + SQLAlchemy                                     |
+| AI         | OpenAI, Google Gemini, Anthropic Claude, DeepSeek       |
+| Voice      | Web Speech API (browser native) + Azure Speech Services |
+| Real-time  | Agora RTC (video/audio) + Socket.IO (WebSocket)         |
+| Auth       | Flask-Login (session-based)                             |
+| CI/CD      | GitHub Actions                                          |
+| Deploy     | Docker + Nginx + ECS                                    |
 
 ## Prerequisites
 
 - Node.js 18+
-- Python 3.9+
+- Python 3.11+
 - npm 9+
 
 ## Quick Start
@@ -34,7 +35,8 @@ cd academic-english-app
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in your OPENAI_API_KEY and FLASK_SECRET_KEY
+# Edit .env and fill in required API keys (see .env.example for all variables)
+# At minimum: FLASK_SECRET_KEY, OPENAI_API_KEY, GOOGLE_API_KEY
 ```
 
 ### 3. Backend setup
@@ -71,18 +73,26 @@ Visit http://localhost:5173 — recommend **Chrome** for full voice features.
 ## Project Structure
 
 ```
-├── frontend/                # React + Vite
-│   ├── src/pages/           # Page components
+├── frontend/                # React 19 + Vite 8
+│   ├── src/pages/           # Page components (25+)
 │   ├── src/components/      # Shared UI components
+│   ├── src/hooks/           # Custom React hooks
 │   ├── src/api/             # API request functions (mock-ready)
-│   └── src/assets/          # Images, icons
-├── backend/                 # Flask
-│   ├── app/routes/          # API route handlers
-│   ├── app/models/          # SQLAlchemy models
+│   └── public/AWL/          # Academic Word List data
+├── backend/                 # Flask + SocketIO
+│   ├── app/routes/          # REST + WebSocket route handlers
+│   ├── app/models/          # SQLAlchemy models (20+)
 │   ├── app/services/        # Business logic, AI calls
 │   └── tests/               # pytest tests
+├── nginx/                   # Nginx reverse proxy config
 ├── docs/                    # API contracts, architecture, meeting notes
+├── Audio/                   # Listening module audio content
+├── GroupDiscussion/          # Group discussion scenarios
+├── OfficeHour/              # Office hour scenarios
+├── Q&ASession/              # Q&A session scenarios
 ├── .github/workflows/       # CI/CD config
+├── Dockerfile               # Multi-stage Docker build
+├── docker-compose.yml       # Production deployment
 ├── .env.example             # Environment variable template
 └── README.md                # This file
 ```
@@ -92,6 +102,7 @@ Visit http://localhost:5173 — recommend **Chrome** for full voice features.
 - [Architecture](docs/architecture.md)
 - [Database Schema](docs/db-schema.md)
 - [Sprint 1 API Contracts](docs/api-sprint1.md)
+- [Sprint 2-3 API Contracts](docs/api-sprint2-3.md)
 
 ## Contributing
 
