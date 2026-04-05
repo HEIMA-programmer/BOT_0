@@ -124,7 +124,7 @@ Visit http://localhost:5173 — recommend **Chrome** for full voice features.
 
 > In accordance with our [Team Working Agreement (Section 8 - AI Usage Policy)](docs/team_working_agreement.md), we disclose all AI-assisted contributions in this project.
 >
-> **Claude (Anthropic)** appears in the contributors list solely due to a **non-functional infrastructure change** — switching the Dockerfile's Debian package mirror from `deb.debian.org` to `mirrors.aliyun.com` to resolve network issues during Docker builds. **No application features, business logic, or functional code were written by AI.** All feature code, tests, and architecture were designed and implemented entirely by the team members listed below.
+> **Claude (Anthropic)** appears in the contributors list solely due to a **non-functional infrastructure change** — switching the Dockerfile's Debian package mirror from `deb.debian.org` to `mirrors.aliyun.com` to resolve network issues during Docker builds. **No application features or business logic were involved.** While AI tools were used to assist development throughout the project, all AI-generated code was personally reviewed and understood by the submitting team member before committing, in compliance with our AI Usage Policy.
 
 ## Our Team
 
