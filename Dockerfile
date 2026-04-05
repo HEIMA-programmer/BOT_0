@@ -26,7 +26,7 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt eventlet
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source
 COPY backend/ ./backend/
