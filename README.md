@@ -1,5 +1,7 @@
 # Academic English Practice App
 
+> **Live Demo: [https://diicsu.cn](https://diicsu.cn)** — Deployed on ECS with Docker + Nginx + HTTPS. Use Chrome for full voice features.
+
 A web application that helps incoming university students transition from everyday English to academic English, enabling them to confidently participate in lectures, seminars, and academic discussions.
 
 ## Tech Stack

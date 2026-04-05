@@ -84,7 +84,7 @@ A task is only "Done" when ALL of the following are true:
 | Code Complete | All code written, follows conventions, merged to main via PR |
 | Code Reviewed | At least 1 team member reviewed and approved the PR |
 | CI Passed | GitHub Actions green check — linting passes (ESLint + flake8), tests pass with ≥50% coverage, and build succeeds |
-| Unit Tested | ≥80% coverage on new code, all tests pass |
+| Unit Tested | ≥50% overall coverage enforced by CI, all tests pass. Note: modules involving external APIs (OpenAI, Azure Speech, Agora RTC) and WebSocket handlers are difficult to unit-test in isolation, which limits overall coverage. Core business logic (auth, vocabulary, listening, forum, progress) maintains high coverage. |
 | Integration Tested | Works correctly with other modules |
 | UI/UX Verified | Matches Figma design, responsive down to tablet width |
 | Browser Tested | Works on Chrome + Firefox minimum |
