@@ -83,7 +83,7 @@ A task is only "Done" when ALL of the following are true:
 |---|---|
 | Code Complete | All code written, follows conventions, merged to main via PR |
 | Code Reviewed | At least 1 team member reviewed and approved the PR |
-| CI Passed | GitHub Actions green check — lint + tests pass |
+| CI Passed | GitHub Actions green check — tests pass and build succeeds |
 | Unit Tested | ≥80% coverage on new code, all tests pass |
 | Integration Tested | Works correctly with other modules |
 | UI/UX Verified | Matches Figma design, responsive down to tablet width |
