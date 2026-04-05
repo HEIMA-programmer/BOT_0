@@ -14,6 +14,9 @@ RUN npm run build
 # ============================================================
 FROM python:3.11-slim
 
+# Use Aliyun mirror for faster package downloads in China
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
+
 # System dependencies for Azure Speech SDK and general use
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
