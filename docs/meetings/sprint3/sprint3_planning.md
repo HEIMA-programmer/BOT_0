@@ -1,4 +1,4 @@
-# Sprint 2 Planning Meeting
+# Sprint 3 Planning Meeting
 
 **Date:** 2026-03-30  
 **Time:** 10:00 – 12:00 (2 hours)  
