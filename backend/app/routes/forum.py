@@ -13,6 +13,7 @@ from app.models.forum_post import ForumPost
 from app.models.forum_post_pin import ForumPostPin
 from app.models.friendship import Friendship
 from app.models.room import Room, RoomMember
+from app.services import sensitive_word_service
 
 forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
 
@@ -27,8 +28,8 @@ REJECTION_REASONS = (
     'The attachment or external link does not meet the requirements',
 )
 VALID_POST_STATUSES = (
-    ForumPost.STATUS_PENDING,
-    ForumPost.STATUS_APPROVED,
+    ForumPost.STATUS_UNDER_REVIEW,
+    ForumPost.STATUS_PUBLISHED,
     ForumPost.STATUS_REJECTED,
 )
 
@@ -56,11 +57,14 @@ def _require_admin():
 def _can_view_post(post):
     if _is_admin():
         return True
-    if post.status == ForumPost.STATUS_APPROVED:
+    if post.status == ForumPost.STATUS_PUBLISHED:
         if post.zone == 'public':
             return True
         friend_ids = _get_friend_ids(current_user.id)
         return post.user_id == current_user.id or post.user_id in friend_ids
+    elif post.status == ForumPost.STATUS_UNDER_REVIEW:
+        # UNDER_REVIEW posts are visible to the author and admins
+        return post.user_id == current_user.id
     return post.user_id == current_user.id
 
 
@@ -68,7 +72,7 @@ def _can_view_forward(forward):
     if _is_admin():
         return True
     if forward.zone == 'public':
-        return forward.post is not None and forward.post.status == ForumPost.STATUS_APPROVED
+        return forward.post is not None and forward.post.status == ForumPost.STATUS_PUBLISHED
     if forward.zone == 'friend':
         friend_ids = _get_friend_ids(current_user.id)
         return forward.user_id == current_user.id or forward.user_id in friend_ids
@@ -93,7 +97,7 @@ def _get_friend_pinned_post_ids(post_ids):
 
 
 def _can_pin_post(post):
-    if post.status != ForumPost.STATUS_APPROVED:
+    if post.status != ForumPost.STATUS_PUBLISHED:
         return False
     if _is_admin():
         return post.zone == 'public'
@@ -117,9 +121,9 @@ def _serialise_post(post, include_comments=False, friend_pinned_post_ids=None):
     data['can_edit'] = (_is_admin() and post.user_id == current_user.id) or (
         not _is_admin() and post.user_id == current_user.id and post.status == ForumPost.STATUS_REJECTED
     )
-    data['can_forward'] = post.status == ForumPost.STATUS_APPROVED
+    data['can_forward'] = post.status == ForumPost.STATUS_PUBLISHED
     data['can_pin'] = _can_pin_post(post)
-    data['can_review'] = _is_admin() and post.status == ForumPost.STATUS_PENDING
+    data['can_review'] = _is_admin() and post.status == ForumPost.STATUS_UNDER_REVIEW
     return data
 
 
@@ -143,8 +147,8 @@ def _touch_post(post):
 
 def _post_query_for_current_user():
     if _is_admin():
-        return ForumPost.query
-    return ForumPost.query.filter_by(status=ForumPost.STATUS_APPROVED)
+        return ForumPost.query.filter(ForumPost.status.in_([ForumPost.STATUS_PUBLISHED, ForumPost.STATUS_UNDER_REVIEW]))
+    return ForumPost.query.filter_by(status=ForumPost.STATUS_PUBLISHED)
 
 
 def _get_friend_ids(user_id):
@@ -173,7 +177,7 @@ def get_posts():
         friend_ids = _get_friend_ids(current_user.id)
         visible_user_ids = friend_ids | {current_user.id}
         query = ForumPost.query.filter(
-            ForumPost.status == ForumPost.STATUS_APPROVED,
+            ForumPost.status == ForumPost.STATUS_PUBLISHED,
             ForumPost.zone == 'friend',
             ForumPost.user_id.in_(visible_user_ids),
         ).outerjoin(
@@ -225,7 +229,7 @@ def get_posts():
             forward_query = ForumForward.query.join(
                 ForumPost, ForumForward.original_post_id == ForumPost.id
             ).filter(
-                ForumPost.status == ForumPost.STATUS_APPROVED,
+                ForumPost.status == ForumPost.STATUS_PUBLISHED,
                 ForumForward.user_id.in_(visible_user_ids),
                 ForumForward.zone == 'friend',
             )
@@ -233,13 +237,13 @@ def get_posts():
             forward_query = ForumForward.query.join(
                 ForumPost, ForumForward.original_post_id == ForumPost.id
             ).filter(
-                ForumPost.status == ForumPost.STATUS_APPROVED,
+                ForumPost.status == ForumPost.STATUS_PUBLISHED,
                 ForumForward.zone == 'public',
             )
         else:
             forward_query = ForumForward.query.join(
                 ForumPost, ForumForward.original_post_id == ForumPost.id
-            ).filter(ForumPost.status == ForumPost.STATUS_APPROVED)
+            ).filter(ForumPost.status == ForumPost.STATUS_PUBLISHED)
             if zone in VALID_ZONES:
                 forward_query = forward_query.filter(ForumForward.zone == zone)
         if search:
@@ -353,7 +357,26 @@ def create_post():
         if not game_verified:
             tag = 'public'  # downgrade to normal tag
 
-    auto_approve = _is_admin() or game_verified
+    # Check for sensitive words
+    contains_sensitive = sensitive_word_service.contains_sensitive_words(title + ' ' + content)
+    current_app.logger.debug(f"Sensitive word check result: {contains_sensitive}")
+    
+    # Determine post status
+    if _is_admin() or game_verified:
+        # Admins and game posts are always published
+        status = ForumPost.STATUS_PUBLISHED
+        reviewed_by = current_user.id
+        reviewed_at = datetime.now(timezone.utc)
+    elif contains_sensitive:
+        # Contains sensitive words - needs review
+        status = ForumPost.STATUS_UNDER_REVIEW
+        reviewed_by = None
+        reviewed_at = None
+    else:
+        # No sensitive words - auto-publish
+        status = ForumPost.STATUS_PUBLISHED
+        reviewed_by = None
+        reviewed_at = None
 
     post = ForumPost(
         user_id=current_user.id,
@@ -364,9 +387,9 @@ def create_post():
         file_url=file_url,
         file_name=file_name,
         video_url=video_url,
-        status=ForumPost.STATUS_APPROVED if auto_approve else ForumPost.STATUS_PENDING,
-        reviewed_by=current_user.id if auto_approve else None,
-        reviewed_at=datetime.now(timezone.utc) if auto_approve else None,
+        status=status,
+        reviewed_by=reviewed_by,
+        reviewed_at=reviewed_at,
     )
     _touch_post(post)
     db.session.add(post)
@@ -374,7 +397,7 @@ def create_post():
 
     return jsonify({
         'post': _serialise_post(post),
-        'message': 'Post published' if auto_approve else 'Post submitted for review',
+        'message': 'Post published' if status == ForumPost.STATUS_PUBLISHED else 'Post submitted for review',
     }), 201
 
 
@@ -414,7 +437,14 @@ def update_post(post_id):
         post.reviewed_by = current_user.id
         post.reviewed_at = datetime.now(timezone.utc)
     else:
-        post.status = ForumPost.STATUS_PENDING
+        # Check for sensitive words in the updated content
+        contains_sensitive = sensitive_word_service.contains_sensitive_words(title + ' ' + content)
+        
+        if contains_sensitive:
+            post.status = ForumPost.STATUS_UNDER_REVIEW
+        else:
+            post.status = ForumPost.STATUS_PUBLISHED
+        
         post.rejection_reason = None
         post.review_note = None
         post.reviewed_by = None
@@ -425,7 +455,12 @@ def update_post(post_id):
     db.session.commit()
     return jsonify({
         'post': _serialise_post(post),
-        'message': 'Post updated' if _is_admin() else 'Post resubmitted for review',
+        'message': (
+            'Post updated' if _is_admin()
+            else ('Post resubmitted for review'
+                  if post.status == ForumPost.STATUS_UNDER_REVIEW
+                  else 'Post updated and published')
+        ),
     }), 200
 
 
@@ -450,13 +485,18 @@ def add_comment(post_id):
     post = db.session.get(ForumPost, post_id)
     if not post:
         return jsonify({'error': 'Post not found'}), 404
-    if post.status != ForumPost.STATUS_APPROVED:
+    if post.status != ForumPost.STATUS_PUBLISHED:
         return jsonify({'error': 'Comments are available after approval'}), 403
 
     data = request.get_json() or {}
     content = data.get('content', '').strip()
     if not content:
         return jsonify({'error': 'content is required'}), 400
+
+    if sensitive_word_service.contains_sensitive_words(content):
+        return jsonify({
+            'error': 'Comment contains inappropriate content',
+        }), 400
 
     comment = ForumComment(post_id=post_id, user_id=current_user.id, content=content)
     db.session.add(comment)
@@ -484,7 +524,7 @@ def delete_comment(comment_id):
 def forward_post(post_id):
     """Forward (repost) someone else's approved post to your own timeline."""
     post = db.session.get(ForumPost, post_id)
-    if not post or post.status != ForumPost.STATUS_APPROVED or not _can_view_post(post):
+    if not post or post.status != ForumPost.STATUS_PUBLISHED or not _can_view_post(post):
         return jsonify({'error': 'Post not found'}), 404
 
     existing = ForumForward.query.filter_by(
@@ -566,7 +606,7 @@ def get_pending_posts():
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
-    query = ForumPost.query.filter_by(status=ForumPost.STATUS_PENDING)\
+    query = ForumPost.query.filter_by(status=ForumPost.STATUS_UNDER_REVIEW)\
         .order_by(ForumPost.created_at.asc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
@@ -598,9 +638,11 @@ def review_post(post_id):
     post.reviewed_at = datetime.now(timezone.utc)
 
     if action == 'approve':
-        post.status = ForumPost.STATUS_APPROVED
+        post.status = ForumPost.STATUS_PUBLISHED
         post.rejection_reason = None
         post.review_note = None
+        _touch_post(post)
+        db.session.commit()
     else:
         rejection_reason = (data.get('rejection_reason') or '').strip()
         review_note = (data.get('review_note') or '').strip() or None
@@ -611,9 +653,8 @@ def review_post(post_id):
         _clear_friend_pins(post.id)
         post.rejection_reason = rejection_reason
         post.review_note = review_note
-
-    _touch_post(post)
-    db.session.commit()
+        _touch_post(post)
+        db.session.commit()
     return jsonify(_serialise_post(post)), 200
 
 
@@ -628,10 +669,10 @@ def pin_post(post_id):
     is_pinned = bool(data.get('is_pinned', True))
     if not _can_pin_post(post):
         if _is_admin():
-            if post.status != ForumPost.STATUS_APPROVED:
-                return jsonify({'error': 'Only approved posts can be pinned'}), 400
+            if post.status != ForumPost.STATUS_PUBLISHED:
+                return jsonify({'error': 'Only published posts can be pinned'}), 400
             return jsonify({'error': 'Only public posts can be pinned'}), 400
-        return jsonify({'error': 'Only approved friend zone posts visible to you can be pinned'}), 403
+        return jsonify({'error': 'Only published friend zone posts visible to you can be pinned'}), 403
 
     if _is_admin():
         post.is_pinned = is_pinned

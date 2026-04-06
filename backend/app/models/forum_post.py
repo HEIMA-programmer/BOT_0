@@ -5,9 +5,9 @@ from app import db
 class ForumPost(db.Model):
     __tablename__ = 'forum_posts'
 
-    STATUS_PENDING = 'pending'
-    STATUS_APPROVED = 'approved'
-    STATUS_REJECTED = 'rejected'
+    STATUS_UNDER_REVIEW = 'UNDER_REVIEW'
+    STATUS_PUBLISHED = 'PUBLISHED'
+    STATUS_REJECTED = 'REJECTED'
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(
@@ -26,8 +26,8 @@ class ForumPost(db.Model):
     status = db.Column(
         db.String(20),
         nullable=False,
-        default=STATUS_PENDING,
-        server_default=db.text("'pending'")
+        default=STATUS_UNDER_REVIEW,
+        server_default=db.text("'UNDER_REVIEW'")
     )
     is_pinned = db.Column(db.Boolean, nullable=False, default=False, server_default=db.text('0'))
     rejection_reason = db.Column(db.String(120), nullable=True)

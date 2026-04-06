@@ -84,6 +84,13 @@ def create_app(config_name=None):
     from app.routes import conversation_ws  # noqa: F401
     from app.routes import room_ws  # noqa: F401
 
+    # Initialize sensitive word service
+    with app.app_context():
+        from app.services import sensitive_word_service
+        sensitive_word_service.initialize()
+        count = sensitive_word_service.get_sensitive_words_count()
+        app.logger.info(f"Sensitive word service initialized with {count} words")
+
     # Validate production config
     if (not app.debug
             and not app.config.get('TESTING')
@@ -138,7 +145,7 @@ def _ensure_runtime_schema():
 
     forum_post_columns = {col['name'] for col in inspector.get_columns('forum_posts')}
     forum_post_alters = {
-        'status': "ALTER TABLE forum_posts ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+        'status': "ALTER TABLE forum_posts ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'UNDER_REVIEW'",
         'is_pinned': 'ALTER TABLE forum_posts ADD COLUMN is_pinned BOOLEAN NOT NULL DEFAULT 0',
         'rejection_reason': 'ALTER TABLE forum_posts ADD COLUMN rejection_reason VARCHAR(120)',
         'review_note': 'ALTER TABLE forum_posts ADD COLUMN review_note VARCHAR(255)',
@@ -154,7 +161,12 @@ def _ensure_runtime_schema():
         db.session.execute(text("ALTER TABLE forum_posts ADD COLUMN zone VARCHAR(10) NOT NULL DEFAULT 'public'"))
 
     db.session.execute(text(
-        "UPDATE forum_posts SET status = 'approved' WHERE status IS NULL"
+        "UPDATE forum_posts SET status = 'PUBLISHED'"
+        " WHERE status IS NULL OR status = 'approved'"
+    ))
+    db.session.execute(text(
+        "UPDATE forum_posts SET status = 'UNDER_REVIEW'"
+        " WHERE status = 'pending'"
     ))
     db.session.execute(text(
         'UPDATE forum_posts SET is_pinned = 0 WHERE is_pinned IS NULL'
@@ -447,7 +459,7 @@ def _seed_guidance_posts(app):
             title=post_data['title'],
             content=post_data['content'],
             video_url=post_data.get('video_url'),
-            status=ForumPost.STATUS_APPROVED,
+            status=ForumPost.STATUS_PUBLISHED,
             is_pinned=True,
             reviewed_by=admin.id,
             reviewed_at=now,

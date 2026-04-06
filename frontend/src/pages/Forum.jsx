@@ -69,9 +69,9 @@ const ZONE_CONFIG = {
 };
 const getZoneConfig = (zone) => ZONE_CONFIG[zone] || { label: zone || 'Unknown Zone', color: 'default' };
 const STATUS_CONFIG = {
-  approved: { label: 'Approved', color: 'green' },
-  pending: { label: 'Pending Review', color: 'gold' },
-  rejected: { label: 'Rejected', color: 'red' },
+  PUBLISHED: { label: 'Published', color: 'green' },
+  UNDER_REVIEW: { label: 'Under Review', color: 'gold' },
+  REJECTED: { label: 'Rejected', color: 'red' },
 };
 // Tags available for user selection (public/friend are auto-set by zone, not user-selectable)
 const USER_SELECTABLE_TAGS = ['skills', 'experience', 'academic_culture'];
@@ -618,11 +618,17 @@ export default function Forum({ user }) {
     }
 
     const post = item;
+    const isUnderReview = post.status === 'UNDER_REVIEW';
     return (
       <Card
         key={post.id}
         hoverable
-        style={{ marginBottom: 12, borderRadius: 10 }}
+        style={{ 
+          marginBottom: 12, 
+          borderRadius: 10,
+          opacity: isUnderReview ? 0.6 : 1,
+          backgroundColor: isUnderReview ? '#f5f5f5' : 'white'
+        }}
         styles={{ body: { padding: '16px 20px' } }}
         onClick={() => openDetail(post.id)}
       >
@@ -949,7 +955,7 @@ export default function Forum({ user }) {
               {detailPost.is_pinned && <Tag color="volcano"><PushpinOutlined /> Pinned</Tag>}
             </Space>
 
-            {detailPost.status === 'rejected' && (
+            {detailPost.status === 'REJECTED' && (
               <Alert
                 type="error"
                 showIcon
@@ -959,12 +965,13 @@ export default function Forum({ user }) {
               />
             )}
 
-            {detailPost.status === 'pending' && detailPost.user_id === user?.id && !isAdmin && (
+            {detailPost.status === 'UNDER_REVIEW' && detailPost.user_id === user?.id && !isAdmin && (
               <Alert
                 type="warning"
                 showIcon
                 style={{ margin: '12px 0' }}
                 message="This post is waiting for admin review."
+                description="Suspected violation – under review"
               />
             )}
 
@@ -1082,7 +1089,7 @@ export default function Forum({ user }) {
                 )}
               />
 
-              {detailPost.status === 'approved' ? (
+              {detailPost.status === 'PUBLISHED' ? (
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <TextArea
                     rows={2}
@@ -1096,7 +1103,7 @@ export default function Forum({ user }) {
                   </Button>
                 </div>
               ) : (
-                <Alert type="info" showIcon style={{ marginTop: 12 }} message="Comments are enabled after the post is approved." />
+                <Alert type="info" showIcon style={{ marginTop: 12 }} message="Comments are enabled after the post is published." />
               )}
             </div>
           </div>
@@ -1189,7 +1196,12 @@ export default function Forum({ user }) {
                           {item.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
                         </ReactMarkdown>
                       </div>
-                      {item.status === 'rejected' && (
+                      {item.status === 'UNDER_REVIEW' && (
+                        <Text type="warning">
+                          Under Review: Suspected violation
+                        </Text>
+                      )}
+                      {item.status === 'REJECTED' && (
                         <Text type="danger">
                           Rejected: {item.rejection_reason}
                           {item.review_note ? ` · ${item.review_note}` : ''}
