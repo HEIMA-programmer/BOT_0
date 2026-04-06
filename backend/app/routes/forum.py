@@ -13,7 +13,7 @@ from app.models.forum_post import ForumPost
 from app.models.forum_post_pin import ForumPostPin
 from app.models.friendship import Friendship
 from app.models.room import Room, RoomMember
-from app.services import 敏感词服务
+from app.services import sensitive_word_service
 
 forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
 
@@ -358,8 +358,8 @@ def create_post():
             tag = 'public'  # downgrade to normal tag
 
     # Check for sensitive words
-    contains_sensitive = 敏感词服务.contains_sensitive_words(title + ' ' + content)
-    current_app.logger.info(f"Sensitive word check: {contains_sensitive} for content: {title} {content}")
+    contains_sensitive = sensitive_word_service.contains_sensitive_words(title + ' ' + content)
+    current_app.logger.debug(f"Sensitive word check result: {contains_sensitive}")
     
     # Determine post status
     if _is_admin() or game_verified:
@@ -373,10 +373,10 @@ def create_post():
         reviewed_by = None
         reviewed_at = None
     else:
-        # No sensitive words - publish immediately
+        # No sensitive words - auto-publish
         status = ForumPost.STATUS_PUBLISHED
-        reviewed_by = current_user.id
-        reviewed_at = datetime.now(timezone.utc)
+        reviewed_by = None
+        reviewed_at = None
 
     post = ForumPost(
         user_id=current_user.id,
@@ -438,7 +438,7 @@ def update_post(post_id):
         post.reviewed_at = datetime.now(timezone.utc)
     else:
         # Check for sensitive words in the updated content
-        contains_sensitive = 敏感词服务.contains_sensitive_words(title + ' ' + content)
+        contains_sensitive = sensitive_word_service.contains_sensitive_words(title + ' ' + content)
         
         if contains_sensitive:
             post.status = ForumPost.STATUS_UNDER_REVIEW
@@ -447,15 +447,20 @@ def update_post(post_id):
         
         post.rejection_reason = None
         post.review_note = None
-        post.reviewed_by = current_user.id if not contains_sensitive else None
-        post.reviewed_at = datetime.now(timezone.utc) if not contains_sensitive else None
+        post.reviewed_by = None
+        post.reviewed_at = None
         post.is_pinned = False
         _clear_friend_pins(post.id)
     _touch_post(post)
     db.session.commit()
     return jsonify({
         'post': _serialise_post(post),
-        'message': 'Post updated' if _is_admin() else ('Post resubmitted for review' if post.status == ForumPost.STATUS_UNDER_REVIEW else 'Post updated and published'),
+        'message': (
+            'Post updated' if _is_admin()
+            else ('Post resubmitted for review'
+                  if post.status == ForumPost.STATUS_UNDER_REVIEW
+                  else 'Post updated and published')
+        ),
     }), 200
 
 
@@ -487,6 +492,11 @@ def add_comment(post_id):
     content = data.get('content', '').strip()
     if not content:
         return jsonify({'error': 'content is required'}), 400
+
+    if sensitive_word_service.contains_sensitive_words(content):
+        return jsonify({
+            'error': 'Comment contains inappropriate content',
+        }), 400
 
     comment = ForumComment(post_id=post_id, user_id=current_user.id, content=content)
     db.session.add(comment)

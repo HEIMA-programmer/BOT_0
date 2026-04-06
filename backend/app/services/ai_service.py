@@ -95,7 +95,3 @@ class AIService:
             response_format={'type': 'json_object'}
         )
         return response.choices[0].message.content
-
-
-# Create a global instance
-ai_service = AIService()

@@ -86,9 +86,10 @@ def create_app(config_name=None):
 
     # Initialize sensitive word service
     with app.app_context():
-        from app.services import 敏感词服务
-        敏感词服务.initialize()
-        app.logger.info(f"Sensitive word service initialized with {敏感词服务.get_sensitive_words_count()} words")
+        from app.services import sensitive_word_service
+        sensitive_word_service.initialize()
+        count = sensitive_word_service.get_sensitive_words_count()
+        app.logger.info(f"Sensitive word service initialized with {count} words")
 
     # Validate production config
     if (not app.debug
@@ -160,7 +161,12 @@ def _ensure_runtime_schema():
         db.session.execute(text("ALTER TABLE forum_posts ADD COLUMN zone VARCHAR(10) NOT NULL DEFAULT 'public'"))
 
     db.session.execute(text(
-        "UPDATE forum_posts SET status = 'PUBLISHED' WHERE status IS NULL"
+        "UPDATE forum_posts SET status = 'PUBLISHED'"
+        " WHERE status IS NULL OR status = 'approved'"
+    ))
+    db.session.execute(text(
+        "UPDATE forum_posts SET status = 'UNDER_REVIEW'"
+        " WHERE status = 'pending'"
     ))
     db.session.execute(text(
         'UPDATE forum_posts SET is_pinned = 0 WHERE is_pinned IS NULL'

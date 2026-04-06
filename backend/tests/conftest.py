@@ -13,6 +13,7 @@ def app():
 @pytest.fixture(scope='function')
 def db(app):
     with app.app_context():
+        _db.drop_all()
         _db.create_all()
         yield _db
         _db.session.rollback()
