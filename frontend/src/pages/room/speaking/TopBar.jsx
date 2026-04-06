@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Typography, Button, Space, Popover, Avatar, Tag } from 'antd';
 import { LinkOutlined, CheckOutlined, TeamOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { copyInviteCode } from '../../../utils/roomUtils';

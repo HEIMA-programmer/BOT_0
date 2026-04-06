@@ -32,6 +32,11 @@ instance/
 .DS_Store
 Thumbs.db
 
+# Release artifacts
+*.tar
+*.tar.gz
+requirements-lock.txt
+
 # Testing
 .coverage
 htmlcov/

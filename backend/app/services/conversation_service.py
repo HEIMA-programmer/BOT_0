@@ -113,7 +113,7 @@ class ConversationService:
 
                 # Send initial message to trigger AI to speak first
                 if self.initial_message:
-                    print(f'[ConversationService] Sending initial message to trigger AI...')
+                    print('[ConversationService] Sending initial message to trigger AI...')
                     await session.send_client_content(
                         turns=[{"role": "user", "parts": [{"text": self.initial_message}]}],
                         turn_complete=True

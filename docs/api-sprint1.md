@@ -27,6 +27,7 @@ Create a new user account.
   "id": 1,
   "username": "sarah_chen",
   "email": "sarah@example.com",
+  "is_admin": false,
   "created_at": "2026-03-16T10:00:00"
 }
 ```
@@ -76,6 +77,7 @@ Log in with email and password. Sets session cookie.
   "id": 1,
   "username": "sarah_chen",
   "email": "sarah@example.com",
+  "is_admin": false,
   "created_at": "2026-03-16T10:00:00"
 }
 ```
@@ -113,6 +115,7 @@ Get current authenticated user info.
   "id": 1,
   "username": "sarah_chen",
   "email": "sarah@example.com",
+  "is_admin": false,
   "created_at": "2026-03-16T10:00:00"
 }
 ```
@@ -180,7 +183,8 @@ Get all words in the current user's word bank.
       "text": "hypothesis",
       "definition": "A supposition or proposed explanation...",
       "added_at": "2026-03-15T10:00:00",
-      "mastery_level": 0
+      "mastery_level": 0,
+      "last_reviewed": null
     }
   ]
 }
@@ -212,7 +216,8 @@ Add a word to the current user's word bank.
   "text": "hypothesis",
   "definition": "A supposition or proposed explanation...",
   "added_at": "2026-03-16T10:30:00",
-  "mastery_level": 0
+  "mastery_level": 0,
+  "last_reviewed": null
 }
 ```
 

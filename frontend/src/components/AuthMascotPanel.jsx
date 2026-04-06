@@ -158,6 +158,7 @@ function Eye({ size, pupilSize, maxDistance, eyeColor, pupilColor, isBlinking, f
     };
   };
 
+  // eslint-disable-next-line react-hooks/refs -- intentional ref read for eye-tracking animation
   const offset = getOffset();
 
   return (
@@ -226,6 +227,7 @@ function Pupil({ size, maxDistance, color, forceLook, isBlinking }) {
     };
   };
 
+  // eslint-disable-next-line react-hooks/refs -- intentional ref read for eye-tracking animation
   const offset = getOffset();
 
   return (
@@ -568,6 +570,7 @@ export default function AuthMascotPanel({
               filter: 'blur(8px)',
             }}
           />
+          {/* eslint-disable-next-line react-hooks/refs -- intentional ref access for character animation */}
           {CHARACTER_CONFIG.map((character) => {
             const isBlinking = blinkMap[character.id];
             const forceLook = passwordActive

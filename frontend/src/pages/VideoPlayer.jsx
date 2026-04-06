@@ -11,7 +11,6 @@ import {
   Alert,
   Modal,
   Form,
-  message,
   Select,
   App as AntdApp,
   Switch,
@@ -91,6 +90,7 @@ function YouTubePlayer({ url, iframeRef }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function getVideoInfo(categoryId, videoId) {
   return videoData[categoryId]?.[videoId];
 }

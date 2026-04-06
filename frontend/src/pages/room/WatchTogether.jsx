@@ -106,7 +106,7 @@ export default function WatchTogether({ user }) {
     if (!playerContainerRef.current) return;
     // Destroy previous
     if (playerRef.current) {
-      try { playerRef.current.destroy(); } catch {}
+      try { playerRef.current.destroy(); } catch { /* ignored */ }
       playerRef.current = null;
       playerReady.current = false;
     }
@@ -132,7 +132,7 @@ export default function WatchTogether({ user }) {
               setPosition(playerRef.current.getCurrentTime());
               const d = playerRef.current.getDuration?.();
               if (d) setDuration(d);
-            } catch {}
+            } catch { /* ignored */ }
           }, 500);
           // Apply any queued sync
           if (pendingSyncRef.current) {
@@ -142,7 +142,7 @@ export default function WatchTogether({ user }) {
         },
         onStateChange: (event) => {
           if (!playerRef.current?.getCurrentTime) return;
-          try { setPosition(playerRef.current.getCurrentTime()); } catch {}
+          try { setPosition(playerRef.current.getCurrentTime()); } catch { /* ignored */ }
           // Host: sync YouTube native play/pause to other members
           const state = event.data; // 1=playing, 2=paused
           if (isHostRef.current && !isSyncingRef.current && (state === 1 || state === 2)) {
@@ -193,7 +193,7 @@ export default function WatchTogether({ user }) {
     return () => {
       if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
       if (playerRef.current) {
-        try { playerRef.current.destroy(); } catch {}
+        try { playerRef.current.destroy(); } catch { /* ignored */ }
         playerRef.current = null;
       }
     };
@@ -376,7 +376,7 @@ export default function WatchTogether({ user }) {
   const handleLeave = useCallback(async () => {
     isLeavingRef.current = true;
     const summary = content?.title ? `Watched: ${content.title}` : '';
-    try { await roomAPI.leave(roomId, { summary }); } catch {}
+    try { await roomAPI.leave(roomId, { summary }); } catch { /* ignored */ }
     navigate('/room');
   }, [roomId, navigate, content]);
 

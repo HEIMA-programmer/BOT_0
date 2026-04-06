@@ -38,6 +38,7 @@ export default function useAgoraMedia({ appId, token, channel, uid, onMediaChang
 
   // Detect camera/mic permission denial — warn user after 5s if tracks failed to create.
   // Check both `ready` flag AND actual track objects (track can exist before ready flips).
+  /* eslint-disable react-hooks/set-state-in-effect -- clearing warning on permission readiness */
   useEffect(() => {
     const timer = setTimeout(() => {
       const issues = [];
@@ -53,6 +54,7 @@ export default function useAgoraMedia({ appId, token, channel, uid, onMediaChang
     }
     return () => clearTimeout(timer);
   }, [micReady, camReady, localMicrophoneTrack, localCameraTrack]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const remoteUsers = useRemoteUsers();
 

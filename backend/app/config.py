@@ -6,6 +6,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 class BaseConfig:
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
+    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin12345')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
     AZURE_SPEECH_KEY = os.getenv('AZURE_SPEECH_KEY', '')
@@ -36,3 +37,6 @@ class ProductionConfig(BaseConfig):
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///app.db')
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    # In production, FLASK_SECRET_KEY and ADMIN_PASSWORD must be set via
+    # environment variables. The dev defaults will be rejected at startup
+    # (see create_app in __init__.py).

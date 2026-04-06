@@ -84,6 +84,15 @@ def create_app(config_name=None):
     from app.routes import conversation_ws  # noqa: F401
     from app.routes import room_ws  # noqa: F401
 
+    # Validate production config
+    if (not app.debug
+            and not app.config.get('TESTING')
+            and app.config['SECRET_KEY'] == 'dev-secret-key-change-in-production'):
+        raise ValueError(
+            'FLASK_SECRET_KEY must be set to a secure random value in production. '
+            'Do not use the default dev key.'
+        )
+
     # Create database tables and auto-seed on first run
     with app.app_context():
         from app.models import (  # noqa: F401
@@ -231,23 +240,37 @@ def _ensure_dev_test_user(app):
 
 
 def _ensure_dev_admin_user(app):
-    """Create the system admin account if it doesn't exist."""
+    """Create the system admin account if it doesn't exist.
+
+    The admin password is read from the ADMIN_PASSWORD config value
+    (sourced from the ADMIN_PASSWORD environment variable).  In
+    production the env var must be set to a secure value; in
+    development it falls back to 'admin12345'.
+    """
     from app.models.user import User
+
+    admin_password = app.config.get('ADMIN_PASSWORD', 'admin12345')
+
+    if not app.debug and admin_password == 'admin12345':
+        app.logger.warning(
+            'ADMIN_PASSWORD is using the default dev value in a non-debug '
+            'environment. Set the ADMIN_PASSWORD env var to a secure value.'
+        )
 
     admin = User.query.filter_by(email='admin@example.com').first()
     if admin:
         if not admin.is_admin:
             admin.is_admin = True
             db.session.commit()
-            app.logger.info('Promoted dev admin user: admin@example.com')
+            app.logger.info('Promoted admin user: admin@example.com')
         return
 
     admin = User(username='adminuser', email='admin@example.com')
-    admin.set_password('admin12345')
+    admin.set_password(admin_password)
     admin.is_admin = True
     db.session.add(admin)
     db.session.commit()
-    app.logger.info('Created dev admin user: admin@example.com / admin12345')
+    app.logger.info('Created admin user: admin@example.com')
 
 
 def _seed_guidance_posts(app):
