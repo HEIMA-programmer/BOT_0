@@ -9,10 +9,11 @@ from pydub import AudioSegment
 
 class SpeakingService:
     def __init__(self):
-        self.azure_key = current_app.config.get('AZURE_SPEECH_KEY')
-        self.azure_region = current_app.config.get('AZURE_SPEECH_REGION')
-        self.deepseek_key = current_app.config.get('DEEPSEEK_API_KEY')
-        self.deepseek_url = current_app.config.get('DEEPSEEK_API_URL', 'https://api.deepseek.com')
+        import os
+        self.azure_key = os.getenv('AZURE_SPEECH_KEY')
+        self.azure_region = os.getenv('AZURE_SPEECH_REGION')
+        self.deepseek_key = os.getenv('DEEPSEEK_API_KEY')
+        self.deepseek_url = os.getenv('DEEPSEEK_API_URL', 'https://api.deepseek.com')
 
         if not self.azure_key or not self.deepseek_key:
             raise RuntimeError('Azure Speech or DeepSeek API key not configured')
@@ -346,3 +347,7 @@ Return ONLY a JSON object with this exact structure:
         except Exception as e:
             current_app.logger.error(f"DeepSeek API error: {e}")
             raise
+
+
+# Create a global instance
+speaking_service = SpeakingService()

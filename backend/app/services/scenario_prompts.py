@@ -187,3 +187,8 @@ def get_scenario_prompt(scenario_type, sub_scenario, custom_context=None):
         prompt += f"\n\nAdditional context from the student: {custom_context}"
 
     return prompt
+
+
+# Create lowercase aliases for imports
+scenario_prompts = SCENARIO_PROMPTS
+scenario_sub_options = SCENARIO_SUB_OPTIONS

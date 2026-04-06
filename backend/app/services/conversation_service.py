@@ -243,3 +243,7 @@ class ConversationService:
         self.running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=5.0)
+
+
+# Create a global instance
+conversation_service = ConversationService()

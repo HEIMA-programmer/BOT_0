@@ -139,3 +139,7 @@ Use 6 as baseline for acceptable performance. Be encouraging but honest.
     "<useful academic phrase 3>"
   ]
 }}"""
+
+
+# Create a global instance
+scoring_service = ScoringService()
