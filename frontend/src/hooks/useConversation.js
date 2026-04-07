@@ -186,40 +186,33 @@ export default function useConversation() {
       setCurrentTranscript(data.text);
     });
 
-    // user_final: finalize user message, also flush any pending user transcript
+    // user_final: finalize user message — update ref synchronously
     socket.on('user_final', (data) => {
       if (data.text) {
         const msg = { role: 'user', text: data.text, timestamp: new Date() };
-        setMessages(prev => {
-          const next = [...prev, msg];
-          messagesRef.current = next;
-          return next;
-        });
+        messagesRef.current = [...messagesRef.current, msg];
+        setMessages([...messagesRef.current]);
       }
       setCurrentTranscript('');
     });
 
-    // ai_speaking_end: finalize AI message at the correct position
+    // ai_speaking_end: finalize AI message at the correct position — update ref synchronously
     socket.on('ai_speaking_end', () => {
       const text = aiTranscriptRef.current;
       if (text) {
-        const insertIdx = aiMsgInsertIdxRef.current;
-        setMessages(prev => {
-          // Prevent duplicates
-          if (prev.some(m => m.role === 'ai' && m.text === text)) {
-            return prev;
-          }
+        const cur = messagesRef.current;
+        // Prevent duplicates
+        if (!cur.some(m => m.role === 'ai' && m.text === text)) {
+          const insertIdx = aiMsgInsertIdxRef.current;
           const newMsg = { role: 'ai', text, timestamp: new Date() };
           // Insert at the position where AI started speaking (not at end)
-          if (insertIdx != null && insertIdx <= prev.length) {
-            const next = [...prev.slice(0, insertIdx), newMsg, ...prev.slice(insertIdx)];
-            messagesRef.current = next;
-            return next;
+          if (insertIdx != null && insertIdx <= cur.length) {
+            messagesRef.current = [...cur.slice(0, insertIdx), newMsg, ...cur.slice(insertIdx)];
+          } else {
+            messagesRef.current = [...cur, newMsg];
           }
-          const next = [...prev, newMsg];
-          messagesRef.current = next;
-          return next;
-        });
+          setMessages([...messagesRef.current]);
+        }
       }
       aiTranscriptRef.current = '';
       aiSpeakingRef.current = false;
