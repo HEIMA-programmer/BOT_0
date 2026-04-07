@@ -239,7 +239,14 @@ def _cleanup_session(session_id, save_messages=False):
 
 
 def _forward_responses(service, session_id, app):
-    """Poll response_queue and emit events to the client. Runs in a plain thread."""
+    """Poll response_queue and emit events to the client. Runs in an eventlet green thread.
+
+    Uses non-blocking get_nowait() + time.sleep() instead of blocking get(timeout)
+    because the queue uses real OS locks (_SafeQueue) to bridge the real OS thread
+    (ConversationService) and this green thread.  time.sleep is monkey-patched to
+    eventlet.sleep, so the hub stays responsive between polls.
+    """
+    import time
     with app.app_context():
         # Wait for session to start (running=True) or an early error/ready message
         while True:
@@ -247,15 +254,15 @@ def _forward_responses(service, session_id, app):
                 break
             if not service.response_queue.empty():
                 break
-            import time
             time.sleep(0.1)
 
         while True:
             try:
-                resp = service.response_queue.get(timeout=5.0)
+                resp = service.response_queue.get_nowait()
             except Exception:
                 if not service.running and service.response_queue.empty():
                     break
+                time.sleep(0.01)  # 10ms poll — yields to eventlet hub
                 continue
 
             rtype = resp.get('type')
