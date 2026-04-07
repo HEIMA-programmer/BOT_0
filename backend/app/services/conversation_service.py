@@ -45,6 +45,7 @@ class _SafeQueue:
         with self._lock:
             return len(self._items) == 0
 
+
 try:
     from google import genai
     from google.genai import types as genai_types
