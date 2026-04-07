@@ -5,6 +5,7 @@ Based on working demo - single event loop, thread-safe queues for cross-thread c
 
 import asyncio
 import base64
+import collections
 import queue
 import threading
 import os
@@ -16,6 +17,33 @@ try:
     _real_threading = eventlet.patcher.original('threading')
 except ImportError:
     _real_threading = threading
+
+
+class _SafeQueue:
+    """Thread-safe queue that works across real OS threads and eventlet green threads.
+
+    Uses real OS locks (not eventlet green locks) so that an OS thread can put()
+    and a green thread can get_nowait() without cross-thread notification issues.
+    Consumers should poll with get_nowait() + sleep instead of blocking get().
+    """
+
+    def __init__(self):
+        self._lock = _real_threading.Lock()
+        self._items = collections.deque()
+
+    def put(self, item):
+        with self._lock:
+            self._items.append(item)
+
+    def get_nowait(self):
+        with self._lock:
+            if self._items:
+                return self._items.popleft()
+        raise queue.Empty
+
+    def empty(self):
+        with self._lock:
+            return len(self._items) == 0
 
 try:
     from google import genai
@@ -62,8 +90,8 @@ class ConversationService:
         self.system_prompt = system_prompt or SYSTEM_PROMPT
         self.voice_name = voice_name or "Puck"
         self.initial_message = initial_message  # text to send first to trigger AI to speak
-        self.audio_in_queue = queue.Queue()    # browser audio -> gemini
-        self.response_queue = queue.Queue()    # gemini responses -> browser
+        self.audio_in_queue = _SafeQueue()      # browser audio -> gemini
+        self.response_queue = _SafeQueue()     # gemini responses -> browser
         self.running = False
         self.ai_is_speaking = False
         self._thread = None
@@ -158,6 +186,10 @@ class ConversationService:
         ai_transcript = ""
         ai_speaking = False
         last_user_transcript_time = 0  # throttle user_transcript events
+        # Gemini may deliver input_transcription AFTER turn_complete.
+        # When that happens, we set this flag so the transcript is emitted
+        # once it eventually arrives (or when the next model turn starts).
+        pending_user_final = False
 
         while self.running:
             async for response in session.receive():
@@ -178,8 +210,34 @@ class ConversationService:
 
                 content = response.server_content
 
+                # --- Process input_transcription FIRST so it's available
+                #     for the model_turn and turn_complete checks below. ---
+                if content.input_transcription and content.input_transcription.text:
+                    user_transcript += content.input_transcription.text
+                    # Throttle: only send every 200ms to avoid flooding
+                    now = time.time()
+                    if now - last_user_transcript_time > 0.2:
+                        display_text = user_transcript[-200:] if len(user_transcript) > 200 else user_transcript
+                        self.response_queue.put({
+                            'type': 'user_transcript',
+                            'text': display_text
+                        })
+                        last_user_transcript_time = now
+
                 # AI audio chunks
                 if content.model_turn and content.model_turn.parts:
+                    # If we were waiting for a delayed user transcript, emit it
+                    # now that the model is starting a new response.
+                    if pending_user_final and user_transcript:
+                        self.response_queue.put({
+                            'type': 'user_final',
+                            'text': user_transcript
+                        })
+                        self.messages.append({'role': 'user', 'content': user_transcript})
+                        user_transcript = ""
+                        last_user_transcript_time = 0
+                        pending_user_final = False
+
                     self.ai_is_speaking = True
                     for part in content.model_turn.parts:
                         if part.inline_data:
@@ -190,20 +248,6 @@ class ConversationService:
                             })
                             if not ai_speaking:
                                 ai_speaking = True
-
-                # User speech transcription (real-time, throttled)
-                if content.input_transcription and content.input_transcription.text:
-                    user_transcript += content.input_transcription.text
-                    # Throttle: only send every 200ms to avoid flooding
-                    now = time.time()
-                    if now - last_user_transcript_time > 0.2:
-                        # Only send the last 200 chars for display efficiency
-                        display_text = user_transcript[-200:] if len(user_transcript) > 200 else user_transcript
-                        self.response_queue.put({
-                            'type': 'user_transcript',
-                            'text': display_text
-                        })
-                        last_user_transcript_time = now
 
                 # AI speech transcription (stream incrementally for real-time display)
                 if content.output_transcription and content.output_transcription.text:
@@ -223,6 +267,12 @@ class ConversationService:
                         self.messages.append({'role': 'user', 'content': user_transcript})
                         user_transcript = ""
                         last_user_transcript_time = 0
+                        pending_user_final = False
+                    elif ai_speaking:
+                        # AI responded (user must have spoken) but transcription
+                        # hasn't arrived yet — mark as pending so it's emitted
+                        # when the transcript eventually comes in.
+                        pending_user_final = True
 
                     if ai_transcript:
                         self.messages.append({'role': 'assistant', 'content': ai_transcript})
