@@ -8,6 +8,7 @@ import {
   Card,
   Empty,
   Form,
+  Image,
   Input,
   List,
   Modal,
@@ -54,6 +55,7 @@ const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 const VIDEO_EXTS = /\.(mp4|webm|mov|ogg)(\?|$)/i;
+const IMAGE_EXTS = /\.(png|jpe?g|gif|webp|bmp)(\?|$)/i;
 const TAG_CONFIG = {
   note: { label: 'Note', color: 'cyan', desc: 'Video notes shared from the player' },
   skills: { label: 'Skills', color: 'blue', desc: 'Turnitin, Teams, plagiarism tips & more' },
@@ -226,6 +228,7 @@ export default function Forum({ user }) {
   const [creating, setCreating] = useState(false);
   const [createForm] = Form.useForm();
   const [fileList, setFileList] = useState([]);
+  const [imageList, setImageList] = useState([]);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailPost, setDetailPost] = useState(null);
@@ -382,11 +385,15 @@ export default function Forum({ user }) {
       if (fileList.length > 0 && fileList[0].originFileObj) {
         formData.append('file', fileList[0].originFileObj);
       }
+      imageList.forEach(f => {
+        if (f.originFileObj) formData.append('images', f.originFileObj);
+      });
       const res = await forumAPI.createPost(formData);
       message.success(res.data.message || 'Post submitted');
       setCreateOpen(false);
       createForm.resetFields();
       setFileList([]);
+      setImageList([]);
       setPage(1);
       fetchPosts();
       fetchMyPosts(1);
@@ -553,6 +560,79 @@ export default function Forum({ user }) {
     ? ((page - 1) * postsPageSize) + 1
     : total;
 
+  const renderImages = (images, compact = false) => {
+    if (!images || images.length === 0) return null;
+    const count = images.length;
+    const cols = count === 1 ? 1 : count === 4 ? 2 : Math.min(count, 3);
+    const showCount = compact ? Math.min(count, 4) : count;
+    const extra = count - showCount;
+    // padding-bottom ratio trick: creates correct aspect ratio without conflicting with CSS Grid
+    // Single: 56.25% = 16:9, Multi: 100% = 1:1 square
+    const paddingBottom = count === 1 ? '56.25%' : '100%';
+
+    const grid = (
+      <Image.PreviewGroup>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${cols}, 1fr)`,
+            gap: 3,
+            marginTop: 10,
+            borderRadius: 8,
+            overflow: 'hidden',
+          }}
+        >
+          {images.slice(0, showCount).map((img, idx) => {
+            const isLastWithMore = idx === showCount - 1 && extra > 0;
+            return (
+              <div key={idx} style={{ position: 'relative', paddingBottom, background: '#f0f0f0', overflow: 'hidden' }}>
+                <Image
+                  src={img.url}
+                  alt={img.name || `image-${idx + 1}`}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  wrapperStyle={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
+                  preview={{ mask: false }}
+                />
+                {isLastWithMore && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'rgba(0,0,0,0.45)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontSize: 22,
+                      fontWeight: 600,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    +{extra}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {/* Hidden images beyond showCount, kept in PreviewGroup for full navigation */}
+          {images.slice(showCount).map((img, idx) => (
+            <Image key={`hidden-${idx}`} src={img.url} style={{ display: 'none' }} />
+          ))}
+        </div>
+      </Image.PreviewGroup>
+    );
+
+    // Compact single image: limit width so 16:9 height stays reasonable on wide cards
+    return (
+      <div onClick={e => e.stopPropagation()}>
+        {compact && count === 1
+          ? <div style={{ maxWidth: '65%' }}>{grid}</div>
+          : grid
+        }
+      </div>
+    );
+  };
+
   const renderAttachment = (post) => {
     if (!post.file_url) return null;
     if (VIDEO_EXTS.test(post.file_name || post.file_url)) {
@@ -561,6 +641,9 @@ export default function Forum({ user }) {
           <VideoPlayer url={post.file_url} />
         </div>
       );
+    }
+    if (IMAGE_EXTS.test(post.file_name || post.file_url)) {
+      return renderImages([{ url: post.file_url, name: post.file_name }]);
     }
     return (
       <div style={{ marginTop: 12 }}>
@@ -650,8 +733,9 @@ export default function Forum({ user }) {
                 {post.content.replace(/\[Video Reference\]\([^)]*\)/g, '').slice(0, 200)}
               </ReactMarkdown>
             </div>
+            {post.images?.length > 0 && renderImages(post.images, true)}
             <Space size={16} style={{ marginTop: 8, color: '#9ca3af' }}>
-              {post.file_url && <span><FileOutlined /> File</span>}
+              {post.file_url && !IMAGE_EXTS.test(post.file_name || post.file_url) && <span><FileOutlined /> File</span>}
               {post.video_url && <span><VideoCameraOutlined /> Video</span>}
               <span><MessageOutlined /> {post.comment_count}</span>
               <span><ShareAltOutlined /> {post.forward_count}</span>
@@ -801,6 +885,7 @@ export default function Forum({ user }) {
           setCreateOpen(false);
           createForm.resetFields();
           setFileList([]);
+          setImageList([]);
         }}
         onOk={handleCreate}
         confirmLoading={creating}
@@ -833,7 +918,25 @@ export default function Forum({ user }) {
           <Form.Item name="video_url" label="Video URL (optional)">
             <Input placeholder="https://youtube.com/..." />
           </Form.Item>
-          <Form.Item label="Attachment (optional)">
+          <Form.Item label="Images (optional, up to 9)">
+            <Upload
+              beforeUpload={() => false}
+              fileList={imageList}
+              onChange={({ fileList: next }) => setImageList(next.slice(0, 9))}
+              multiple
+              accept="image/*"
+              listType="picture-card"
+              maxCount={9}
+            >
+              {imageList.length < 9 && (
+                <div>
+                  <PlusOutlined />
+                  <div style={{ marginTop: 8 }}>Add Image</div>
+                </div>
+              )}
+            </Upload>
+          </Form.Item>
+          <Form.Item label="Other Attachment (optional)">
             <Upload
               beforeUpload={() => false}
               fileList={fileList}
@@ -1041,6 +1144,7 @@ export default function Forum({ user }) {
               );
             })()}
 
+            {detailPost.images?.length > 0 && renderImages(detailPost.images, false)}
             {renderAttachment(detailPost)}
             {detailPost.video_url && (
               <div style={{ marginTop: 12 }}>

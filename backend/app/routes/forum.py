@@ -20,6 +20,7 @@ forum_bp = Blueprint('forum', __name__, url_prefix='/api/forum')
 SUGGESTED_TAGS = ('skills', 'experience', 'academic_culture', 'public', 'note')
 VALID_ZONES = ('public', 'friend')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'mp4', 'webm', 'mov'}
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 REJECTION_REASONS = (
     'The post contains inaccurate or misleading information',
     'The post is not relevant to the forum topic',
@@ -212,69 +213,74 @@ def get_posts():
         query = query.order_by(ForumPostPin.id.is_not(None).desc(), ForumPost.created_at.desc())
     else:
         query = query.order_by(ForumPost.is_pinned.desc(), ForumPost.created_at.desc())
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
-    items = _serialise_posts(pagination.items)
-    # Tag each post item with type
+    if not include_forwards:
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        items = _serialise_posts(pagination.items)
+        for item in items:
+            item['type'] = 'post'
+        return jsonify({
+            'posts': items,
+            'total': pagination.total,
+            'page': page,
+            'pages': pagination.pages,
+        }), 200
+
+    # include_forwards: fetch all posts + all forwards, mix and paginate in Python
+    all_posts = query.all()
+    items = _serialise_posts(all_posts)
     for item in items:
         item['type'] = 'post'
 
-    total = pagination.total
+    if zone == 'friend' and not _is_admin():
+        friend_ids = _get_friend_ids(current_user.id)
+        visible_user_ids = friend_ids | {current_user.id}
+        forward_query = ForumForward.query.join(
+            ForumPost, ForumForward.original_post_id == ForumPost.id
+        ).filter(
+            ForumPost.status == ForumPost.STATUS_PUBLISHED,
+            ForumForward.user_id.in_(visible_user_ids),
+            ForumForward.zone == 'friend',
+        )
+    elif zone == 'public' and not _is_admin():
+        forward_query = ForumForward.query.join(
+            ForumPost, ForumForward.original_post_id == ForumPost.id
+        ).filter(
+            ForumPost.status == ForumPost.STATUS_PUBLISHED,
+            ForumForward.zone == 'public',
+        )
+    else:
+        forward_query = ForumForward.query.join(
+            ForumPost, ForumForward.original_post_id == ForumPost.id
+        ).filter(ForumPost.status == ForumPost.STATUS_PUBLISHED)
+        if zone in VALID_ZONES:
+            forward_query = forward_query.filter(ForumForward.zone == zone)
+    if search:
+        pattern = f'%{search}%'
+        forward_query = forward_query.filter(db.or_(
+            ForumPost.title.ilike(pattern),
+            ForumPost.tag.ilike(pattern),
+        ))
 
-    # Include forwards in the feed
-    if include_forwards:
-        if zone == 'friend' and not _is_admin():
-            friend_ids = _get_friend_ids(current_user.id)
-            visible_user_ids = friend_ids | {current_user.id}
-            forward_query = ForumForward.query.join(
-                ForumPost, ForumForward.original_post_id == ForumPost.id
-            ).filter(
-                ForumPost.status == ForumPost.STATUS_PUBLISHED,
-                ForumForward.user_id.in_(visible_user_ids),
-                ForumForward.zone == 'friend',
-            )
-        elif zone == 'public' and not _is_admin():
-            forward_query = ForumForward.query.join(
-                ForumPost, ForumForward.original_post_id == ForumPost.id
-            ).filter(
-                ForumPost.status == ForumPost.STATUS_PUBLISHED,
-                ForumForward.zone == 'public',
-            )
-        else:
-            forward_query = ForumForward.query.join(
-                ForumPost, ForumForward.original_post_id == ForumPost.id
-            ).filter(ForumPost.status == ForumPost.STATUS_PUBLISHED)
-            if zone in VALID_ZONES:
-                forward_query = forward_query.filter(ForumForward.zone == zone)
-        if search:
-            pattern = f'%{search}%'
-            forward_query = forward_query.filter(db.or_(
-                ForumPost.title.ilike(pattern),
-                ForumPost.tag.ilike(pattern),
-            ))
+    forwards = forward_query.order_by(ForumForward.created_at.desc()).all()
+    for fw in forwards:
+        data = fw.to_dict()
+        data['type'] = 'forward'
+        items.append(data)
 
-        forwards = forward_query.order_by(ForumForward.created_at.desc()).all()
-        for fw in forwards:
-            data = fw.to_dict()
-            data['type'] = 'forward'
-            items.append(data)
+    items.sort(key=lambda x: (
+        x.get('is_pinned', False),
+        x.get('created_at', ''),
+    ), reverse=True)
 
-        # Sort combined list by created_at descending, pinned posts first
-        items.sort(key=lambda x: (
-            x.get('is_pinned', False),
-            x.get('created_at', ''),
-        ), reverse=True)
-
-        total = len(items)
-        start = (page - 1) * per_page
-        end = start + per_page
-        items = items[start:end]
-
+    total = len(items)
+    start = (page - 1) * per_page
+    end = start + per_page
     return jsonify({
-        'posts': items,
+        'posts': items[start:end],
         'total': total,
-        'page': page if not include_forwards else page,
-        'pages': pagination.pages if not include_forwards else ((total + per_page - 1) // per_page),
+        'page': page,
+        'pages': (total + per_page - 1) // per_page,
     }), 200
 
 
@@ -338,6 +344,19 @@ def create_post():
             file_url = f'/api/forum/uploads/{unique_name}'
             file_name = original_name
 
+    images = []
+    for img_file in request.files.getlist('images'):
+        if not img_file.filename:
+            continue
+        ext = img_file.filename.rsplit('.', 1)[-1].lower() if '.' in img_file.filename else ''
+        if ext not in ALLOWED_IMAGE_EXTENSIONS:
+            continue
+        original_name = secure_filename(img_file.filename)
+        unique_name = f"{uuid.uuid4().hex}_{original_name}"
+        img_file.save(os.path.join(_upload_dir(), unique_name))
+        images.append({'url': f'/api/forum/uploads/{unique_name}', 'name': original_name})
+    images = images or None
+
     # Game record posts are auto-approved, but only if the user actually
     # participated in the referenced game room (prevents tag abuse).
     game_verified = False
@@ -386,6 +405,7 @@ def create_post():
         content=content,
         file_url=file_url,
         file_name=file_name,
+        images=images,
         video_url=video_url,
         status=status,
         reviewed_by=reviewed_by,
