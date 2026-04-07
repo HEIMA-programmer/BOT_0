@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { Button } from 'antd';
-import { RobotOutlined, UserOutlined, AudioOutlined, SoundOutlined } from '@ant-design/icons';
+import { RobotOutlined, UserOutlined, AudioOutlined, AudioMutedOutlined } from '@ant-design/icons';
 import './ConversationView.css';
 
 function formatTime(date) {
@@ -29,7 +29,9 @@ export default function ConversationView({
   messages,
   currentTranscript,
   currentAiTranscript,
+  micMuted,
   onEndConversation,
+  onToggleMic,
   readOnly = false,
 }) {
   const messagesEndRef = useRef(null);
@@ -38,8 +40,8 @@ export default function ConversationView({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentTranscript, currentAiTranscript]);
 
-  // Loading / connecting state
-  if (status === 'connecting' || status === 'ready') {
+  // Loading / connecting state — only show full loading on initial connect (no messages yet)
+  if ((status === 'connecting' || status === 'ready') && messages.length === 0) {
     return (
       <div className="conversation-container">
         <div className="conversation-loading">
@@ -64,8 +66,11 @@ export default function ConversationView({
         {messages.length === 0 && !currentAiTranscript && !currentTranscript && status === 'listening' && (
           <div className="conversation-empty">
             <RobotOutlined />
-            <div>Waiting for conversation to begin...</div>
-            <div style={{ fontSize: 12 }}>Speak naturally or wait for AI to start</div>
+            <div className="typing-dots" style={{ marginTop: 8 }}>
+              <span /><span /><span />
+            </div>
+            <div>AI is preparing to speak...</div>
+            <div style={{ fontSize: 12 }}>Please wait a moment</div>
           </div>
         )}
 
@@ -114,9 +119,15 @@ export default function ConversationView({
       </div>
 
       {/* Status bar */}
-      {!readOnly && (status === 'listening' || status === 'ended') && (
+      {!readOnly && (status === 'listening' || status === 'ended' || (status === 'connecting' && messages.length > 0)) && (
         <div className="conversation-status-bar">
           <div className="status-indicator">
+            {status === 'connecting' && messages.length > 0 && (
+              <>
+                <div className="status-dot connecting" />
+                <span>Reconnecting...</span>
+              </>
+            )}
             {status === 'listening' && aiSpeaking && (
               <>
                 <div className="status-dot ai-speaking" />
@@ -124,11 +135,17 @@ export default function ConversationView({
                 <span>AI is speaking</span>
               </>
             )}
-            {status === 'listening' && !aiSpeaking && (
+            {status === 'listening' && !aiSpeaking && !micMuted && (
               <>
                 <div className="status-dot listening" />
                 <WaveformBars color="#10b981" />
                 <span>Listening...</span>
+              </>
+            )}
+            {status === 'listening' && !aiSpeaking && micMuted && (
+              <>
+                <div className="status-dot" style={{ background: '#9ca3af' }} />
+                <span style={{ color: '#9ca3af' }}>Mic muted</span>
               </>
             )}
             {status === 'ended' && (
@@ -136,11 +153,22 @@ export default function ConversationView({
             )}
           </div>
 
-          {status === 'listening' && (
-            <Button danger onClick={onEndConversation} size="middle">
-              End Conversation
-            </Button>
-          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {status === 'listening' && onToggleMic && (
+              <Button
+                shape="circle"
+                size="middle"
+                icon={micMuted ? <AudioMutedOutlined /> : <AudioOutlined />}
+                onClick={onToggleMic}
+                className={micMuted ? 'mic-btn muted' : 'mic-btn'}
+              />
+            )}
+            {status === 'listening' && (
+              <Button danger onClick={onEndConversation} size="middle">
+                End Conversation
+              </Button>
+            )}
+          </div>
         </div>
       )}
     </div>

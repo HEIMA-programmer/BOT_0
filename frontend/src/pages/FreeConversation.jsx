@@ -130,7 +130,9 @@ export default function FreeConversation() {
           messages={conversation.messages}
           currentTranscript={conversation.currentTranscript}
           currentAiTranscript={conversation.currentAiTranscript}
+          micMuted={conversation.micMuted}
           onEndConversation={handleEnd}
+          onToggleMic={conversation.toggleMic}
         />
       </div>
 
