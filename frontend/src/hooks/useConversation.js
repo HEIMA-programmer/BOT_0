@@ -10,14 +10,14 @@ export default function useConversation() {
   const [status, setStatus] = useState('idle'); // idle | connecting | ready | listening | ended
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [currentTranscript, setCurrentTranscript] = useState('');
-  const [currentAiTranscript, setCurrentAiTranscript] = useState('');
   const [scoringStatus, setScoringStatus] = useState('idle'); // idle | scoring | done | error
   const [scores, setScores] = useState(null);
+  const [micMuted, setMicMuted] = useState(false);
 
   const socketRef = useRef(null);
   const streamRef = useRef(null);
   const processorRef = useRef(null);
+  const sourceRef = useRef(null);
   const recordingContextRef = useRef(null);
   const playbackContextRef = useRef(null);
   const nextPlayTimeRef = useRef(0);
@@ -27,6 +27,12 @@ export default function useConversation() {
 
   // Track the latest AI transcript text via ref to avoid stale closure issues
   const aiTranscriptRef = useRef('');
+
+  // Track messages array synchronously for event handlers
+  const messagesRef = useRef([]);
+  // Unique message ID counter
+  const msgIdCounterRef = useRef(0);
+  const nextMsgId = () => `msg-${Date.now()}-${++msgIdCounterRef.current}`;
 
   // --- Audio playback (24kHz PCM from Gemini) ---
   const playAudio = useCallback((base64Audio) => {
@@ -95,6 +101,7 @@ export default function useConversation() {
 
       source.connect(processor);
       processor.connect(ctx.destination);
+      sourceRef.current = source;
       processorRef.current = processor;
       setStatus('listening');
     } catch (err) {
@@ -108,6 +115,10 @@ export default function useConversation() {
       processorRef.current.disconnect();
       processorRef.current = null;
     }
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -120,11 +131,12 @@ export default function useConversation() {
     optionsRef.current = options;
     setStatus('connecting');
     setMessages([]);
-    setCurrentTranscript('');
-    setCurrentAiTranscript('');
+    messagesRef.current = [];
     aiTranscriptRef.current = '';
+    msgIdCounterRef.current = 0;
     setScores(null);
     setScoringStatus('idle');
+    setMicMuted(false);
 
     const socket = io('/conversation');
     socketRef.current = socket;
@@ -155,39 +167,32 @@ export default function useConversation() {
       if (data.audio) playAudio(data.audio);
     });
 
-    // Streaming AI transcript - update both ref and state for real-time display
+    // Accumulate AI transcript via ref (no streaming display)
     socket.on('ai_transcript', (data) => {
       aiTranscriptRef.current = data.text;
-      setCurrentAiTranscript(data.text);
     });
 
-    socket.on('user_transcript', (data) => {
-      setCurrentTranscript(data.text);
-    });
-
-    // user_final: finalize user message, also flush any pending user transcript
+    // user_final: finalize user message — always append to end
     socket.on('user_final', (data) => {
       if (data.text) {
-        setMessages(prev => [...prev, { role: 'user', text: data.text, timestamp: new Date() }]);
+        const msg = { id: nextMsgId(), role: 'user', text: data.text, timestamp: new Date() };
+        messagesRef.current = [...messagesRef.current, msg];
+        setMessages([...messagesRef.current]);
       }
-      setCurrentTranscript('');
     });
 
-    // ai_speaking_end: finalize AI message from the ref (avoids stale closure)
+    // ai_speaking_end: finalize AI message — always append to end
     socket.on('ai_speaking_end', () => {
       const text = aiTranscriptRef.current;
       if (text) {
-        setMessages(prev => {
-          // Prevent duplicates: check if the last AI message has the same text
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.role === 'ai' && lastMsg.text === text) {
-            return prev;
-          }
-          return [...prev, { role: 'ai', text, timestamp: new Date() }];
-        });
+        const cur = messagesRef.current;
+        if (!cur.some(m => m.role === 'ai' && m.text === text)) {
+          const newMsg = { id: nextMsgId(), role: 'ai', text, timestamp: new Date() };
+          messagesRef.current = [...cur, newMsg];
+          setMessages([...messagesRef.current]);
+        }
       }
       aiTranscriptRef.current = '';
-      setCurrentAiTranscript('');
       nextPlayTimeRef.current = 0;
       setAiSpeaking(false);
     });
@@ -210,6 +215,60 @@ export default function useConversation() {
       message.error(data.message || 'An error occurred');
     });
   }, [playAudio, startMic]);
+
+  // --- Toggle mic mute/unmute ---
+  const toggleMic = useCallback(() => {
+    setMicMuted(prev => {
+      const willMute = !prev;
+      if (willMute) {
+        // Mute: disconnect processor to stop sending audio
+        if (processorRef.current) {
+          processorRef.current.disconnect();
+        }
+        if (sourceRef.current) {
+          sourceRef.current.disconnect();
+        }
+        // Signal backend that user's turn is done for faster AI response
+        if (socketRef.current) {
+          socketRef.current.emit('end_user_turn');
+        }
+      } else {
+        // Unmute: reconnect processor to resume sending audio
+        const ctx = recordingContextRef.current;
+        const source = sourceRef.current;
+        const processor = processorRef.current;
+        if (ctx && source && processor) {
+          source.connect(processor);
+          processor.connect(ctx.destination);
+        } else if (streamRef.current && ctx) {
+          // Re-create source/processor if needed
+          const newSource = ctx.createMediaStreamSource(streamRef.current);
+          const newProcessor = ctx.createScriptProcessor(512, 1, 1);
+          newProcessor.onaudioprocess = (e) => {
+            const input = e.inputBuffer.getChannelData(0);
+            const pcm = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+              const s = Math.max(-1, Math.min(1, input[i]));
+              pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            const bytes = new Uint8Array(pcm.buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            if (socketRef.current) {
+              socketRef.current.emit('audio_chunk', { audio: btoa(binary) });
+            }
+          };
+          newSource.connect(newProcessor);
+          newProcessor.connect(ctx.destination);
+          sourceRef.current = newSource;
+          processorRef.current = newProcessor;
+        }
+      }
+      return willMute;
+    });
+  }, []);
 
   // --- End conversation ---
   const endConversation = useCallback(() => {
@@ -245,11 +304,11 @@ export default function useConversation() {
     status,
     aiSpeaking,
     messages,
-    currentTranscript,
-    currentAiTranscript,
     scoringStatus,
     scores,
+    micMuted,
     connect,
+    toggleMic,
     endConversation,
     requestScoring,
   };

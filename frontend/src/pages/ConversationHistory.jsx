@@ -78,7 +78,8 @@ export default function ConversationHistory() {
   // Detail view
   if (selectedSession) {
     const report = selectedSession.report;
-    const messages = (selectedSession.messages || []).map(m => ({
+    const messages = (selectedSession.messages || []).map((m, i) => ({
+      id: `hist-${m.id || i}`,
       role: m.role === 'assistant' ? 'ai' : 'user',
       text: m.content,
       timestamp: m.created_at,
@@ -113,8 +114,6 @@ export default function ConversationHistory() {
             status="ended"
             aiSpeaking={false}
             messages={messages}
-            currentTranscript=""
-            currentAiTranscript=""
             readOnly
           />
         </div>
