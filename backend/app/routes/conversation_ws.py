@@ -99,6 +99,18 @@ def handle_audio_chunk(data):
         session_data['service'].audio_in_queue.put(audio_data)
 
 
+@socketio.on('end_user_turn', namespace='/conversation')
+def handle_end_user_turn():
+    """Send silence to help Gemini VAD detect end-of-speech when user mutes mic."""
+    session_id = request.sid
+    session_data = active_sessions.get(session_id)
+    if not session_data:
+        return
+    # 0.5s of silence at 16kHz 16-bit PCM = 16000 bytes of zeros
+    silence = b'\x00' * 16000
+    session_data['service'].audio_in_queue.put(silence)
+
+
 @socketio.on('end_conversation', namespace='/conversation')
 def handle_end_conversation():
     session_id = request.sid

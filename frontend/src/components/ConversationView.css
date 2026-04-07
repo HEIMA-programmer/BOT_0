@@ -152,40 +152,6 @@
   text-align: right;
 }
 
-/* Streaming AI text with blinking cursor */
-.message-bubble.ai.streaming::after {
-  content: '|';
-  animation: blink 1s step-end infinite;
-  color: #059669;
-  font-weight: 600;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-/* Transcript (user typing) */
-.transcript-row {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-direction: row-reverse;
-  animation: fadeInUp 0.2s ease-out;
-}
-
-.transcript-bubble {
-  max-width: 70%;
-  padding: 12px 16px;
-  border-radius: 16px;
-  background: #dbeafe;
-  color: #1e40af;
-  opacity: 0.7;
-  font-size: 14px;
-  line-height: 1.6;
-  border-bottom-right-radius: 4px;
-}
-
 /* Voice waveform animation */
 .waveform {
   display: flex;
@@ -260,6 +226,27 @@
     box-shadow: 0 0 0 6px transparent;
     opacity: 0.7;
   }
+}
+
+/* Mic button */
+.mic-btn {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.mic-btn:hover {
+  border-color: #059669 !important;
+  color: #059669 !important;
+}
+
+.mic-btn.muted {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.mic-btn.muted:hover {
+  border-color: #dc2626 !important;
+  color: #dc2626 !important;
 }
 
 /* Empty state */
