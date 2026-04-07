@@ -262,6 +262,27 @@
   }
 }
 
+/* Mic button */
+.mic-btn {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.mic-btn:hover {
+  border-color: #059669 !important;
+  color: #059669 !important;
+}
+
+.mic-btn.muted {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.mic-btn.muted:hover {
+  border-color: #dc2626 !important;
+  color: #dc2626 !important;
+}
+
 /* Empty state */
 .conversation-empty {
   display: flex;
