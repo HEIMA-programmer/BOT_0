@@ -12,8 +12,6 @@ describe('ConversationView', () => {
         status="connecting"
         aiSpeaking={false}
         messages={[]}
-        currentTranscript=""
-        currentAiTranscript=""
         onEndConversation={vi.fn()}
       />
     );
@@ -23,8 +21,8 @@ describe('ConversationView', () => {
 
   it('renders message bubbles', () => {
     const messages = [
-      { role: 'assistant', content: 'Hello! How can I help you today?' },
-      { role: 'user', content: 'I need help with my essay.' },
+      { id: 'test-1', role: 'assistant', content: 'Hello! How can I help you today?' },
+      { id: 'test-2', role: 'user', content: 'I need help with my essay.' },
     ];
 
     renderWithProviders(
@@ -32,8 +30,6 @@ describe('ConversationView', () => {
         status="listening"
         aiSpeaking={false}
         messages={messages}
-        currentTranscript=""
-        currentAiTranscript=""
         onEndConversation={vi.fn()}
       />
     );
@@ -50,8 +46,6 @@ describe('ConversationView', () => {
         status="listening"
         aiSpeaking={false}
         messages={[]}
-        currentTranscript=""
-        currentAiTranscript=""
         onEndConversation={onEnd}
       />
     );
@@ -65,9 +59,7 @@ describe('ConversationView', () => {
       <ConversationView
         status="listening"
         aiSpeaking={false}
-        messages={[{ role: 'assistant', content: 'Hi' }]}
-        currentTranscript=""
-        currentAiTranscript=""
+        messages={[{ id: 'test-3', role: 'assistant', content: 'Hi' }]}
         onEndConversation={vi.fn()}
         readOnly
       />

@@ -128,8 +128,6 @@ export default function FreeConversation() {
           status={conversation.status}
           aiSpeaking={conversation.aiSpeaking}
           messages={conversation.messages}
-          currentTranscript={conversation.currentTranscript}
-          currentAiTranscript={conversation.currentAiTranscript}
           micMuted={conversation.micMuted}
           onEndConversation={handleEnd}
           onToggleMic={conversation.toggleMic}
