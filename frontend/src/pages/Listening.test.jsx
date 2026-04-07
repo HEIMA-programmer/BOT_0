@@ -247,6 +247,7 @@ const beginnerPracticePayload = {
   instructions: 'Listen to the recording and answer the multiple-choice questions.',
   question_count: 2,
   saved_attempt: null,
+  attempt_history: [],
   questions: [
     {
       id: 'beginner-campus-welcome-multiple-choice-1',
@@ -289,6 +290,7 @@ const libraryPracticePayload = {
   instructions: 'Listen to the recording and answer the multiple-choice questions.',
   question_count: 1,
   saved_attempt: null,
+  attempt_history: [],
   questions: [
     {
       id: 'beginner-library-tour-multiple-choice-1',
@@ -318,6 +320,7 @@ const groupDiscussionPracticePayload = {
   instructions: 'Listen to the recording and answer the multiple-choice questions.',
   question_count: 1,
   saved_attempt: null,
+  attempt_history: [],
   questions: [
     {
       id: 'beginner-best-way-to-learn-english-multiple-choice-1',
@@ -347,6 +350,7 @@ const officeHourPracticePayload = {
   instructions: 'Listen to the recording and answer the multiple-choice questions.',
   question_count: 1,
   saved_attempt: null,
+  attempt_history: [],
   questions: [
     {
       id: 'beginner-grades-multiple-choice-1',
@@ -369,6 +373,13 @@ const beginnerSubmitPayload = {
   correct_count: 1,
   total_count: 2,
   transcript: 'Welcome to your first lecture. Today we will cover campus orientation basics.',
+  attempt_history: [
+    {
+      id: 101,
+      score: 50,
+      completed_at: '2026-04-08T10:30:00Z',
+    },
+  ],
   results: [
     {
       id: 'beginner-campus-welcome-multiple-choice-1',
@@ -411,6 +422,7 @@ const intermediatePracticePayload = {
   instructions: 'Listen carefully, then complete the fill-in-the-blank and short-answer tasks.',
   question_count: 2,
   saved_attempt: null,
+  attempt_history: [],
   questions: [
     {
       id: 'intermediate-research-fill-1',
@@ -434,6 +446,13 @@ const intermediateSubmitPayload = {
   correct_count: 2,
   total_count: 2,
   transcript: 'Research begins with a clear question. Surveys and interviews reveal different kinds of evidence.',
+  attempt_history: [
+    {
+      id: 201,
+      score: 100,
+      completed_at: '2026-04-08T11:00:00Z',
+    },
+  ],
   results: [
     {
       id: 'intermediate-research-fill-1',
@@ -530,6 +549,28 @@ describe('Listening page', () => {
     });
   });
 
+  it('shows Beginner and Advanced on the landing page and uses intermediate data for Advanced', async () => {
+    renderListening('/listening');
+    await selectAudioPractice();
+
+    expect(await screen.findByText('Choose your listening level')).toBeTruthy();
+    expect(screen.getByText('Beginner')).toBeTruthy();
+    expect(screen.getByText('Advanced')).toBeTruthy();
+    expect(screen.queryByText('Intermediate')).toBeNull();
+
+    fireEvent.click(screen.getByText('Advanced'));
+
+    expect(await screen.findByText('Advanced Listening Practice')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(mockListeningAPI.getPractice).toHaveBeenCalledWith(
+        'intermediate',
+        'lecture-clips',
+        'research-methods'
+      );
+    });
+  });
+
   it('switches to the group discussion scenario and loads its practice questions', async () => {
     renderListening('/listening/beginner?type=audio');
 
@@ -604,6 +645,7 @@ describe('Listening page', () => {
   it('handles intermediate fill-in-the-blank and short-answer submission', async () => {
     renderListening('/listening/intermediate?type=audio');
 
+    expect(await screen.findByText('Advanced Listening Practice')).toBeTruthy();
     expect(await screen.findByText('The professor says research begins with a clear ____.')).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText('Type your answer here'), {
@@ -633,6 +675,37 @@ describe('Listening page', () => {
       screen.getAllByText('Because they reveal different kinds of evidence.').length
     ).toBeGreaterThan(0);
     expect(screen.getByText(/Research begins with a clear question/)).toBeTruthy();
+  });
+
+  it('shows attempt history for the selected recording in English', async () => {
+    mockListeningAPI.getPractice.mockResolvedValueOnce({
+      data: {
+        ...beginnerPracticePayload,
+        attempt_history: [
+          {
+            id: 301,
+            score: 80,
+            completed_at: '2026-04-07T09:30:00Z',
+          },
+          {
+            id: 302,
+            score: 60,
+            completed_at: '2026-04-05T08:15:00Z',
+          },
+        ],
+      },
+    });
+
+    renderListening('/listening/beginner?type=audio');
+
+    expect(await screen.findByText('Who is speaking at the start of the lecture?')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /History/i }));
+
+    expect(await screen.findByText('Attempt history')).toBeTruthy();
+    expect(screen.getByText('Accuracy 80%')).toBeTruthy();
+    expect(screen.getByText('Accuracy 60%')).toBeTruthy();
+    expect(screen.getByText('Previous scores for this recording.')).toBeTruthy();
   });
 
   it('preserves answers when switching between clips and restores prior submission results', async () => {
@@ -683,6 +756,13 @@ describe('Listening page', () => {
     mockListeningAPI.getPractice.mockResolvedValueOnce({
       data: {
         ...beginnerPracticePayload,
+        attempt_history: [
+          {
+            id: 401,
+            score: 50,
+            completed_at: '2026-04-08T10:30:00Z',
+          },
+        ],
         saved_attempt: {
           answers: {
             'beginner-campus-welcome-multiple-choice-1': 'A',

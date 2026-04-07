@@ -42,8 +42,7 @@ const speakingScenarios = [
 
 const listeningDifficulties = [
   { key: 'beginner', label: 'Beginner' },
-  { key: 'intermediate', label: 'Intermediate' },
-  { key: 'advanced', label: 'Advanced' },
+  { key: 'intermediate', label: 'Advanced' },
 ];
 
 const listeningScenarios = [
@@ -124,13 +123,11 @@ const listeningItemsByDifficulty = {
       { key: 'testing-students', label: 'Testing Students' },
     ],
   },
-  advanced: {
-    'lecture-clips': [],
-    'group-discussion': [],
-    'qa-session': [],
-    'office-hour': [],
-  },
 };
+
+const normalizeListeningDifficulty = (difficulty) => (
+  difficulty === 'advanced' ? 'intermediate' : difficulty
+);
 
 const menuItems = [
   { key: 'add', icon: <PlusCircleOutlined />, label: 'Add New Task' },
@@ -192,14 +189,15 @@ export default function Schedule({ onClose }) {
     let content = '';
     
     if (newTask.module === 'listening') {
+      const normalizedDifficulty = normalizeListeningDifficulty(newTask.difficulty);
       if (!newTask.listeningItem) {
         message.warning('Please select a listening item');
         return;
       }
       const scenarioInfo = listeningScenarios.find(s => s.key === newTask.listeningType);
-      const items = listeningItemsByDifficulty[newTask.difficulty]?.[newTask.listeningType] || [];
+      const items = listeningItemsByDifficulty[normalizedDifficulty]?.[newTask.listeningType] || [];
       const itemInfo = items.find(i => i.key === newTask.listeningItem);
-      const difficultyLabel = listeningDifficulties.find(d => d.key === newTask.difficulty)?.label || newTask.difficulty;
+      const difficultyLabel = listeningDifficulties.find(d => d.key === normalizedDifficulty)?.label || normalizedDifficulty;
       content = `${scenarioInfo?.label || ''}: ${itemInfo?.label || ''} (${difficultyLabel})`;
     } else if (newTask.module === 'speaking') {
       if (!newTask.scenarioType) {
@@ -216,7 +214,7 @@ export default function Schedule({ onClose }) {
     const task = {
       id: Date.now(),
       module: newTask.module,
-      difficulty: newTask.difficulty,
+      difficulty: normalizeListeningDifficulty(newTask.difficulty),
       articleTitle: newTask.articleTitle,
       scenario: newTask.scenario,
       scenarioType: newTask.scenarioType,
@@ -268,7 +266,8 @@ export default function Schedule({ onClose }) {
 
   const handleViewDetail = (task) => {
     if (task.module === 'listening') {
-      navigate(`/listening/${task.listeningType}/${task.listeningItem}?difficulty=${task.difficulty}`, { 
+      const normalizedDifficulty = normalizeListeningDifficulty(task.difficulty);
+      navigate(`/listening/${task.listeningType}/${task.listeningItem}?difficulty=${normalizedDifficulty}`, { 
         state: { taskId: task.id } 
       });
     } else if (task.module === 'speaking') {

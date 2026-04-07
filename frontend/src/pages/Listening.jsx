@@ -38,8 +38,17 @@ const { TextArea } = Input;
 
 const levelTheme = {
   beginner: { color: '#059669', bg: '#ecfdf5', accent: '#047857' },
-  intermediate: { color: '#2563eb', bg: '#eff6ff', accent: '#1d4ed8' },
+  intermediate: { color: '#d97706', bg: '#fffbeb', accent: '#b45309' },
   advanced: { color: '#d97706', bg: '#fffbeb', accent: '#b45309' },
+};
+
+const hiddenListeningLevelIds = new Set(['advanced']);
+
+const listeningLevelDisplayOverrides = {
+  intermediate: {
+    label: 'Advanced',
+    description: 'Challenge yourself with longer clips, richer detail, and more open-ended responses.',
+  },
 };
 
 const scenarioIcons = {
@@ -116,6 +125,58 @@ function createEmptyAnswers(questions) {
   }, {});
 }
 
+function getDisplayedListeningLevel(level) {
+  if (!level) {
+    return null;
+  }
+
+  const override = listeningLevelDisplayOverrides[level.id];
+  return override ? { ...level, ...override } : level;
+}
+
+function formatHistoryTimestamp(value) {
+  if (!value) {
+    return 'Unknown date';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown date';
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function formatHistoryScore(value) {
+  if (typeof value !== 'number') {
+    return 'N/A';
+  }
+
+  return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
+}
+
+function getHistoryScoreColor(value) {
+  if (typeof value !== 'number') {
+    return 'default';
+  }
+
+  if (value >= 80) {
+    return 'success';
+  }
+
+  if (value >= 60) {
+    return 'processing';
+  }
+
+  return 'warning';
+}
+
 export default function Listening({ user }) {
   useLearningTimeTracker('listening', 'study_time:listening');
 
@@ -126,7 +187,8 @@ export default function Listening({ user }) {
   const state = location.state || {};
   
   const [mediaType, setMediaType] = useState(searchParams.get('type') || null);
-  const difficulty = searchParams.get('difficulty') || state.difficulty || levelId;
+  const rawDifficulty = searchParams.get('difficulty') || state.difficulty || levelId;
+  const difficulty = rawDifficulty === 'advanced' ? 'intermediate' : rawDifficulty;
 
   const [catalog, setCatalog] = useState({ levels: [], source_count: 0 });
   const [loading, setLoading] = useState(true);
@@ -137,10 +199,12 @@ export default function Listening({ user }) {
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [practiceError, setPracticeError] = useState('');
   const [practiceData, setPracticeData] = useState(null);
+  const [attemptHistory, setAttemptHistory] = useState([]);
   const [answers, setAnswers] = useState({});
   const [answerCache, setAnswerCache] = useState(() => loadPersistedListeningState(user?.id).answerCache);
   const [submitting, setSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [submissionCache, setSubmissionCache] = useState(
     () => loadPersistedListeningState(user?.id).submissionCache
   );
@@ -192,7 +256,14 @@ export default function Listening({ user }) {
   }, []);
 
   const levels = catalog.levels || [];
-  const selectedLevel = levels.find((level) => level.id === difficulty) || null;
+  const visibleLevels = levels
+    .filter((level) => !hiddenListeningLevelIds.has(level.id))
+    .map(getDisplayedListeningLevel);
+  const levelCardSpan = visibleLevels.length <= 2 ? 12 : 8;
+  const selectedLevel = levels.find(
+    (level) => level.id === difficulty && !hiddenListeningLevelIds.has(level.id)
+  ) || null;
+  const selectedLevelDisplay = getDisplayedListeningLevel(selectedLevel);
   const selectedScenario = selectedLevel?.scenarios?.find(
     (scenario) => scenario.id === selectedScenarioId
   ) || null;
@@ -280,6 +351,7 @@ export default function Listening({ user }) {
     if (!selectedScenario) {
       setSelectedClipId(null);
       setPracticeData(null);
+      setAttemptHistory([]);
       setPracticeError('');
       setAnswers({});
       setSubmissionResult(null);
@@ -289,6 +361,7 @@ export default function Listening({ user }) {
     if (!selectedScenario.is_available) {
       setSelectedClipId(null);
       setPracticeData(null);
+      setAttemptHistory([]);
       setPracticeError('');
       setAnswers({});
       setSubmissionResult(null);
@@ -303,6 +376,7 @@ export default function Listening({ user }) {
   useEffect(() => {
     if (!difficulty || !selectedLevel || !selectedScenario?.is_available || !selectedClip) {
       setPracticeData(null);
+      setAttemptHistory([]);
       setPracticeError('');
       setAnswers({});
       setSubmissionResult(null);
@@ -323,6 +397,7 @@ export default function Listening({ user }) {
         );
         if (!active) return;
         setPracticeData(response.data);
+        setAttemptHistory(response.data.attempt_history || []);
         const emptyAnswers = createEmptyAnswers(response.data.questions);
         const savedAttempt = response.data.saved_attempt;
         const savedAnswers = savedAttempt?.answers || {};
@@ -343,6 +418,7 @@ export default function Listening({ user }) {
         console.error('Failed to load listening practice:', fetchError);
         if (!active) return;
         setPracticeData(null);
+        setAttemptHistory([]);
         setAnswers({});
         setPracticeError('Failed to load questions for this clip. Please choose another one.');
       } finally {
@@ -357,6 +433,10 @@ export default function Listening({ user }) {
       active = false;
     };
   }, [difficulty, selectedLevel, selectedScenario, selectedClip]);
+
+  useEffect(() => {
+    setHistoryExpanded(false);
+  }, [selectedPracticeKey]);
 
   useEffect(() => {
     const flushActivePracticeTime = () => {
@@ -428,6 +508,7 @@ export default function Listening({ user }) {
         answers
       );
       setSubmissionResult(response.data);
+      setAttemptHistory(response.data.attempt_history || []);
       if (selectedPracticeKey) {
         activePracticeKeyRef.current = null;
         practiceStartedAtRef.current = null;
@@ -634,8 +715,8 @@ export default function Listening({ user }) {
               Choose your listening level
             </Title>
             <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-              Beginner and Intermediate practice are ready now for Lecture Clips, Group Discussion,
-              Q&A Session, and Office Hour. Advanced content stays visible for future development.
+              Beginner and Advanced practice are ready now for Lecture Clips, Group Discussion,
+              Q&A Session, and Office Hour.
             </Text>
           </Col>
           <Col xs={24} md={8} lg={6}>
@@ -657,10 +738,10 @@ export default function Listening({ user }) {
         </Space>
       </div>
       <Row gutter={[16, 16]}>
-        {levels.map((level) => {
+        {visibleLevels.map((level) => {
           const theme = levelTheme[level.id] || levelTheme.beginner;
           return (
-            <Col xs={24} md={8} key={level.id}>
+            <Col xs={24} md={levelCardSpan} key={level.id}>
               <Card
                 hoverable
                 role="button"
@@ -679,8 +760,8 @@ export default function Listening({ user }) {
               >
                 <div
                   style={{
-                    width: 56,
-                    height: 56,
+                    width: 72,
+                    height: 72,
                     borderRadius: 14,
                     background: theme.bg,
                     display: 'flex',
@@ -688,7 +769,7 @@ export default function Listening({ user }) {
                     justifyContent: 'center',
                     marginBottom: 18,
                     color: theme.color,
-                    fontSize: 24,
+                    fontSize: 30,
                   }}
                 >
                   <SoundOutlined />
@@ -719,7 +800,7 @@ export default function Listening({ user }) {
     <>
       <div style={{ marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#374151' }}>
-          Choose a scenario in {selectedLevel.label}
+          Choose a scenario in {selectedLevelDisplay?.label || selectedLevel.label}
         </Title>
       </div>
       <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
@@ -867,6 +948,8 @@ export default function Listening({ user }) {
       return null;
     }
 
+    const selectedTheme = levelTheme[selectedLevel?.id] || levelTheme.beginner;
+
     if (!selectedScenario.is_available) {
       return (
         <Card
@@ -874,7 +957,7 @@ export default function Listening({ user }) {
           styles={{ body: { padding: 24 } }}
         >
           <Empty
-            description={`${selectedScenario.label} for ${selectedLevel.label} is reserved for later development.`}
+            description={`${selectedScenario.label} for ${selectedLevelDisplay?.label || selectedLevel.label} is reserved for later development.`}
           />
         </Card>
       );
@@ -943,10 +1026,116 @@ export default function Listening({ user }) {
             >
               {selectedClip ? (
                 <>
-                  <Space wrap size={[8, 8]} style={{ marginBottom: 14 }}>
-                    <Tag color="blue" style={{ borderRadius: 999 }}>{selectedLevel.label}</Tag>
-                    <Tag color="gold" style={{ borderRadius: 999 }}>{selectedScenario.label}</Tag>
-                  </Space>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      marginBottom: 14,
+                    }}
+                  >
+                    <Space wrap size={[8, 8]}>
+                      <Tag
+                        style={{
+                          borderRadius: 999,
+                          padding: '2px 10px',
+                          color: selectedTheme.accent,
+                          background: selectedTheme.bg,
+                          border: `1px solid ${selectedTheme.color}33`,
+                        }}
+                      >
+                        {selectedLevelDisplay?.label || selectedLevel.label}
+                      </Tag>
+                      <Tag color="gold" style={{ borderRadius: 999 }}>
+                        {selectedScenario.label}
+                      </Tag>
+                    </Space>
+
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<ClockCircleOutlined />}
+                      onClick={() => setHistoryExpanded((current) => !current)}
+                      style={{
+                        borderRadius: 999,
+                        border: '1px solid #e5e7eb',
+                        background: '#fff',
+                        height: 'auto',
+                        padding: '4px 10px',
+                        color: '#4b5563',
+                      }}
+                    >
+                      {attemptHistory.length ? `History (${attemptHistory.length})` : 'History'}
+                    </Button>
+                  </div>
+
+                  {historyExpanded ? (
+                    <Card
+                      size="small"
+                      style={{
+                        borderRadius: 12,
+                        border: '1px solid #f3f4f6',
+                        background: '#fafaf9',
+                        marginBottom: 16,
+                      }}
+                      styles={{ body: { padding: 16 } }}
+                    >
+                      <Space orientation="vertical" size={10} style={{ width: '100%' }}>
+                        <div>
+                          <Text strong style={{ color: '#111827' }}>
+                            Attempt history
+                          </Text>
+                          <Text
+                            type="secondary"
+                            style={{ display: 'block', marginTop: 4, fontSize: 13 }}
+                          >
+                            Previous scores for this recording.
+                          </Text>
+                        </div>
+
+                        {attemptHistory.length ? (
+                          <div style={{ maxHeight: 220, overflowY: 'auto', paddingRight: 4 }}>
+                            <Space orientation="vertical" size={10} style={{ width: '100%' }}>
+                              {attemptHistory.map((entry) => (
+                                <div
+                                  key={entry.id}
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: '10px 12px',
+                                    borderRadius: 10,
+                                    border: '1px solid #e5e7eb',
+                                    background: '#fff',
+                                  }}
+                                >
+                                  <Space orientation="vertical" size={2}>
+                                    <Text strong style={{ color: '#111827' }}>
+                                      {formatHistoryTimestamp(entry.completed_at)}
+                                    </Text>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      Completed attempt
+                                    </Text>
+                                  </Space>
+                                  <Tag
+                                    color={getHistoryScoreColor(entry.score)}
+                                    style={{ borderRadius: 999, marginInlineEnd: 0 }}
+                                  >
+                                    Accuracy {formatHistoryScore(entry.score)}
+                                  </Tag>
+                                </div>
+                              ))}
+                            </Space>
+                          </div>
+                        ) : (
+                          <Text type="secondary">No attempt history yet.</Text>
+                        )}
+                      </Space>
+                    </Card>
+                  ) : null}
+
                   <Title level={4} style={{ marginTop: 0, marginBottom: 8, fontWeight: 600 }}>
                     {selectedClip.title}
                   </Title>
@@ -1140,7 +1329,7 @@ export default function Listening({ user }) {
                   border: `1px solid ${theme.color}33`,
                 }}
               >
-                {selectedLevel.label}
+                {selectedLevelDisplay?.label || selectedLevel.label}
               </Tag>
               <Tag
                 icon={selectedLevel.is_available ? <CheckCircleOutlined /> : <ClockCircleOutlined />}
@@ -1153,10 +1342,10 @@ export default function Listening({ user }) {
 
             <div>
               <Title level={3} style={{ margin: 0, fontWeight: 700, color: '#1a1a2e' }}>
-                {selectedLevel.label} Listening Practice
+                {(selectedLevelDisplay?.label || selectedLevel.label)} Listening Practice
               </Title>
               <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-                {selectedLevel.description}
+                {selectedLevelDisplay?.description || selectedLevel.description}
               </Text>
             </div>
           </Space>

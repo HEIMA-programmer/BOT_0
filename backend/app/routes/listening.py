@@ -71,11 +71,11 @@ SCENARIOS = [
 
 QUESTION_SECTION_RULES = {
     'beginner': [
-        ('Multiple Choice', 'multiple_choice', 'Multiple choice'),
+        ('Multiple Choice', 'multiple_choice', 'Multiple choice', 5),
     ],
     'intermediate': [
-        ('Fill in the Blank', 'fill_in_the_blank', 'Fill in the blank'),
-        ('Short Answer', 'short_answer', 'Short answer'),
+        ('Fill in the Blank', 'fill_in_the_blank', 'Fill in the blank', 2),
+        ('Short Answer', 'short_answer', 'Short answer', 3),
     ],
 }
 
@@ -408,7 +408,7 @@ def _load_practice_questions(source, level_id):
     questions = []
     next_number = 1
 
-    for section_heading, question_type, section_label in section_rules:
+    for section_heading, question_type, section_label, question_limit in section_rules:
         section_text = _extract_section_block(level_block, section_heading)
         if not section_text:
             continue
@@ -429,6 +429,9 @@ def _load_practice_questions(source, level_id):
                 section_label,
                 next_number,
             )
+
+        if question_limit is not None:
+            parsed_questions = parsed_questions[:question_limit]
 
         questions.extend(parsed_questions)
         next_number += len(parsed_questions)
@@ -570,6 +573,36 @@ def _find_saved_attempt(user_id, level_id, scenario_id, source_slug):
         scenario_id=scenario_id,
         source_slug=source_slug,
     ).first()
+
+
+def _serialize_attempt_history_entry(progress_record):
+    return {
+        'id': progress_record.id,
+        'score': progress_record.score,
+        'completed_at': (
+            progress_record.completed_at.isoformat()
+            if progress_record.completed_at
+            else None
+        ),
+    }
+
+
+def _load_attempt_history(user_id, level_id, scenario_id, source_slug):
+    activity_type = f'{level_id}:{scenario_id}:{source_slug}'
+    progress_records = (
+        Progress.query.filter_by(
+            user_id=user_id,
+            module='listening',
+            activity_type=activity_type,
+        )
+        .order_by(Progress.completed_at.desc(), Progress.id.desc())
+        .all()
+    )
+
+    return [
+        _serialize_attempt_history_entry(progress_record)
+        for progress_record in progress_records
+    ]
 
 
 def _find_level(level_id):
@@ -772,6 +805,12 @@ def get_listening_practice(level_id, scenario_id, source_slug):
 
     saved_attempt = _find_saved_attempt(current_user.id, level_id, scenario_id, source_slug)
     payload['saved_attempt'] = saved_attempt.to_dict() if saved_attempt else None
+    payload['attempt_history'] = _load_attempt_history(
+        current_user.id,
+        level_id,
+        scenario_id,
+        source_slug,
+    )
 
     return jsonify(payload), 200
 
@@ -845,6 +884,13 @@ def submit_listening_practice(level_id, scenario_id, source_slug):
     saved_attempt.total_count = total_count
     db.session.commit()
 
+    attempt_history = _load_attempt_history(
+        current_user.id,
+        level_id,
+        scenario_id,
+        source_slug,
+    )
+
     return jsonify({
         'level': {
             'id': level['id'],
@@ -861,4 +907,5 @@ def submit_listening_practice(level_id, scenario_id, source_slug):
         'total_count': total_count,
         'results': results,
         'transcript': source['transcript'],
+        'attempt_history': attempt_history,
     }), 200

@@ -91,11 +91,12 @@ def test_beginner_practice_route_returns_multiple_choice_questions_only(client, 
 
     assert data['level']['id'] == 'beginner'
     assert data['scenario']['id'] == 'lecture-clips'
-    assert data['question_count'] >= 1
+    assert data['question_count'] == 5
     assert len(data['questions']) == data['question_count']
     assert all(question['type'] == 'multiple_choice' for question in data['questions'])
     assert all('correct_answer' not in question for question in data['questions'])
     assert all(question['options'] for question in data['questions'])
+    assert data['attempt_history'] == []
 
 
 def test_group_discussion_beginner_practice_returns_multiple_choice_questions_only(client, login_user):
@@ -108,11 +109,12 @@ def test_group_discussion_beginner_practice_returns_multiple_choice_questions_on
 
     assert data['level']['id'] == 'beginner'
     assert data['scenario']['id'] == 'group-discussion'
-    assert data['question_count'] >= 1
+    assert data['question_count'] == 5
     assert len(data['questions']) == data['question_count']
     assert all(question['type'] == 'multiple_choice' for question in data['questions'])
     assert all('correct_answer' not in question for question in data['questions'])
     assert all(question['options'] for question in data['questions'])
+    assert data['attempt_history'] == []
 
 
 def test_office_hour_beginner_practice_returns_multiple_choice_questions_only(client, login_user):
@@ -125,11 +127,12 @@ def test_office_hour_beginner_practice_returns_multiple_choice_questions_only(cl
 
     assert data['level']['id'] == 'beginner'
     assert data['scenario']['id'] == 'office-hour'
-    assert data['question_count'] >= 1
+    assert data['question_count'] == 5
     assert len(data['questions']) == data['question_count']
     assert all(question['type'] == 'multiple_choice' for question in data['questions'])
     assert all('correct_answer' not in question for question in data['questions'])
     assert all(question['options'] for question in data['questions'])
+    assert data['attempt_history'] == []
 
 
 def test_intermediate_practice_submission_returns_score_and_results(client, login_user):
@@ -138,6 +141,7 @@ def test_intermediate_practice_submission_returns_score_and_results(client, logi
     response = client.get('/api/listening/quiz/intermediate/lecture-clips/better-human-trailer')
     assert response.status_code == 200
     quiz = response.get_json()
+    assert quiz['question_count'] == 5
 
     answers = {}
     for question in quiz['questions']:
@@ -160,10 +164,14 @@ def test_intermediate_practice_submission_returns_score_and_results(client, logi
 
     assert result['level']['id'] == 'intermediate'
     assert result['scenario']['id'] == 'lecture-clips'
+    assert result['total_count'] == 5
     assert result['total_count'] == quiz['question_count']
     assert result['correct_count'] == 2
     assert result['score'] == round((2 / quiz['question_count']) * 100, 1)
     assert result['transcript']
+    assert len(result['attempt_history']) == 1
+    assert result['attempt_history'][0]['score'] == result['score']
+    assert result['attempt_history'][0]['completed_at'] is not None
 
     results_by_prompt = {item['prompt']: item for item in result['results']}
     assert results_by_prompt['The podcast is hosted by ____.']['is_correct'] is True
@@ -185,6 +193,7 @@ def test_office_hour_intermediate_submission_returns_score_and_results(client, l
     response = client.get('/api/listening/quiz/intermediate/office-hour/grades')
     assert response.status_code == 200
     quiz = response.get_json()
+    assert quiz['question_count'] == 5
 
     answers = {}
     for question in quiz['questions']:
@@ -205,10 +214,13 @@ def test_office_hour_intermediate_submission_returns_score_and_results(client, l
 
     assert result['level']['id'] == 'intermediate'
     assert result['scenario']['id'] == 'office-hour'
+    assert result['total_count'] == 5
     assert result['total_count'] == quiz['question_count']
     assert result['correct_count'] == 2
     assert result['score'] == round((2 / quiz['question_count']) * 100, 1)
     assert result['transcript']
+    assert len(result['attempt_history']) == 1
+    assert result['attempt_history'][0]['score'] == result['score']
 
     results_by_prompt = {item['prompt']: item for item in result['results']}
     assert (
@@ -237,6 +249,7 @@ def test_qa_session_intermediate_submission_returns_score_and_results(client, lo
     response = client.get('/api/listening/quiz/intermediate/qa-session/big-family')
     assert response.status_code == 200
     quiz = response.get_json()
+    assert quiz['question_count'] == 5
 
     answers = {}
     for question in quiz['questions']:
@@ -255,10 +268,13 @@ def test_qa_session_intermediate_submission_returns_score_and_results(client, lo
 
     assert result['level']['id'] == 'intermediate'
     assert result['scenario']['id'] == 'qa-session'
+    assert result['total_count'] == 5
     assert result['total_count'] == quiz['question_count']
     assert result['correct_count'] == 2
     assert result['score'] == round((2 / quiz['question_count']) * 100, 1)
     assert result['transcript']
+    assert len(result['attempt_history']) == 1
+    assert result['attempt_history'][0]['score'] == result['score']
 
     results_by_prompt = {item['prompt']: item for item in result['results']}
     assert results_by_prompt['Mark says Sorie is from a ________ family.']['is_correct'] is True
@@ -300,6 +316,45 @@ def test_listening_practice_returns_saved_attempt_for_same_user(client, login_us
     assert practice_data['saved_attempt'] is not None
     assert practice_data['saved_attempt']['answers'] == answers
     assert practice_data['saved_attempt']['results']
+    assert len(practice_data['attempt_history']) == 1
+    assert practice_data['attempt_history'][0]['score'] == submit_response.get_json()['score']
+
+
+def test_listening_practice_returns_attempt_history_for_multiple_submissions(client, login_user):
+    login_user()
+
+    quiz_response = client.get('/api/listening/quiz/beginner/lecture-clips/better-human-trailer')
+    assert quiz_response.status_code == 200
+    quiz = quiz_response.get_json()
+    assert quiz['question_count'] == 5
+
+    first_answers = {}
+    second_answers = {}
+
+    for index, question in enumerate(quiz['questions']):
+        first_answers[question['id']] = 'A'
+        second_answers[question['id']] = 'B' if index == 0 else 'A'
+
+    first_submit = client.post(
+        '/api/listening/quiz/beginner/lecture-clips/better-human-trailer/submit',
+        json={'answers': first_answers},
+    )
+    assert first_submit.status_code == 200
+
+    second_submit = client.post(
+        '/api/listening/quiz/beginner/lecture-clips/better-human-trailer/submit',
+        json={'answers': second_answers},
+    )
+    assert second_submit.status_code == 200
+
+    practice_response = client.get('/api/listening/quiz/beginner/lecture-clips/better-human-trailer')
+    assert practice_response.status_code == 200
+    practice_data = practice_response.get_json()
+
+    assert len(practice_data['attempt_history']) == 2
+    assert practice_data['attempt_history'][0]['id'] != practice_data['attempt_history'][1]['id']
+    assert practice_data['attempt_history'][0]['completed_at'] is not None
+    assert practice_data['attempt_history'][1]['completed_at'] is not None
 
 
 def test_listening_audio_route_returns_404_for_unknown_clip(client, login_user):
