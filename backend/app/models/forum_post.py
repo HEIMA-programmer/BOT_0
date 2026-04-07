@@ -22,6 +22,7 @@ class ForumPost(db.Model):
     content = db.Column(db.Text, nullable=False)
     file_url = db.Column(db.String(500), nullable=True)
     file_name = db.Column(db.String(200), nullable=True)
+    images = db.Column(db.JSON, nullable=True)  # list of {url, name}
     video_url = db.Column(db.String(500), nullable=True)
     status = db.Column(
         db.String(20),
@@ -80,6 +81,7 @@ class ForumPost(db.Model):
             'content': self.content,
             'file_url': self.file_url,
             'file_name': self.file_name,
+            'images': self.images or [],
             'video_url': self.video_url,
             'status': self.status,
             'is_pinned': bool(self.is_pinned),

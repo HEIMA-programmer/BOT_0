@@ -152,6 +152,7 @@ def _ensure_runtime_schema():
         'reviewed_by': 'ALTER TABLE forum_posts ADD COLUMN reviewed_by INTEGER',
         'reviewed_at': 'ALTER TABLE forum_posts ADD COLUMN reviewed_at DATETIME',
         'updated_at': 'ALTER TABLE forum_posts ADD COLUMN updated_at DATETIME',
+        'images': 'ALTER TABLE forum_posts ADD COLUMN images TEXT',
     }
     for column, ddl in forum_post_alters.items():
         if column not in forum_post_columns:
@@ -442,7 +443,265 @@ def _seed_guidance_posts(app):
             ),
             'video_url': 'https://www.youtube.com/watch?v=WUvTyaaNkzM',
         },
+        {
+            'title': 'Treasure Hunt 🍫🗺️',
+            'content': (
+                "**The Most Fun We've Had in English Class — Treasure Hunt!**\n\n"
+                "Last week our English for Academic Skills class did something completely different "
+                "— a Treasure Hunt across the new campus, and it was SO much fun! 🎉\n\n"
+                "Here's how it worked: each group had 10 minutes to hide a small bag of chocolates "
+                "somewhere on campus 🍬, then rush back to the classroom and write a set of directions "
+                "clear enough for a completely different group to follow — no maps, no photos, just your words. 📝\n\n"
+                "The hiding part was already chaotic 😂 Everyone sprinting off in different directions, "
+                "arguing about whether a spot was \"too obvious\" or \"too impossible to find\", and then "
+                "panicking because 10 minutes goes faster than you think ⏱️\n\n"
+                "The writing part is where it got genuinely challenging 💪 As students in a Sino-British "
+                "joint programme, being able to express yourself precisely in English is something we work "
+                "on from day one — and this activity really puts that to the test. You have to think about "
+                "landmarks, distances, directional language (\"turn left at...\", \"walk past...\", "
+                "\"it's tucked behind the...\"), and make sure every sentence is completely unambiguous. "
+                "One vague line and the other team is wandering around the wrong building entirely 😅\n\n"
+                "The searching part was the most fun 🏃 Armed with nothing but a paragraph of English "
+                "directions, each group set off across campus trying to decode each other's clues. "
+                "Some descriptions were impressively clear. Others... were creative interpretations "
+                "of the English language 😂\n\n"
+                "The first group to find the hidden bag won ALL the chocolates 🏆🍫 — and trust me, "
+                "that made everyone write their directions very carefully.\n\n"
+                "It's one of those activities where you don't realise how much English you're practising "
+                "until afterwards — descriptive writing, spatial language, clarity and precision, "
+                "all wrapped up in a genuinely fun competition 🌟\n\n"
+                "10/10 would hide chocolates again 😄\n\n"
+                "#DIICSU #TreasureHunt"
+            ),
+            'tag': 'academic_culture',
+            'images': [
+                {'url': '/api/forum/uploads/hunt1.jpg', 'name': 'hunt1.jpg'},
+                {'url': '/api/forum/uploads/hunt2.jpg', 'name': 'hunt2.jpg'},
+            ],
+        },
+        {
+            'title': 'English Corner 🗣️',
+            'content': (
+                "**English Corner — Is It Worth Going? (Spoiler: Yes 🙋)**\n\n"
+                "Every week the college runs an English Corner session, usually on the 5th floor "
+                "of the Foreign Languages building 📬 Keep an eye on your email for the weekly topic and time!\n\n"
+                "At DIICSU, we're preparing for an international academic environment from the very "
+                "beginning — and English Corner is honestly one of the best low-pressure ways to build "
+                "that confidence 😌 No grades, no judgment, just real conversation with teachers and classmates.\n\n"
+                "Topics cover everything from campus life to current events — basically anything that "
+                "gets people actually speaking 🔥\n\n"
+                "If you're nervous about English in class, start here. "
+                "Just showing up consistently makes a real difference 💪\n\n"
+                "See you there! 👋\n\n"
+                "#EnglishCorner #SpeakingPractice #DIICSU"
+            ),
+            'tag': 'experience',
+            'images': [
+                {'url': '/api/forum/uploads/english_corner.png', 'name': 'english_corner.png'},
+            ],
+        },
+        {
+            'title': 'Summer School 🇬🇧✈️',
+            'content': (
+                "**Two Weeks at Our Partner University — Everything You Need to Know**\n\n"
+                "This summer, a group of us packed our bags and flew to Dundee 🧳✈️ Not just any "
+                "university — THE University of Dundee, the institution whose name is literally on our degree.\n\n"
+                "And honestly? It hit different walking onto that campus knowing this is where some of "
+                "us will continue our studies 🎓\n\n"
+                "**What the programme looks like:**\n"
+                "The Summer School lasts around two weeks, with classes and academic activities at the "
+                "University of Dundee during the week. But it's not all studying — we also got to travel "
+                "to other parts of the UK, including London 🎡🌧️ (yes, it rained. A lot. Welcome to Britain 😂)\n\n"
+                "**What you actually gain:**\n\n"
+                "🗣️ Full immersion, 24/7. Every conversation, every meal, every journey is in English. "
+                "You'll be surprised how quickly your brain switches gears when there's no Chinese to fall back on.\n\n"
+                "🏫 You experience the actual campus. Libraries, lecture halls, student facilities — "
+                "you get a real preview of what studying there full-time would look like. "
+                "It makes the idea of going to Dundee feel concrete rather than abstract.\n\n"
+                "🌍 Cultural exposure you can't get in a classroom. Navigating public transport, "
+                "understanding British social norms, adjusting to a completely different pace of life "
+                "— these are things you can only learn by being there.\n\n"
+                "🤝 You meet people. Other international students, local students, professors — "
+                "the connections you make in two weeks can be surprisingly meaningful.\n\n"
+                "**Is it worth it?**\n"
+                "As a DIICSU student, the pathway to Dundee is one of the biggest advantages of our "
+                "programme 💪 The Summer School is essentially a preview of that future. If you're "
+                "considering continuing your degree in the UK, going gives you a massive head start "
+                "— you'll already know the campus, the city, and what to expect from British academic culture.\n\n"
+                "And even if you're not planning to go to Dundee long-term, two weeks in the UK will do "
+                "more for your English and your confidence than a whole semester of classroom study 🌟\n\n"
+                "Applications usually open before the end of the academic year — keep an eye on "
+                "announcements and don't miss it!"
+            ),
+            'tag': 'experience',
+            'images': [
+                {'url': '/api/forum/uploads/IMG_1004.jpg', 'name': 'IMG_1004.jpg'},
+                {'url': '/api/forum/uploads/IMG_1170.jpg', 'name': 'IMG_1170.jpg'},
+                {'url': '/api/forum/uploads/IMG_1176.jpg', 'name': 'IMG_1176.jpg'},
+                {'url': '/api/forum/uploads/IMG_1264.jpg', 'name': 'IMG_1264.jpg'},
+                {'url': '/api/forum/uploads/IMG_1350.jpg', 'name': 'IMG_1350.jpg'},
+                {'url': '/api/forum/uploads/IMG_1587.jpg', 'name': 'IMG_1587.jpg'},
+                {'url': '/api/forum/uploads/IMG_1605.jpg', 'name': 'IMG_1605.jpg'},
+                {'url': '/api/forum/uploads/IMG_2317.jpg', 'name': 'IMG_2317.jpg'},
+                {'url': '/api/forum/uploads/IMG_2442.jpg', 'name': 'IMG_2442.jpg'},
+            ],
+        },
+        {
+            'title': 'Academic English 📚',
+            'content': (
+                "**One Year In — What Academic English Actually Taught Me ✨**\n\n"
+                "Okay real talk 👇\n\n"
+                "When I started at DIICSU, I thought \"academic English\" just meant writing essays "
+                "with fancier vocabulary. Maybe some extra grammar practice. A box to tick before the "
+                "real subjects started.\n\n"
+                "A year later, I can confidently say: I completely missed the point 😂\n\n"
+                "**What it actually covers:**\n\n"
+                "The English for Academic Skills course touches on everything — writing, reading, "
+                "listening, and speaking, but not in the way you'd expect from a typical English class. "
+                "It's not about grammar rules. It's about how to function in an academic environment "
+                "where English is the working language.\n\n"
+                "✍️ **Writing** — How to structure an argument. How to write a proper academic report. "
+                "How to reference sources correctly (yes, referencing is a whole skill on its own 😅). "
+                "How to describe data, processes, and findings clearly and precisely.\n\n"
+                "👂 **Listening** — Following lectures delivered by foreign professors with different "
+                "accents. Picking out key information in real time. This one is harder than it sounds, "
+                "especially in first year.\n\n"
+                "📖 **Reading** — Processing dense academic texts efficiently. Understanding assignment "
+                "briefs, rubrics, and feedback written entirely in English.\n\n"
+                "🗣️ **Speaking** — The final speaking exam is an individual Presentation in front of "
+                "your class, followed by Q&A from your classmates and teacher. No notes to hide behind. "
+                "Eye contact, body language, and the ability to think on your feet all count.\n\n"
+                "**Why it matters more at DIICSU than anywhere else:**\n\n"
+                "At a regular university, English is one subject among many 🤷 At DIICSU, English is "
+                "the medium for ALL your subjects. Your Calculus exam is in English. Your Engineering "
+                "project report is in English. Your group demo is delivered in English. Every assignment "
+                "brief, every professor's feedback, every rubric — English.\n\n"
+                "**Practical tips:**\n\n"
+                "📌 For Speaking — prepare thoroughly and practise out loud, not just in your head. "
+                "The teacher pays attention to delivery: smile, make eye contact, don't just read off your slides.\n\n"
+                "📌 For Writing — pay close attention to how references are formatted. "
+                "It sounds like a small detail but it affects your grade more than you'd think.\n\n"
+                "📌 For general improvement — check the Extra Materials on myDundee. "
+                "There's a solid bank of practice exercises across all four skills.\n\n"
+                "📌 Go to English Corner. Seriously. It's low pressure, it's free, "
+                "and consistent speaking practice compounds over time 🗣️\n\n"
+                "The final grade is just Pass or Fail — but don't let that fool you into coasting. "
+                "The skills you build here follow you through every year of this programme and beyond 🌟\n\n"
+                "#AcademicEnglish #StudyTips #DIICSU"
+            ),
+            'tag': 'skills',
+            'images': [
+                {'url': '/api/forum/uploads/english_class.jpg', 'name': 'english_class.jpg'},
+            ],
+        },
+        {
+            'title': "What's It Actually Like Studying in a Sino-British Joint Programme? 🌏",
+            'content': (
+                "People always ask me — what's different about DIICSU compared to a regular Chinese "
+                "university? Here's my honest answer, one year in 👇\n\n"
+                "**From day one, everything is in English 📚**\n\n"
+                "Not just English class. Your maths. Your engineering projects. Your group presentations. "
+                "Every assignment brief, every professor's feedback, every exam paper — English. "
+                "The first week is genuinely overwhelming 😅 You're sitting in a lecture thinking "
+                "\"I understood every individual word but somehow missed the whole point.\" "
+                "That feeling fades, but it takes time.\n\n"
+                "**You have both Chinese and foreign professors 👨‍🏫👩‍🏫**\n\n"
+                "The difference in teaching style is real. Chinese teachers tend to be more structured, "
+                "guiding you step by step through the material. Foreign professors often throw a problem "
+                "at you and expect you to figure it out, ask questions, and defend your thinking. "
+                "Neither is better — but switching between the two in the same week takes some getting used to 😂\n\n"
+                "**The first time you use Turnitin is terrifying 😬**\n\n"
+                "Academic integrity is taken very seriously here in a way that's genuinely different "
+                "from most Chinese high schools. Turnitin checks your submission for plagiarism, and "
+                "the rules around referencing and originality are strict. Nobody tells you how stressful "
+                "submitting your first assignment feels until you're staring at that similarity percentage 😅 "
+                "Learn how referencing works early — it will save you a lot of anxiety.\n\n"
+                "**Peer review is a thing 🤝**\n\n"
+                "In project courses, your teammates evaluate your individual contribution — and you "
+                "evaluate theirs. The scores are hidden from each other and they actually affect your "
+                "final grade. It sounds uncomfortable, and honestly it is at first. But it teaches you "
+                "to show up, contribute, and not coast on your group's effort.\n\n"
+                "**There's a real pathway to the UK 🇬🇧**\n\n"
+                "This isn't just a marketing line on a brochure. The programme is genuinely designed "
+                "to prepare you for studying at the University of Dundee. The academic standards, "
+                "the English requirements, the teaching style — all of it is building towards that. "
+                "Whether or not you end up going, that context shapes everything about how the programme runs.\n\n"
+                "Is it harder than a regular programme? Sometimes, yes! Is it worth it? Absolutely 💪\n\n"
+                "#DIICSU #SinoBritish #JointProgramme"
+            ),
+            'tag': 'academic_culture',
+        },
+        {
+            'title': "Having Foreign Professors — What Nobody Tells You 👨‍🏫",
+            'content': (
+                "One of the most unique parts of DIICSU is having foreign professors teach your core "
+                "subjects 🌍 Here's what I wish someone had told me before my first class 👇\n\n"
+                "**The accent situation is real 😅**\n\n"
+                "British, American, Australian, Scottish — you'll encounter different accents across "
+                "different modules, sometimes within the same week. My first lecture, I understood maybe "
+                "60% of what was said. By the end of semester, the same professor felt completely natural. "
+                "Your ears do adapt, but those first few weeks can be humbling 😂\n\n"
+                "Pro tip: preview the lecture notes beforehand. When you already know roughly what's "
+                "being discussed, you can fill in the gaps even if you miss a few words. "
+                "It makes a huge difference 💡\n\n"
+                "**They will ask you questions. Out loud. In front of everyone. 😬**\n\n"
+                "Foreign professors often use a much more interactive teaching style than what most of "
+                "us were used to in high school. They'll stop mid-lecture, look around the room, and "
+                "ask someone directly. The first time it happened to me I completely froze — not because "
+                "I didn't know the answer, but because I wasn't prepared to answer in English on the spot 😂\n\n"
+                "The solution? Sit somewhere visible and mentally prepare a few sentences before class. "
+                "Once you've answered once or twice, the fear completely disappears 💪\n\n"
+                "**Feedback is direct and specific 📝**\n\n"
+                "Foreign professors tend to give very detailed written feedback on assignments — what "
+                "worked, what didn't, and exactly why. At first it can feel harsh compared to what "
+                "you're used to. But it's genuinely useful. Read every comment carefully, especially "
+                "in first year when you're still figuring out what academic work at this level looks like.\n\n"
+                "**The learning curve is steep but short 📈**\n\n"
+                "Almost everyone struggles in the first month. Almost everyone finds their footing by "
+                "the end of semester one. The adjustment is real, but so is the growth — and by the time "
+                "you're done with first year, the idea of studying full-time in an English-speaking "
+                "environment feels a lot less scary 🌟\n\n"
+                "#DIICSU #ForeignProfessors #StudyTips"
+            ),
+            'tag': 'experience',
+            'images': [
+                {'url': '/api/forum/uploads/english_class_foreign_professor.jpg', 'name': 'english_class_foreign_professor.jpg'},
+            ],
+        },
+        {
+            'title': "Why English Skills Matter More Here Than You Think 📝",
+            'content': (
+                "At a regular Chinese university, you can get by with limited English 🤷 "
+                "At DIICSU, that's genuinely not an option.\n\n"
+                "Here's why 👇\n\n"
+                "📋 **Every exam is in English.** Even subjects like Calculus — if you don't know "
+                "the English mathematical vocabulary, you might fail a problem you actually know how to solve.\n\n"
+                "🤝 **Group projects require English communication.** You'll work with classmates from "
+                "different backgrounds, and your reports, presentations and demos all need to be in English.\n\n"
+                "✈️ **You might continue your degree in the UK.** If you go to Dundee, you'll be in a "
+                "fully English-speaking academic environment from day one. "
+                "The foundation you build here matters.\n\n"
+                "The good news? The programme is designed to build these skills gradually — "
+                "English for Academic Skills, English Corner, project courses with dedicated English "
+                "components. Use every opportunity 💡\n\n"
+                "Start early, practise consistently, and by the time you need it most, "
+                "it'll be second nature 🌟\n\n"
+                "#DIICSU #AcademicEnglish #StudyTips"
+            ),
+            'tag': 'skills',
+        },
     ]
+
+    # Copy seed images into the uploads directory so they're available after a fresh deploy
+    import shutil
+    seed_img_dir = os.path.join(os.path.dirname(__file__), 'seed_images')
+    upload_dir = os.path.join(app.instance_path, 'uploads', 'forum')
+    os.makedirs(upload_dir, exist_ok=True)
+    if os.path.isdir(seed_img_dir):
+        for fname in os.listdir(seed_img_dir):
+            dst = os.path.join(upload_dir, fname)
+            if not os.path.exists(dst):
+                shutil.copy2(os.path.join(seed_img_dir, fname), dst)
 
     now = datetime.now(timezone.utc)
     created_count = 0
@@ -452,23 +711,28 @@ def _seed_guidance_posts(app):
         if existing:
             continue
 
-        post = ForumPost(
-            user_id=admin.id,
-            zone='public',
-            tag='public',
-            title=post_data['title'],
-            content=post_data['content'],
-            video_url=post_data.get('video_url'),
-            status=ForumPost.STATUS_PUBLISHED,
-            is_pinned=True,
-            reviewed_by=admin.id,
-            reviewed_at=now,
-            created_at=now,
-            updated_at=now,
-        )
-        db.session.add(post)
-        created_count += 1
+        try:
+            post = ForumPost(
+                user_id=admin.id,
+                zone='public',
+                tag=post_data.get('tag', 'public'),
+                title=post_data['title'],
+                content=post_data['content'],
+                video_url=post_data.get('video_url'),
+                images=post_data.get('images') or None,
+                status=ForumPost.STATUS_PUBLISHED,
+                is_pinned=True,
+                reviewed_by=admin.id,
+                reviewed_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(post)
+            db.session.commit()
+            created_count += 1
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error('Failed to seed post %r: %s', post_data['title'], e)
 
     if created_count > 0:
-        db.session.commit()
         app.logger.info('Seeded %d guidance posts for DIICSU majors', created_count)
