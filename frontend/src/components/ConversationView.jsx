@@ -27,8 +27,6 @@ export default function ConversationView({
   status,
   aiSpeaking,
   messages,
-  currentTranscript,
-  currentAiTranscript,
   micMuted,
   onEndConversation,
   onToggleMic,
@@ -38,7 +36,7 @@ export default function ConversationView({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentTranscript, currentAiTranscript]);
+  }, [messages]);
 
   // Loading / connecting state — only show full loading on initial connect (no messages yet)
   if ((status === 'connecting' || status === 'ready') && messages.length === 0) {
@@ -63,7 +61,7 @@ export default function ConversationView({
     <div className="conversation-container">
       {/* Messages area */}
       <div className="conversation-messages">
-        {messages.length === 0 && !currentAiTranscript && !currentTranscript && status === 'listening' && (
+        {messages.length === 0 && status === 'listening' && (
           <div className="conversation-empty">
             <RobotOutlined />
             <div className="typing-dots" style={{ marginTop: 8 }}>
@@ -74,8 +72,8 @@ export default function ConversationView({
           </div>
         )}
 
-        {messages.map((msg, index) => (
-          <div key={index} className={`message-row ${msg.role === 'user' ? 'user' : 'ai'}`}>
+        {messages.map((msg) => (
+          <div key={msg.id || msg.timestamp} className={`message-row ${msg.role === 'user' ? 'user' : 'ai'}`}>
             <div className={`message-avatar ${msg.role === 'user' ? 'user' : 'ai'}`}>
               {msg.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
             </div>
@@ -89,31 +87,6 @@ export default function ConversationView({
             </div>
           </div>
         ))}
-
-        {/* User live transcript (show before AI streaming so order is correct) */}
-        {currentTranscript && (
-          <div className="transcript-row">
-            <div className="transcript-bubble">
-              {currentTranscript.length > 150
-                ? '...' + currentTranscript.slice(-150)
-                : currentTranscript}...
-            </div>
-          </div>
-        )}
-
-        {/* Streaming AI response */}
-        {currentAiTranscript && (
-          <div className="message-row ai">
-            <div className="message-avatar ai">
-              <RobotOutlined />
-            </div>
-            <div className="message-content">
-              <div className="message-bubble ai streaming">
-                {currentAiTranscript}
-              </div>
-            </div>
-          </div>
-        )}
 
         <div ref={messagesEndRef} />
       </div>
