@@ -190,7 +190,7 @@ describe('Forum page', () => {
 
     // Switch mock to empty page before clicking page 2
     mockForumAPI.getPosts.mockResolvedValue({
-      data: { posts: [], total: 0, page: 2, pages: 0 },
+      data: { posts: [], total: 11, page: 2, pages: 2 },
     });
     fireEvent.click(screen.getByTitle('2'));
     await waitFor(() =>
