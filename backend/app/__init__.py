@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 from flask import Flask, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
@@ -665,7 +666,10 @@ def _seed_guidance_posts(app):
             ),
             'tag': 'experience',
             'images': [
-                {'url': '/api/forum/uploads/english_class_foreign_professor.jpg', 'name': 'english_class_foreign_professor.jpg'},
+                {
+                    'url': '/api/forum/uploads/english_class_foreign_professor.jpg',
+                    'name': 'english_class_foreign_professor.jpg',
+                },
             ],
         },
         {
@@ -693,7 +697,6 @@ def _seed_guidance_posts(app):
     ]
 
     # Copy seed images into the uploads directory so they're available after a fresh deploy
-    import shutil
     seed_img_dir = os.path.join(os.path.dirname(__file__), 'seed_images')
     upload_dir = os.path.join(app.instance_path, 'uploads', 'forum')
     os.makedirs(upload_dir, exist_ok=True)
