@@ -8,6 +8,11 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from sqlalchemy import inspect, text
 
+try:
+    from flask_compress import Compress
+except ImportError:  # pragma: no cover - optional at import time
+    Compress = None
+
 db = SQLAlchemy()
 login_manager = LoginManager()
 socketio = SocketIO(cors_allowed_origins="*")
@@ -33,6 +38,10 @@ def create_app(config_name=None):
     login_manager.session_protection = 'strong'
     cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
     CORS(app, supports_credentials=True, origins=cors_origins)
+    # gzip compression for JSON / HTML / JS / CSS responses. Flask-Compress
+    # uses a sensible default min-size so tiny payloads are skipped.
+    if Compress is not None:
+        Compress(app)
     socketio.init_app(app, cors_allowed_origins="*")
 
     @login_manager.unauthorized_handler
@@ -56,6 +65,8 @@ def create_app(config_name=None):
     from app.routes.chat_history import chat_history_bp
     from app.routes.room import room_bp
     from app.routes.friends import friends_bp
+    from app.routes.speaking import speaking_bp
+    from app.routes.proxy import proxy_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(daily_words_bp)
@@ -67,6 +78,8 @@ def create_app(config_name=None):
     app.register_blueprint(chat_history_bp)
     app.register_blueprint(room_bp)
     app.register_blueprint(friends_bp)
+    app.register_blueprint(speaking_bp)
+    app.register_blueprint(proxy_bp)
 
     # Serve frontend production build when dist/ exists
     _dist_dir = Path(__file__).resolve().parent.parent.parent / 'frontend' / 'dist'
@@ -196,6 +209,41 @@ def _ensure_runtime_schema():
     db.session.execute(text(
         "UPDATE forum_forwards SET zone = 'public' WHERE zone IS NULL OR zone = ''"
     ))
+
+    # Speaking sessions: additive columns for detailed scoring / history
+    try:
+        speaking_columns = {col['name'] for col in inspector.get_columns('speaking_sessions')}
+    except Exception:
+        speaking_columns = set()
+    speaking_alters = {
+        'scenario_type': 'ALTER TABLE speaking_sessions ADD COLUMN scenario_type VARCHAR(50)',
+        'pronunciation_json': 'ALTER TABLE speaking_sessions ADD COLUMN pronunciation_json TEXT',
+        'content_json': 'ALTER TABLE speaking_sessions ADD COLUMN content_json TEXT',
+        'overall_score': 'ALTER TABLE speaking_sessions ADD COLUMN overall_score FLOAT',
+    }
+    for column, ddl in speaking_alters.items():
+        if speaking_columns and column not in speaking_columns:
+            db.session.execute(text(ddl))
+
+    # Forum indexes to speed up the common list queries (R5). CREATE INDEX IF
+    # NOT EXISTS is idempotent in SQLite.
+    db.session.execute(text(
+        'CREATE INDEX IF NOT EXISTS ix_forum_posts_status_zone_created '
+        'ON forum_posts(status, zone, created_at)'
+    ))
+    db.session.execute(text(
+        'CREATE INDEX IF NOT EXISTS ix_forum_posts_user_id_created '
+        'ON forum_posts(user_id, created_at)'
+    ))
+    db.session.execute(text(
+        'CREATE INDEX IF NOT EXISTS ix_forum_comments_post_id '
+        'ON forum_comments(post_id)'
+    ))
+    db.session.execute(text(
+        'CREATE INDEX IF NOT EXISTS ix_forum_forwards_original_post_id '
+        'ON forum_forwards(original_post_id)'
+    ))
+
     db.session.commit()
 
 
@@ -354,7 +402,7 @@ def _seed_guidance_posts(app):
                 "- [Engineering Toolbox](https://www.engineeringtoolbox.com/)\n\n"
                 "Welcome aboard and enjoy your engineering journey!"
             ),
-            'video_url': 'https://www.youtube.com/watch?v=F8aJqYVDiAs',
+            'video_url': 'https://www.youtube.com/watch?v=mbjPf07W-6Y',
         },
         {
             'title': '[Guide] Mechanical Design, Manufacturing & Automation - Getting Started',
@@ -382,7 +430,7 @@ def _seed_guidance_posts(app):
                 "- [MIT OCW Mechanical Engineering](https://ocw.mit.edu/courses/mechanical-engineering/)\n\n"
                 "Best of luck in your mechanical engineering journey!"
             ),
-            'video_url': 'https://www.youtube.com/watch?v=mKsyRJxNepg',
+            'video_url': 'https://www.youtube.com/watch?v=RjQtzHQj54I',
         },
         {
             'title': '[Guide] Transportation Engineering - Getting Started',
@@ -708,10 +756,37 @@ def _seed_guidance_posts(app):
 
     now = datetime.now(timezone.utc)
     created_count = 0
+    repaired_count = 0
+
+    # Known-broken YouTube IDs that should be overwritten on existing guidance
+    # posts (one-time idempotent repair — after the first boot no post has a
+    # known-bad ID so the block is a no-op).
+    KNOWN_BAD_YT_IDS = {'F8aJqYVDiAs', 'mKsyRJxNepg'}
 
     for post_data in guidance_posts:
         existing = ForumPost.query.filter_by(title=post_data['title']).first()
         if existing:
+            if existing.video_url:
+                for bad_id in KNOWN_BAD_YT_IDS:
+                    if bad_id in existing.video_url:
+                        new_url = post_data.get('video_url')
+                        if new_url and new_url != existing.video_url:
+                            existing.video_url = new_url
+                            existing.updated_at = now
+                            try:
+                                db.session.commit()
+                                repaired_count += 1
+                                app.logger.info(
+                                    'Repaired guidance post video_url for %r: %s -> %s',
+                                    post_data['title'], bad_id, new_url
+                                )
+                            except Exception as repair_err:
+                                db.session.rollback()
+                                app.logger.error(
+                                    'Failed to repair guidance post %r: %s',
+                                    post_data['title'], repair_err
+                                )
+                        break
             continue
 
         try:
@@ -739,3 +814,5 @@ def _seed_guidance_posts(app):
 
     if created_count > 0:
         app.logger.info('Seeded %d guidance posts for DIICSU majors', created_count)
+    if repaired_count > 0:
+        app.logger.info('Repaired %d guidance post video URLs', repaired_count)

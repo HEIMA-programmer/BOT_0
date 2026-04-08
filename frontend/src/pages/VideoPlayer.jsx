@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Card,
   Col,
@@ -14,7 +14,6 @@ import {
   Select,
   App as AntdApp,
   Switch,
-  Spin,
   Radio,
 } from 'antd';
 import {
@@ -34,6 +33,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
 import { forumAPI, roomAPI } from '../api';
 import { videoData } from '../data/videos';
+import ProxiedVideoPlayer from '../components/ProxiedVideoPlayer';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -47,48 +47,6 @@ const TAG_CONFIG = {
   public: { label: 'Public', color: 'orange' },
 };
 const TAGS = Object.keys(TAG_CONFIG);
-
-function YouTubePlayer({ url, iframeRef }) {
-  const [loading, setLoading] = useState(true);
-  
-  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
-  if (!ytMatch) return null;
-  
-  const videoId = ytMatch[1];
-  
-  return (
-    <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, borderRadius: 16, overflow: 'hidden', background: '#000' }}>
-      {loading && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#000',
-            color: '#fff',
-          }}
-        >
-          <Spin size="large" />
-          <Text style={{ color: 'rgba(255,255,255,0.72)', marginTop: 12 }}>Loading video...</Text>
-        </div>
-      )}
-      <iframe
-        ref={iframeRef}
-        src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1`}
-        title="Video"
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        loading="lazy"
-        onLoad={() => setLoading(false)}
-      />
-    </div>
-  );
-}
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function getVideoInfo(categoryId, videoId) {
@@ -107,9 +65,7 @@ export default function VideoPlayer() {
   const fromForum = searchParams.get('fromForum') === 'true';
   const [showReferenceNotes, setShowReferenceNotes] = useState(fromForum);
   const [currentVideoTime, setCurrentVideoTime] = useState('00:00');
-  const iframeRef = useRef(null);
   const playerRef = useRef(null);
-  const intervalRef = useRef(null);
 
   const [notes, setNotes] = useState([
     
@@ -126,56 +82,6 @@ export default function VideoPlayer() {
     const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
-
-  // 加载YouTube iframe API
-  useEffect(() => {
-    if (!video?.url) return;
-
-    const initPlayer = () => {
-      if (!iframeRef.current || playerRef.current) return;
-      playerRef.current = new window.YT.Player(iframeRef.current, {
-        events: {
-          onReady: () => {
-            intervalRef.current = setInterval(() => {
-              if (playerRef.current?.getCurrentTime) {
-                setCurrentVideoTime(formatTime(playerRef.current.getCurrentTime()));
-              }
-            }, 1000);
-          },
-          onStateChange: () => {
-            if (playerRef.current?.getCurrentTime) {
-              setCurrentVideoTime(formatTime(playerRef.current.getCurrentTime()));
-            }
-          },
-        },
-      });
-    };
-
-    if (window.YT?.Player) {
-      // API already loaded (e.g. navigated back) — create player directly
-      initPlayer();
-    } else {
-      // First load — inject script and wait for callback
-      if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-        const tag = document.createElement('script');
-        tag.src = 'https://www.youtube.com/iframe_api';
-        document.head.appendChild(tag);
-      }
-      const prev = window.onYouTubeIframeAPIReady;
-      window.onYouTubeIframeAPIReady = () => {
-        prev?.();
-        initPlayer();
-      };
-    }
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
-    };
-  }, [video?.url]);
 
   const handleAddNote = () => {
     if (!currentNote.trim()) return;
@@ -340,7 +246,12 @@ export default function VideoPlayer() {
             styles={{ body: { padding: 0, overflow: 'hidden' } }}
           >
             {video.url ? (
-              <YouTubePlayer url={video.url} iframeRef={iframeRef} />
+              <ProxiedVideoPlayer
+                ref={playerRef}
+                src={video.url}
+                controls
+                onTimeUpdate={(t) => setCurrentVideoTime(formatTime(t || 0))}
+              />
             ) : (
               <>
                 <div

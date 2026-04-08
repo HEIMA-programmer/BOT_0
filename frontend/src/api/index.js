@@ -129,4 +129,11 @@ export const friendsAPI = {
   remove: (friendUserId) => api.delete(`/friends/${friendUserId}`),
 };
 
+// Structured Speaking history APIs
+export const speakingAPI = {
+  getSessions: (params) => api.get('/speaking/sessions', { params }),
+  getSession: (id) => api.get(`/speaking/sessions/${id}`),
+  deleteSession: (id) => api.delete(`/speaking/sessions/${id}`),
+};
+
 export default api;

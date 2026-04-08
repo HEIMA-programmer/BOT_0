@@ -22,4 +22,7 @@ jobs:
             cd ~/BOT_0
             git pull origin main
             docker compose up -d --build
+            # Reload nginx so any /nginx/conf.d/*.conf changes take effect —
+            # the config is bind-mounted, so `up -d` alone won't reload it.
+            docker compose exec -T nginx nginx -t && docker compose exec -T nginx nginx -s reload || true
             docker image prune -f

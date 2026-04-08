@@ -1,12 +1,210 @@
-import { Typography, Card, Row, Col, Button, Space, Progress, Breadcrumb, Input, Divider, Tag, message, Spin } from 'antd';
-import { AudioOutlined, MessageOutlined, PauseCircleOutlined, ArrowLeftOutlined, PlusOutlined, CheckCircleOutlined, LoadingOutlined, ReadOutlined, TeamOutlined, QuestionCircleOutlined } from '@ant-design/icons';
-import { useState, useEffect, useRef } from 'react';
+import { Typography, Card, Row, Col, Button, Space, Progress, Breadcrumb, Input, Divider, Tag, message, Spin, Tabs, List, Empty, Popconfirm } from 'antd';
+import { AudioOutlined, MessageOutlined, PauseCircleOutlined, ArrowLeftOutlined, PlusOutlined, CheckCircleOutlined, LoadingOutlined, ReadOutlined, TeamOutlined, QuestionCircleOutlined, HistoryOutlined, DeleteOutlined } from '@ant-design/icons';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import useLearningTimeTracker from '../hooks/useLearningTimeTracker';
+import { speakingAPI } from '../api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+
+const HISTORY_PAGE_SIZE = 10;
+
+function formatHistoryDate(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function HistoryPanel({ refreshKey }) {
+  const [sessions, setSessions] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await speakingAPI.getSessions({ page, per_page: HISTORY_PAGE_SIZE });
+      setSessions(res.data.sessions || []);
+      setTotal(res.data.total || 0);
+    } catch (err) {
+      console.error('Failed to load speaking history', err);
+      message.error('Failed to load history');
+    } finally {
+      setLoading(false);
+    }
+  }, [page]);
+
+  useEffect(() => {
+    load();
+  }, [load, refreshKey]);
+
+  const handleDelete = async (id) => {
+    try {
+      await speakingAPI.deleteSession(id);
+      message.success('Deleted');
+      if (expandedId === id) setExpandedId(null);
+      // Reload current page; if last row on page was deleted, step back.
+      if (sessions.length === 1 && page > 1) {
+        setPage((p) => p - 1);
+      } else {
+        load();
+      }
+    } catch (err) {
+      console.error('Failed to delete speaking session', err);
+      message.error('Failed to delete');
+    }
+  };
+
+  if (loading && sessions.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: 64 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!loading && sessions.length === 0) {
+    return (
+      <Card style={{ borderRadius: 12 }}>
+        <Empty description="No history yet. Complete a session to see it here." />
+      </Card>
+    );
+  }
+
+  return (
+    <Card style={{ borderRadius: 12 }}>
+      <List
+        loading={loading}
+        dataSource={sessions}
+        pagination={{
+          current: page,
+          pageSize: HISTORY_PAGE_SIZE,
+          total,
+          onChange: (p) => {
+            setExpandedId(null);
+            setPage(p);
+          },
+          showSizeChanger: false,
+        }}
+        renderItem={(item) => {
+          const expanded = expandedId === item.id;
+          return (
+            <List.Item
+              key={item.id}
+              style={{
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                background: expanded ? '#f8fafc' : 'transparent',
+                borderRadius: 12,
+                padding: 16,
+                cursor: 'pointer',
+              }}
+              onClick={() => setExpandedId(expanded ? null : item.id)}
+            >
+              <Row style={{ width: '100%' }} align="middle" gutter={16}>
+                <Col flex="80px">
+                  <Progress
+                    type="circle"
+                    size={64}
+                    percent={Math.round(item.overall_score || 0)}
+                    strokeColor="#7c3aed"
+                    format={(p) => <span style={{ fontSize: 14, fontWeight: 600 }}>{p}</span>}
+                  />
+                </Col>
+                <Col flex="auto">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <Text strong style={{ fontSize: 16 }}>{item.topic}</Text>
+                    {item.scenario_type && (
+                      <Tag color="blue" style={{ borderRadius: 999 }}>{item.scenario_type}</Tag>
+                    )}
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>{formatHistoryDate(item.created_at)}</Text>
+                </Col>
+                <Col>
+                  <Popconfirm
+                    title="Delete this session?"
+                    okText="Delete"
+                    okButtonProps={{ danger: true }}
+                    cancelText="Cancel"
+                    onConfirm={(e) => {
+                      e?.stopPropagation?.();
+                      handleDelete(item.id);
+                    }}
+                    onCancel={(e) => e?.stopPropagation?.()}
+                  >
+                    <Button
+                      type="text"
+                      icon={<DeleteOutlined />}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </Popconfirm>
+                </Col>
+              </Row>
+
+              {expanded && (
+                <div style={{ width: '100%', marginTop: 16 }} onClick={(e) => e.stopPropagation()}>
+                  <Row gutter={[16, 16]}>
+                    {item.pronunciation && (
+                      <Col xs={24} md={12}>
+                        <Card size="small" title="Pronunciation" style={{ borderRadius: 8 }}>
+                          <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                            <div><Text>Overall: </Text><Text strong>{item.pronunciation.overall ?? '—'}</Text></div>
+                            <div><Text>Accuracy: </Text><Text strong>{item.pronunciation.accuracy ?? '—'}</Text></div>
+                            <div><Text>Fluency: </Text><Text strong>{item.pronunciation.fluency ?? '—'}</Text></div>
+                            <div><Text>Prosody: </Text><Text strong>{item.pronunciation.prosody ?? '—'}</Text></div>
+                          </Space>
+                        </Card>
+                      </Col>
+                    )}
+                    {item.content && (
+                      <Col xs={24} md={12}>
+                        <Card size="small" title="Content" style={{ borderRadius: 8 }}>
+                          <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                            <div><Text>Overall: </Text><Text strong>{item.content.overall ?? '—'}</Text></div>
+                            <div><Text>Vocabulary: </Text><Text strong>{item.content.vocabulary ?? '—'}</Text></div>
+                            <div><Text>Grammar: </Text><Text strong>{item.content.grammar ?? '—'}</Text></div>
+                            <div><Text>Topic: </Text><Text strong>{item.content.topic ?? '—'}</Text></div>
+                          </Space>
+                        </Card>
+                      </Col>
+                    )}
+                  </Row>
+                  {item.content?.feedback && (
+                    <Card size="small" title="AI Feedback" style={{ marginTop: 12, borderRadius: 8 }}>
+                      <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                        {item.content.feedback.vocabulary && (
+                          <div><Text strong style={{ color: '#7c3aed' }}>Vocabulary: </Text><Text>{item.content.feedback.vocabulary}</Text></div>
+                        )}
+                        {item.content.feedback.grammar && (
+                          <div><Text strong style={{ color: '#7c3aed' }}>Grammar: </Text><Text>{item.content.feedback.grammar}</Text></div>
+                        )}
+                        {item.content.feedback.topic && (
+                          <div><Text strong style={{ color: '#7c3aed' }}>Topic: </Text><Text>{item.content.feedback.topic}</Text></div>
+                        )}
+                      </Space>
+                    </Card>
+                  )}
+                  {item.transcript && (
+                    <Card size="small" title="Transcript" style={{ marginTop: 12, borderRadius: 8 }}>
+                      <Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{item.transcript}</Paragraph>
+                    </Card>
+                  )}
+                </div>
+              )}
+            </List.Item>
+          );
+        }}
+      />
+    </Card>
+  );
+}
 
 export default function StructuredSpeaking() {
   useLearningTimeTracker('speaking', 'study_time:structured-speaking');
@@ -93,8 +291,10 @@ export default function StructuredSpeaking() {
   };
 
   // State management
+  const [topTab, setTopTab] = useState('new');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedTopic, setSelectedTopic] = useState(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const currentTopics = scenarioType
     ? scenarioTopics[scenarioType]
@@ -138,7 +338,10 @@ export default function StructuredSpeaking() {
       setProgressMessage('');
       setResult(data);
       message.success('Scoring complete! 🎉');
-      
+      // Invalidate any cached history so the next visit to the History tab
+      // reloads the fresh session from the backend.
+      setHistoryRefreshKey((k) => k + 1);
+
       if (state.taskId) {
         window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId: state.taskId } }));
       }
@@ -263,7 +466,8 @@ export default function StructuredSpeaking() {
         socketRef.current.emit('submit_audio', {
           audio: base64Audio,
           topic: selectedTopic.title,
-          mimeType: mimeType
+          mimeType: mimeType,
+          scenario_type: scenarioType || selectedCategory || (selectedTopic?.isCustom ? 'custom' : null),
         });
       }
     };
@@ -321,6 +525,22 @@ export default function StructuredSpeaking() {
           </Text>
         </div>
 
+        <Tabs
+          activeKey={topTab}
+          onChange={setTopTab}
+          items={[
+            { key: 'new', label: <span><MessageOutlined /> New Session</span> },
+            { key: 'history', label: <span><HistoryOutlined /> History</span> },
+          ]}
+          style={{ marginBottom: 16 }}
+        />
+
+        {topTab === 'history' && (
+          <HistoryPanel refreshKey={historyRefreshKey} />
+        )}
+
+        {topTab === 'new' && (
+        <>
         <Card style={{ marginBottom: 24, borderRadius: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <Title level={4} style={{ margin: 0 }}>
@@ -476,6 +696,8 @@ export default function StructuredSpeaking() {
               ))}
             </Row>
           </>
+        )}
+        </>
         )}
       </div>
     );

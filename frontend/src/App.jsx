@@ -106,7 +106,9 @@ export default function App() {
 
               {/* Protected routes */}
               <Route path="/" element={
-                <RequireAuth user={user} loading={loading}><Home /></RequireAuth>
+                <RequireAuth user={user} loading={loading}>
+                  <Home onScheduleClick={() => setScheduleModalVisible(true)} />
+                </RequireAuth>
               } />
               <Route path="/daily-words" element={
                 <RequireAuth user={user} loading={loading}><DailyWords /></RequireAuth>

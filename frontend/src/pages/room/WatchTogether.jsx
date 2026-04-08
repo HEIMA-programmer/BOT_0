@@ -15,13 +15,9 @@ import { roomAPI } from '../../api/index';
 import { getAvatarColor, copyInviteCode } from '../../utils/roomUtils';
 import { friendsAPI } from '../../api/index';
 import { videoCategories } from '../../data/videos';
+import ProxiedVideoPlayer from '../../components/ProxiedVideoPlayer';
 
 const { Text } = Typography;
-
-const getYouTubeId = (url) => {
-  const m = url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
-  return m?.[1];
-};
 
 export default function WatchTogether({ user }) {
   const navigate = useNavigate();
@@ -48,7 +44,6 @@ export default function WatchTogether({ user }) {
   const [isPlaying, setIsPlaying]   = useState(false);
   const [position, setPosition]     = useState(0);
   const [duration, setDuration]     = useState(0);
-  const playerContainerRef = useRef(null);
   const playerRef     = useRef(null);
   const playerReady   = useRef(false);
   const timeIntervalRef = useRef(null);
@@ -102,100 +97,61 @@ export default function WatchTogether({ user }) {
     setTimeout(() => { isSyncingRef.current = false; }, 200);
   }, []);
 
-  const createPlayer = useCallback((videoId) => {
-    if (!playerContainerRef.current) return;
-    // Destroy previous
-    if (playerRef.current) {
-      try { playerRef.current.destroy(); } catch { /* ignored */ }
-      playerRef.current = null;
-      playerReady.current = false;
-    }
+  // Player lifecycle: the ProxiedVideoPlayer below owns the actual <video>
+  // element; we just wire the imperative playerRef from its forwardRef and
+  // install event handlers via onReady / onStateChange.
+  const handlePlayerReady = useCallback(() => {
+    playerReady.current = true;
+    // Start position sampling for the progress bar
     if (timeIntervalRef.current) {
       clearInterval(timeIntervalRef.current);
       timeIntervalRef.current = null;
     }
-    // Reset container — YT.Player replaces the target element
-    playerContainerRef.current.innerHTML = '<div id="wt-yt-player"></div>';
-
-    playerRef.current = new window.YT.Player('wt-yt-player', {
-      videoId,
-      width: '100%',
-      height: '100%',
-      playerVars: { enablejsapi: 1, rel: 0 },
-      events: {
-        onReady: () => {
-          playerReady.current = true;
-          // Start time tracking
-          timeIntervalRef.current = setInterval(() => {
-            if (!playerRef.current?.getCurrentTime) return;
-            try {
-              setPosition(playerRef.current.getCurrentTime());
-              const d = playerRef.current.getDuration?.();
-              if (d) setDuration(d);
-            } catch { /* ignored */ }
-          }, 500);
-          // Apply any queued sync
-          if (pendingSyncRef.current) {
-            applySync(pendingSyncRef.current);
-            pendingSyncRef.current = null;
-          }
-        },
-        onStateChange: (event) => {
-          if (!playerRef.current?.getCurrentTime) return;
-          try { setPosition(playerRef.current.getCurrentTime()); } catch { /* ignored */ }
-          // Host: sync YouTube native play/pause to other members
-          const state = event.data; // 1=playing, 2=paused
-          if (isHostRef.current && !isSyncingRef.current && (state === 1 || state === 2)) {
-            const playing = state === 1;
-            setIsPlaying(playing);
-            socketRef.current?.emit('sync_playback', {
-              room_id:    roomIdRef.current,
-              is_playing: playing,
-              position:   playerRef.current.getCurrentTime?.() || 0,
-            });
-          }
-        },
-      },
-    });
+    timeIntervalRef.current = setInterval(() => {
+      if (!playerRef.current?.getCurrentTime) return;
+      try {
+        setPosition(playerRef.current.getCurrentTime());
+        const d = playerRef.current.getDuration?.();
+        if (d) setDuration(d);
+      } catch { /* ignored */ }
+    }, 500);
+    // Flush any sync that arrived before the player was ready
+    if (pendingSyncRef.current) {
+      applySync(pendingSyncRef.current);
+      pendingSyncRef.current = null;
+    }
   }, [applySync]);
 
-  // Load YT API once
-  useEffect(() => {
-    if (window.YT?.Player) return;
-    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      document.head.appendChild(tag);
+  const handlePlayerStateChange = useCallback(({ state }) => {
+    if (!playerRef.current?.getCurrentTime) return;
+    try { setPosition(playerRef.current.getCurrentTime()); } catch { /* ignored */ }
+    // Host: sync native play/pause to other members
+    if (isHostRef.current && !isSyncingRef.current && (state === 1 || state === 2)) {
+      const playing = state === 1;
+      setIsPlaying(playing);
+      socketRef.current?.emit('sync_playback', {
+        room_id:    roomIdRef.current,
+        is_playing: playing,
+        position:   playerRef.current.getCurrentTime?.() || 0,
+      });
     }
   }, []);
 
-  // (Re-)init player whenever content changes
+  // Reset ready flag whenever content changes so a fresh player reports ready
   useEffect(() => {
-    if (!content?.video_url) return;
-    const ytId = getYouTubeId(content.video_url);
-    if (!ytId) return;
-
-    const tryCreate = () => {
-      if (window.YT?.Player) {
-        createPlayer(ytId);
-      } else {
-        const prev = window.onYouTubeIframeAPIReady;
-        window.onYouTubeIframeAPIReady = () => { prev?.(); createPlayer(ytId); };
+    playerReady.current = false;
+    return () => {
+      if (timeIntervalRef.current) {
+        clearInterval(timeIntervalRef.current);
+        timeIntervalRef.current = null;
       }
     };
-    // Small delay to let container render
-    const timer = setTimeout(tryCreate, 100);
-    return () => clearTimeout(timer);
-  }, [content?.video_url, createPlayer]);
+  }, [content?.video_url]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
-      if (playerRef.current) {
-        try { playerRef.current.destroy(); } catch { /* ignored */ }
-        playerRef.current = null;
-      }
     };
   }, []);
 
@@ -259,7 +215,11 @@ export default function WatchTogether({ user }) {
     socket.on('content_selected', (data) => {
       setContent(data);
       setIsPlaying(false);
-      setPosition(0);
+      // NOTE: do NOT reset position to 0 — the server sends content_selected
+      // immediately followed by playback_synced on join, and the paired
+      // playback_synced carries the host's current (live) position. Resetting
+      // here would race with applySync. Socket.IO preserves event order so
+      // playback_synced always arrives after content_selected.
     });
 
     socket.on('playback_synced', (data) => {
@@ -387,7 +347,7 @@ export default function WatchTogether({ user }) {
 
   if (!room) return null;
 
-  const ytId = content?.video_url ? getYouTubeId(content.video_url) : null;
+  const hasVideo = !!content?.video_url;
 
   return (
     <div style={{ height: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -513,14 +473,16 @@ export default function WatchTogether({ user }) {
             flex: 1, background: '#000', display: 'flex', alignItems: 'center',
             justifyContent: 'center',
           }}>
-            {content && ytId ? (
+            {hasVideo ? (
               <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                <div
-                  ref={playerContainerRef}
-                  style={{ width: '100%', height: '100%' }}
-                >
-                  <div id="wt-yt-player" />
-                </div>
+                <ProxiedVideoPlayer
+                  ref={playerRef}
+                  src={content.video_url}
+                  controls={isHost}
+                  onReady={handlePlayerReady}
+                  onStateChange={handlePlayerStateChange}
+                  style={{ paddingBottom: 0, height: '100%', borderRadius: 0 }}
+                />
                 {/* Overlay for non-host to prevent direct interaction */}
                 {!isHost && (
                   <div style={{
