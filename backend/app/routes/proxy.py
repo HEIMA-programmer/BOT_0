@@ -101,7 +101,14 @@ def _resolve_youtube(video_id):
         'noplaylist': True,
         'cachedir': False,
         'format': YTDL_FORMAT,
-        'extractor_args': {'youtube': {'player_client': ['web']}},
+        # The 'web' client no longer returns any progressive (muxed) mp4
+        # for most videos — only DASH (split audio+video). Since proxy.py
+        # streams a single URL directly to the browser without ffmpeg
+        # merging, we need a client that still serves itag 18 (360p mp4
+        # progressive). 'android' is the only client that consistently
+        # returns it; 'web' is kept as fallback for the rare case android
+        # is throttled.
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
     proxy_url = _get_proxy_url()
     if proxy_url:
