@@ -50,6 +50,8 @@ import remarkGfm from 'remark-gfm';
 import { forumAPI } from '../api';
 import { getVideoInfo } from './VideoPlayer';
 import HelpButton from '../components/HelpButton';
+import LazyImage from '../components/LazyImage';
+import ProxiedVideoPlayer from '../components/ProxiedVideoPlayer';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -108,20 +110,7 @@ function VideoPlayer({ url }) {
 
   const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
   if (ytMatch) {
-    return (
-      <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, borderRadius: 8, overflow: 'hidden', background: '#000' }}>
-        {loading && <VideoLoadingOverlay />}
-        <iframe
-          src={`https://www.youtube.com/embed/${ytMatch[1]}`}
-          title="Video"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-          onLoad={() => setLoading(false)}
-        />
-      </div>
-    );
+    return <ProxiedVideoPlayer src={url} controls />;
   }
 
   const biliMatch = url.match(/bilibili\.com\/video\/(BV[\w]+)/);
@@ -586,7 +575,7 @@ export default function Forum({ user }) {
             const isLastWithMore = idx === showCount - 1 && extra > 0;
             return (
               <div key={idx} style={{ position: 'relative', paddingBottom, background: '#f0f0f0', overflow: 'hidden' }}>
-                <Image
+                <LazyImage
                   src={img.url}
                   alt={img.name || `image-${idx + 1}`}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
@@ -1126,20 +1115,10 @@ export default function Forum({ user }) {
               const ref = parseVideoReference(detailPost.content);
               if (!ref) return null;
               const v = getVideoInfo(ref.categoryId, ref.videoId);
-              const ytMatch = v?.url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
-              if (!ytMatch) return null;
+              if (!v?.url) return null;
               return (
                 <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden' }}>
-                  <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
-                    <iframe
-                      src={`https://www.youtube.com/embed/${ytMatch[1]}`}
-                      title="Video Preview"
-                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      loading="lazy"
-                    />
-                  </div>
+                  <ProxiedVideoPlayer src={v.url} controls />
                 </div>
               );
             })()}

@@ -41,7 +41,11 @@ sid_room: dict = {}
 pending_cleanups: dict = {}
 # room_id → {title, video_url, categoryId, videoId}  (WatchTogether content)
 room_content: dict = {}
-# room_id → {is_playing: bool, position: float}
+# room_id → {is_playing: bool, position: float, last_update_at: float}
+# last_update_at is a server-side monotonic timestamp; it is never leaked to
+# clients. See _compute_live_playback below for how the live position is
+# derived so late joiners receive the host's current playhead instead of a
+# stale snapshot.
 room_playback: dict = {}
 # room_id → topic string  (SpeakingRoom)
 room_topics: dict = {}
@@ -108,6 +112,26 @@ def _deferred_cleanup(app, user_id, room_id):
             room_content.pop(room_id, None)
             room_playback.pop(room_id, None)
             room_topics.pop(room_id, None)
+
+
+def _compute_live_playback(state):
+    """
+    Return the current playback state advanced by the time elapsed since the
+    host's last update. This is what late joiners should see so they don't
+    start at a stale position. The returned dict intentionally omits the
+    internal ``last_update_at`` timestamp.
+    """
+    if not state:
+        return None
+    now = _time.monotonic()
+    last_update = state.get('last_update_at') or now
+    position = float(state.get('position', 0.0))
+    if state.get('is_playing'):
+        position += max(0.0, now - last_update)
+    return {
+        'is_playing': bool(state.get('is_playing', False)),
+        'position': position,
+    }
 
 
 def _get_room_and_member(room_id):
@@ -230,12 +254,16 @@ def handle_join_waiting_room(data):
     )
     socketio.emit('rooms_updated', {}, namespace='/room', room='lobby')
 
-    # Sync current session state to the joining client
+    # Sync current session state to the joining client.
+    # Socket.IO preserves per-connection event order, so the client receives
+    # content_selected before playback_synced and can apply the sync once the
+    # player reports ready (pendingSyncRef handles the race).
     if room.room_type == 'watch':
         if room_id in room_content:
             emit('content_selected', room_content[room_id])
-        if room_id in room_playback:
-            emit('playback_synced', room_playback[room_id])
+        live = _compute_live_playback(room_playback.get(room_id))
+        if live is not None:
+            emit('playback_synced', live)
     elif room.room_type == 'speaking' and room_id in room_topics:
         emit('topic_changed', {'topic': room_topics[room_id]})
     elif room.room_type == 'game' and room_id in game_states:
@@ -846,7 +874,11 @@ def handle_select_content(data):
         'videoId': data.get('videoId'),
     }
     room_content[room_id] = content
-    room_playback[room_id] = {'is_playing': False, 'position': 0.0}
+    room_playback[room_id] = {
+        'is_playing': False,
+        'position': 0.0,
+        'last_update_at': _time.monotonic(),
+    }
     socketio.emit('content_selected', content, namespace='/room', room=str(room_id))
 
 
@@ -862,10 +894,13 @@ def handle_sync_playback(data):
     state = {
         'is_playing': bool(data.get('is_playing', False)),
         'position': float(data.get('position', 0)),
+        'last_update_at': _time.monotonic(),
     }
     room_playback[room_id] = state
-    socketio.emit('playback_synced', state, namespace='/room',
-                  room=str(room_id), skip_sid=request.sid)
+    # Route the broadcast through _compute_live_playback so the client
+    # payload shape matches the late-join path and never leaks last_update_at.
+    socketio.emit('playback_synced', _compute_live_playback(state),
+                  namespace='/room', room=str(room_id), skip_sid=request.sid)
 
 
 @socketio.on('send_comment', namespace='/room')

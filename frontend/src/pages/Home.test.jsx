@@ -43,7 +43,7 @@ describe('Home page', () => {
     expect(await screen.findByText((content) => content.includes('25') && content.includes('570'))).toBeTruthy();
   });
 
-  it('renders all five module cards and navigates on click', async () => {
+  it('renders all six module cards and navigates on click', async () => {
     mockDailyLearningAPI.getStats.mockResolvedValue({
       data: { total_learned: 0, total_words: 0 },
     });
@@ -55,8 +55,22 @@ describe('Home page', () => {
     expect(screen.getByText('Vocabulary')).toBeTruthy();
     expect(screen.getByText('Forum')).toBeTruthy();
     expect(screen.getByText('Room')).toBeTruthy();
+    expect(screen.getByText('Schedule')).toBeTruthy();
 
     fireEvent.click(screen.getByText('Vocabulary'));
     expect(mockNavigate).toHaveBeenCalledWith('/daily-words');
+  });
+
+  it('invokes onScheduleClick when Schedule card clicked', async () => {
+    mockDailyLearningAPI.getStats.mockResolvedValue({
+      data: { total_learned: 0, total_words: 0 },
+    });
+    const onScheduleClick = vi.fn();
+
+    renderWithProviders(<Home onScheduleClick={onScheduleClick} />);
+
+    fireEvent.click(await screen.findByText('Schedule'));
+    expect(onScheduleClick).toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });

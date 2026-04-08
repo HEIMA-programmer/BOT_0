@@ -1,8 +1,13 @@
+import base64
+import json
+
 from flask_socketio import emit
 from flask import current_app
-from app import socketio
+from flask_login import current_user
+
+from app import socketio, db
+from app.models.speaking_session import SpeakingSession
 from app.services.speaking_service import SpeakingService
-import base64
 
 
 @socketio.on('connect')
@@ -27,7 +32,8 @@ def handle_submit_audio(data):
     {
         'audio': base64-encoded audio data,
         'topic': str - the speaking topic,
-        'mimeType': str - MIME type of the audio (optional)
+        'mimeType': str - MIME type of the audio (optional),
+        'scenario_type': str - optional tag such as 'office_hours', 'custom', etc.
     }
     """
     try:
@@ -41,6 +47,7 @@ def handle_submit_audio(data):
         topic = data['topic']
         audio_base64 = data['audio']
         mime_type = data.get('mimeType', 'audio/webm')
+        scenario_type = data.get('scenario_type')
 
         # Decode base64 audio
         try:
@@ -84,6 +91,39 @@ def handle_submit_audio(data):
 
         current_app.logger.info('Successfully processed audio')
         emit('result', result)
+
+        # Persist the session history. Wrapped in its own try/except so a DB
+        # failure never disturbs the client that just received its feedback.
+        try:
+            if getattr(current_user, 'is_authenticated', False):
+                pron_overall = int(pronunciation_scores.get('overall', 0) or 0)
+                cont_overall = int(content_scores.get('overall', 0) or 0)
+                overall_score = round((pron_overall + cont_overall) / 2)
+
+                feedback_summary = None
+                feedback_block = content_scores.get('feedback') if isinstance(content_scores, dict) else None
+                if isinstance(feedback_block, dict):
+                    feedback_summary = feedback_block.get('topic') or feedback_block.get('vocabulary')
+
+                session_row = SpeakingSession(
+                    user_id=current_user.id,
+                    topic=topic,
+                    scenario_type=scenario_type,
+                    transcript=transcript,
+                    pronunciation_json=json.dumps(pronunciation_scores),
+                    content_json=json.dumps(content_scores),
+                    overall_score=float(overall_score),
+                    score=float(overall_score),
+                    ai_feedback=feedback_summary,
+                )
+                db.session.add(session_row)
+                db.session.commit()
+        except Exception as persist_err:
+            current_app.logger.error(f'Failed to persist speaking session: {persist_err}')
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
 
     except ValueError as e:
         # Handle specific errors (e.g., no speech detected)

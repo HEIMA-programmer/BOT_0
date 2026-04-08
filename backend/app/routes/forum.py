@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 from app import db
 from app.models.forum_comment import ForumComment
@@ -105,8 +107,38 @@ def _can_pin_post(post):
     return post.zone == 'friend' and _can_view_post(post)
 
 
-def _serialise_post(post, include_comments=False, friend_pinned_post_ids=None):
-    data = post.to_dict(include_comments=include_comments)
+def _count_map(post_ids):
+    """Return ({post_id: comment_count}, {post_id: forward_count}).
+
+    Two GROUP BY queries replace the per-post len(self.comments) /
+    len(self.forwards) that caused N+1 lazy loads in the old serializer.
+    """
+    if not post_ids:
+        return {}, {}
+    comments_rows = (
+        db.session.query(ForumComment.post_id, func.count(ForumComment.id))
+        .filter(ForumComment.post_id.in_(post_ids))
+        .group_by(ForumComment.post_id)
+        .all()
+    )
+    forwards_rows = (
+        db.session.query(
+            ForumForward.original_post_id, func.count(ForumForward.id)
+        )
+        .filter(ForumForward.original_post_id.in_(post_ids))
+        .group_by(ForumForward.original_post_id)
+        .all()
+    )
+    return dict(comments_rows), dict(forwards_rows)
+
+
+def _serialise_post(post, include_comments=False, friend_pinned_post_ids=None,
+                    comment_count_override=None, forward_count_override=None):
+    data = post.to_dict(
+        include_comments=include_comments,
+        comment_count_override=comment_count_override,
+        forward_count_override=forward_count_override,
+    )
     if post.zone == 'friend':
         friend_pinned = (
             post.id in friend_pinned_post_ids
@@ -129,11 +161,18 @@ def _serialise_post(post, include_comments=False, friend_pinned_post_ids=None):
 
 
 def _serialise_posts(posts):
+    post_ids = [post.id for post in posts]
     friend_pinned_post_ids = _get_friend_pinned_post_ids([
         post.id for post in posts if post.zone == 'friend'
     ])
+    comment_counts, forward_counts = _count_map(post_ids)
     return [
-        _serialise_post(post, friend_pinned_post_ids=friend_pinned_post_ids)
+        _serialise_post(
+            post,
+            friend_pinned_post_ids=friend_pinned_post_ids,
+            comment_count_override=comment_counts.get(post.id, 0),
+            forward_count_override=forward_counts.get(post.id, 0),
+        )
         for post in posts
     ]
 
@@ -147,9 +186,13 @@ def _touch_post(post):
 
 
 def _post_query_for_current_user():
+    base = ForumPost.query.options(
+        joinedload(ForumPost.user),
+        joinedload(ForumPost.reviewer),
+    )
     if _is_admin():
-        return ForumPost.query.filter(ForumPost.status.in_([ForumPost.STATUS_PUBLISHED, ForumPost.STATUS_UNDER_REVIEW]))
-    return ForumPost.query.filter_by(status=ForumPost.STATUS_PUBLISHED)
+        return base.filter(ForumPost.status.in_([ForumPost.STATUS_PUBLISHED, ForumPost.STATUS_UNDER_REVIEW]))
+    return base.filter_by(status=ForumPost.STATUS_PUBLISHED)
 
 
 def _get_friend_ids(user_id):
@@ -177,7 +220,10 @@ def get_posts():
     if zone == 'friend' and not _is_admin():
         friend_ids = _get_friend_ids(current_user.id)
         visible_user_ids = friend_ids | {current_user.id}
-        query = ForumPost.query.filter(
+        query = ForumPost.query.options(
+            joinedload(ForumPost.user),
+            joinedload(ForumPost.reviewer),
+        ).filter(
             ForumPost.status == ForumPost.STATUS_PUBLISHED,
             ForumPost.zone == 'friend',
             ForumPost.user_id.in_(visible_user_ids),
@@ -232,10 +278,14 @@ def get_posts():
     for item in items:
         item['type'] = 'post'
 
+    forward_eager = [
+        joinedload(ForumForward.post).joinedload(ForumPost.user),
+        joinedload(ForumForward.user),
+    ]
     if zone == 'friend' and not _is_admin():
         friend_ids = _get_friend_ids(current_user.id)
         visible_user_ids = friend_ids | {current_user.id}
-        forward_query = ForumForward.query.join(
+        forward_query = ForumForward.query.options(*forward_eager).join(
             ForumPost, ForumForward.original_post_id == ForumPost.id
         ).filter(
             ForumPost.status == ForumPost.STATUS_PUBLISHED,
@@ -243,14 +293,14 @@ def get_posts():
             ForumForward.zone == 'friend',
         )
     elif zone == 'public' and not _is_admin():
-        forward_query = ForumForward.query.join(
+        forward_query = ForumForward.query.options(*forward_eager).join(
             ForumPost, ForumForward.original_post_id == ForumPost.id
         ).filter(
             ForumPost.status == ForumPost.STATUS_PUBLISHED,
             ForumForward.zone == 'public',
         )
     else:
-        forward_query = ForumForward.query.join(
+        forward_query = ForumForward.query.options(*forward_eager).join(
             ForumPost, ForumForward.original_post_id == ForumPost.id
         ).filter(ForumPost.status == ForumPost.STATUS_PUBLISHED)
         if zone in VALID_ZONES:

@@ -7,6 +7,7 @@ import {
   TeamOutlined,
   MessageOutlined,
   ArrowRightOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { dailyLearningAPI, progressAPI } from '../api';
@@ -14,51 +15,60 @@ import HelpButton from '../components/HelpButton';
 
 const { Title, Text } = Typography;
 
-const modules = [
-  {
-    title: 'Listening Lab',
-    icon: <SoundOutlined />,
-    path: '/listening',
-    desc: 'Practice with lectures, discussions, and Q&A clips',
-    color: '#d97706',
-    bg: 'linear-gradient(135deg, #fffbeb, #fef3c7)',
-  },
-  {
-    title: 'Speaking Studio',
-    icon: <AudioOutlined />,
-    path: '/speaking',
-    desc: 'Improve pronunciation and expression',
-    color: '#dc2626',
-    bg: 'linear-gradient(135deg, #fef2f2, #fecaca)',
-  },
-  {
-    title: 'Vocabulary',
-    icon: <ReadOutlined />,
-    path: '/daily-words',
-    desc: 'Daily words, word bank & review all in one place',
-    color: '#2563eb',
-    bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
-  },
-  {
-    title: 'Forum',
-    icon: <MessageOutlined />,
-    path: '/forum',
-    desc: 'Share skills, experiences, and discuss academic culture',
-    color: '#0891b2',
-    bg: 'linear-gradient(135deg, #ecfeff, #cffafe)',
-  },
-  {
-    title: 'Room',
-    icon: <TeamOutlined />,
-    path: '/room',
-    desc: 'Join speaking rooms, watch together, or play vocabulary games',
-    color: '#7c3aed',
-    bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
-  },
-];
-
-export default function Home() {
+export default function Home({ onScheduleClick }) {
   const navigate = useNavigate();
+
+  const modules = [
+    {
+      title: 'Listening Lab',
+      icon: <SoundOutlined />,
+      path: '/listening',
+      desc: 'Practice with lectures, discussions, and Q&A clips',
+      color: '#d97706',
+      bg: 'linear-gradient(135deg, #fffbeb, #fef3c7)',
+    },
+    {
+      title: 'Speaking Studio',
+      icon: <AudioOutlined />,
+      path: '/speaking',
+      desc: 'Improve pronunciation and expression',
+      color: '#dc2626',
+      bg: 'linear-gradient(135deg, #fef2f2, #fecaca)',
+    },
+    {
+      title: 'Vocabulary',
+      icon: <ReadOutlined />,
+      path: '/daily-words',
+      desc: 'Daily words, word bank & review all in one place',
+      color: '#2563eb',
+      bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+    },
+    {
+      title: 'Forum',
+      icon: <MessageOutlined />,
+      path: '/forum',
+      desc: 'Share skills, experiences, and discuss academic culture',
+      color: '#0891b2',
+      bg: 'linear-gradient(135deg, #ecfeff, #cffafe)',
+    },
+    {
+      title: 'Room',
+      icon: <TeamOutlined />,
+      path: '/room',
+      desc: 'Join speaking rooms, watch together, or play vocabulary games',
+      color: '#7c3aed',
+      bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
+    },
+    {
+      title: 'Schedule',
+      icon: <CalendarOutlined />,
+      onClick: onScheduleClick,
+      key: 'schedule',
+      desc: 'Plan daily sessions and track your study streak',
+      color: '#0284c7',
+      bg: 'linear-gradient(135deg, #f0f9ff, #bae6fd)',
+    },
+  ];
   const [stats, setStats] = useState({
     wordsLearned: 0,
     totalWords: 0,
@@ -131,10 +141,13 @@ export default function Home() {
       </Title>
       <Row gutter={[16, 16]}>
         {modules.map((m) => (
-          <Col xs={24} sm={12} lg={8} key={m.path}>
+          <Col xs={24} sm={12} lg={8} key={m.key || m.path}>
             <Card
               hoverable
-              onClick={() => navigate(m.path)}
+              onClick={() => {
+                if (m.onClick) m.onClick();
+                else if (m.path) navigate(m.path);
+              }}
               style={{
                 height: '100%',
                 borderRadius: 12,

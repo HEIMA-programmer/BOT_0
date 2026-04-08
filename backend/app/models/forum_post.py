@@ -5,6 +5,11 @@ from app import db
 class ForumPost(db.Model):
     __tablename__ = 'forum_posts'
 
+    __table_args__ = (
+        db.Index('ix_forum_posts_status_zone_created', 'status', 'zone', 'created_at'),
+        db.Index('ix_forum_posts_user_id_created', 'user_id', 'created_at'),
+    )
+
     STATUS_UNDER_REVIEW = 'UNDER_REVIEW'
     STATUS_PUBLISHED = 'PUBLISHED'
     STATUS_REJECTED = 'REJECTED'
@@ -70,7 +75,16 @@ class ForumPost(db.Model):
         lazy=True,
     )
 
-    def to_dict(self, include_comments=False):
+    def to_dict(self, include_comments=False,
+                comment_count_override=None, forward_count_override=None):
+        """Serialize the post.
+
+        ``comment_count_override`` / ``forward_count_override`` let callers
+        pass pre-computed aggregate counts (e.g. from a ``GROUP BY`` query)
+        so the N+1 lazy-load of ``self.comments`` / ``self.forwards`` is
+        avoided on the list endpoint. Falls back to ``len(self.comments)``
+        for callers that don't pass the override.
+        """
         d = {
             'id': self.id,
             'user_id': self.user_id,
@@ -90,8 +104,16 @@ class ForumPost(db.Model):
             'reviewed_by': self.reviewed_by,
             'reviewed_by_username': self.reviewer.username if self.reviewer else None,
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
-            'comment_count': len(self.comments),
-            'forward_count': len(self.forwards),
+            'comment_count': (
+                comment_count_override
+                if comment_count_override is not None
+                else len(self.comments)
+            ),
+            'forward_count': (
+                forward_count_override
+                if forward_count_override is not None
+                else len(self.forwards)
+            ),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
